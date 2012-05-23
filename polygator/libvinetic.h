@@ -20,6 +20,9 @@ struct vinetic_context {
 	char pram_path[PATH_MAX];
 	char dram_path[PATH_MAX];
 
+	char alm_dsp_ab_path[PATH_MAX];
+	char alm_dsp_cd_path[PATH_MAX];
+
 	int error;
 	int errorline;
 
@@ -31,6 +34,8 @@ struct vinetic_context {
 extern void vin_init(struct vinetic_context *ctx, char *path);
 extern void vin_set_pram(struct vinetic_context *ctx, char *path);
 extern void vin_set_dram(struct vinetic_context *ctx, char *path);
+extern void vin_set_alm_dsp_ab(struct vinetic_context *ctx, char *path);
+extern void vin_set_alm_dsp_cd(struct vinetic_context *ctx, char *path);
 extern void vin_init(struct vinetic_context *ctx, char *path);
 extern int vin_open(struct vinetic_context *ctx);
 extern void vin_close(struct vinetic_context *ctx);
@@ -61,8 +66,10 @@ extern int vin_phi_disable_interrupt(struct vinetic_context *ctx);
 
 extern int vin_download_edsp_firmvare(struct vinetic_context *ctx);
 
+extern int vin_download_alm_dsp(struct vinetic_context *ctx, char *path);
+extern int vin_jump_alm_dsp(struct vinetic_context *ctx, unsigned int chan);
 
-extern int vin_coder_channel_jb_statistic_reset(struct vinetic_context *ctx, int chan);
+extern int vin_coder_channel_jb_statistic_reset(struct vinetic_context *ctx, unsigned int chan);
 
 #define VIN_GAINDB_MIN -24.08
 #define VIN_GAINDB_MAX 23.95

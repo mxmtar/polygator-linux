@@ -11,6 +11,8 @@ WDIR := $(CURDIR)
 CC := $(CROSS_COMPILE)gcc
 AR := $(CROSS_COMPILE)ar
 
+INSTALL := install
+
 ################################################################################
 # compiler/linker flags
 ################################################################################
@@ -42,6 +44,10 @@ all: libvinetic
 .PHONY: libvinetic
 libvinetic: $(O_FILES)
 	$(AR) -rc libvinetic.a $(O_FILES)
+
+libvinetic_install:
+	$(INSTALL) -m 755 -d $(DESTDIR)/usr/lib/libvinetic
+	$(INSTALL) -m 644 libvinetic.a $(DESTDIR)/usr/lib/libvinetic
 
 ################################################################################
 # clean

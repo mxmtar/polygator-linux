@@ -245,8 +245,9 @@ static void vinetic_poll(unsigned long addr)
 	}
 
 	// read command data from mailbox
+	
 	if (vin->cdata_size) {
-// 		debug("cmd_omb_len=%lu\n", cmd_omb_len);
+// 		debug("cdata_size=%lu\n", vin->cdata_size);
 		// write short commands rCOBX
 		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 		{
@@ -349,6 +350,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 	struct vinetic *vin = filp->private_data;
 
 	cmd.full = filp->f_pos & 0xffffffff;
+// 	debug("cmd.full=0x%08x\n", cmd.full);
 
 	// check for is read command
 	if (cmd.parts.first.bits.rw != VIN_READ) {
@@ -587,6 +589,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		}
 	}
 vinetic_read_end:
+// 	debug("res=%ld\n", (long int)res);
 	wake_up_interruptible(&vin->seek_cbox_waitq);
 	return res;
 }
@@ -603,6 +606,7 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	struct vinetic *vin = filp->private_data;
 
 	cmd.full = filp->f_pos & 0xffffffff;
+// 	debug("cmd.full=0x%08x\n", cmd.full);
 
 	// check for is write command
 	if (cmd.parts.first.bits.rw != VIN_WRITE) {
@@ -1286,6 +1290,7 @@ loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
 	spin_lock_bh(&vin->lock);
 	for (;;)
 	{
+// 		debug("%ld\n", (long int)filp->f_pos);
 		if (!filp->f_pos) break;
 		
 		if (filp->f_flags & O_NONBLOCK) {
@@ -1305,7 +1310,7 @@ loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
 	spin_unlock_bh(&vin->lock);
 
 vinetic_llseek_end:
-// 	log(KERN_ERR, "%ld\n", (long int)res);
+// 	debug("%ld\n", (long int)res);
 	return res;
 }
 

@@ -495,6 +495,35 @@ union vin_cmd {
 } __attribute__((packed));
 
 enum {
+	VIN_SOP_DCCHKR = 0x00,
+	VIN_SOP_DSCHKR = 0x01,
+	VIN_SOP_CCR = 0x02,
+};
+
+struct vin_cmd_sop_dcchkr {
+	union vin_cmd header;
+	u_int16_t dc_check;
+} __attribute__((packed));
+
+struct vin_cmd_sop_dschkr {
+	union vin_cmd header;
+	u_int16_t ds_check;
+} __attribute__((packed));
+
+struct vin_cmd_sop_ccr {
+	union vin_cmd header;
+	struct vin_ccr {
+		u_int16_t pd_cbias:1;
+		u_int16_t pd_cvcm:1;
+		u_int16_t jump_ac1:1;
+		u_int16_t jump_ac2:1;
+		u_int16_t jump_ac3:1;
+		u_int16_t jump_dc:1;
+		u_int16_t jump_res0:10;
+	} __attribute__((packed)) ccr;
+} __attribute__((packed));
+
+enum {
 	VIN_MOD_PCM = 0x0,
 	VIN_MOD_CODER = 0x3,
 	VIN_MOD_CONT = 0x5,
@@ -881,6 +910,9 @@ enum {
  */
 enum {
 	VIN_EOP_EDSPSWVERSREG = 0x06,
+	VIN_EOP_SET_FPI = 0x14,
+	VIN_EOP_ACCESS_FPI = 0x15,
+	VIN_EOP_CRC_FPI = 0x16,
 	VIN_EOP_SETPRAM = 0x18,
 	VIN_EOP_ACCESSPRAM = 0x19,
 	VIN_EOP_CRC_PRAM = 0x1a,
@@ -942,6 +974,24 @@ enum {
 	VIN_MV_VIP = 0,
 	VIN_MV_4M = 2,
 };
+
+struct vin_cmd_eop_set_fpi_address {
+	union vin_cmd header;
+	u_int16_t high_addres1;
+	u_int16_t low_addres1;
+	u_int16_t high_addres2;
+	u_int16_t low_addres2;
+} __attribute__((packed));
+
+struct vin_cmd_eop_access_fpi_memory {
+	union vin_cmd header;
+	u_int16_t data[32];
+} __attribute__((packed));
+
+struct vin_cmd_eop_crc_fpi {
+	union vin_cmd header;
+	u_int16_t crc;
+} __attribute__((packed));
 
 struct vin_cmd_eop_set_pram_address {
 	union vin_cmd header;

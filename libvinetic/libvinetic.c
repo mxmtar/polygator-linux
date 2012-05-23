@@ -12,11 +12,11 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <endian.h>
-
-#include <stdio.h>
 
 #include "polygator/libvinetic.h"
 
@@ -34,6 +34,16 @@ void vin_set_pram(struct vinetic_context *ctx, char *path)
 void vin_set_dram(struct vinetic_context *ctx, char *path)
 {
 	strncpy(ctx->dram_path, path, sizeof(ctx->dram_path));
+}
+
+void vin_set_alm_dsp_ab(struct vinetic_context *ctx, char *path)
+{
+	strncpy(ctx->alm_dsp_ab_path, path, sizeof(ctx->alm_dsp_ab_path));
+}
+
+void vin_set_alm_dsp_cd(struct vinetic_context *ctx, char *path)
+{
+	strncpy(ctx->alm_dsp_cd_path, path, sizeof(ctx->alm_dsp_cd_path));
 }
 
 int vin_open(struct vinetic_context *ctx)
@@ -273,12 +283,19 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 
 	struct vin_cmd_eop_set_pram_address cmd_eop_set_pram_address;
 	struct vin_cmd_eop_access_pram cmd_eop_access_pram;
-// 	struct vin_cmd_eop_crc_pram cmd_eop_crc_pram;
 
 	struct vin_cmd_eop_set_dram_address cmd_eop_set_dram_address;
 	struct vin_cmd_eop_access_dram cmd_eop_access_dram;
-// 	struct vin_cmd_eop_crc_dram cmd_eop_crc_dram;
-
+#if 0
+	struct vin_cmd_eop_crc_pram cmd_eop_crc_pram;
+	struct vin_cmd_eop_crc_dram cmd_eop_crc_dram;
+	u_int16_t seg_addr_start_high;
+	u_int16_t seg_addr_start_low;
+	u_int32_t seg_addr_start;
+	u_int16_t seg_addr_end_high;
+	u_int16_t seg_addr_end_low;
+	u_int32_t seg_addr_end;
+#endif
 	ssize_t res;
 	size_t i;
 	size_t seg_size;
@@ -299,6 +316,7 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 		ctx->errorline = __LINE__ - 1;
 		ctx->error = errno;
 		goto vin_download_edsp_firmware_error;
+
 	}
 	// Maximazing Command In-Box
 	cmd_short.full = VIN_wMAXCBX;
@@ -326,23 +344,6 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 		goto vin_download_edsp_firmware_error;
 	}
 	fd_offset = 0;
-#if 0
-	// Reset PRAM CRC
-	cmd_eop_crc_pram.header.parts.first.bits.rw = VIN_WRITE;
-	cmd_eop_crc_pram.header.parts.first.bits.sc = VIN_SC_NO;
-	cmd_eop_crc_pram.header.parts.first.bits.bc = VIN_BC_NO;
-	cmd_eop_crc_pram.header.parts.first.bits.cmd = VIN_CMD_EOP;
-	cmd_eop_crc_pram.header.parts.first.bits.res = 0;
-	cmd_eop_crc_pram.header.parts.first.bits.chan = 0;
-	cmd_eop_crc_pram.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
-	cmd_eop_crc_pram.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_PRAM;
-	cmd_eop_crc_pram.header.parts.second.eop.bits.length = 0;
-	if ((res = vin_write(ctx, &cmd_eop_crc_pram, sizeof(union vin_cmd)) < 0)) {
-		ctx->errorline = __LINE__ - 1;
-		ctx->error = errno;
-		goto vin_download_edsp_firmware_error;
-	}
-#endif
 	while (fd_offset < fd_stat.st_size)
 	{
 		// Read PRAM segment header
@@ -357,6 +358,7 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 			goto vin_download_edsp_firmware_error;
 		}
 		fd_offset += sizeof(struct vin_xram_segment_header);
+		seg_size = be32toh(xram_segment_header.size);
 		// Set PRAM Address
 		cmd_eop_set_pram_address.header.parts.first.bits.rw = VIN_WRITE;
 		cmd_eop_set_pram_address.header.parts.first.bits.sc = VIN_SC_NO;
@@ -374,7 +376,6 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 			ctx->error = errno;
 			goto vin_download_edsp_firmware_error;
 		}
-		seg_size = be32toh(xram_segment_header.size);
 		while (seg_size)
 		{
 			// Check for MBX-EMPTY
@@ -390,6 +391,7 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 				goto vin_download_edsp_firmware_error;
 			}
 			seg_chunk_size = (seg_size < 252) ? (seg_size) : (252);
+// 			printf("pram: %lu %lu\n", (unsigned long int)seg_chunk_size, (unsigned long int)seg_chunk_size);
 			if (read(fd, cmd_eop_access_pram.data, seg_chunk_size*2) < 0) {
 				ctx->errorline = __LINE__ - 1;
 				ctx->error = errno;
@@ -416,13 +418,6 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 			seg_size -= seg_chunk_size;
 		}
 	}
-	close(fd);
-	// Check for MBX-EMPTY
-	if (vin_check_mbx_empty(ctx) < 0) {
-		ctx->errorline = __LINE__ - 1;
-		ctx->error = errno;
-		goto vin_download_edsp_firmware_error;
-	}
 #if 0
 	// Reset PRAM CRC
 	cmd_eop_crc_pram.header.parts.first.bits.rw = VIN_WRITE;
@@ -439,7 +434,75 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 		ctx->error = errno;
 		goto vin_download_edsp_firmware_error;
 	}
+	fd_offset = 0;
+	while (fd_offset < fd_stat.st_size)
+	{
+		// Read PRAM segment header
+		if (lseek(fd, fd_offset, SEEK_SET) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+		if (read(fd, &xram_segment_header, sizeof(struct vin_xram_segment_header)) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+		seg_addr_start_high = be16toh(xram_segment_header.high);
+		seg_addr_start_low = be16toh(xram_segment_header.low);
+		seg_addr_start = (seg_addr_start_high << 16) + (seg_addr_start_low << 0);
+		seg_size = be32toh(xram_segment_header.size);
+		seg_addr_end = seg_addr_start + (seg_size/3)*2 - 2;
+		seg_addr_end_high = (seg_addr_end >> 16) & 0xffff;
+		seg_addr_end_low = (seg_addr_end >> 0) & 0xffff;
+// 		printf("pram seg %08x:%08x - %lu\n", seg_addr_start, seg_addr_end, (unsigned long int)seg_size);
+		fd_offset += sizeof(struct vin_xram_segment_header) + seg_size*2;
+		// Set PRAM Address
+		cmd_eop_set_pram_address.header.parts.first.bits.rw = VIN_WRITE;
+		cmd_eop_set_pram_address.header.parts.first.bits.sc = VIN_SC_NO;
+		cmd_eop_set_pram_address.header.parts.first.bits.bc = VIN_BC_NO;
+		cmd_eop_set_pram_address.header.parts.first.bits.cmd = VIN_CMD_EOP;
+		cmd_eop_set_pram_address.header.parts.first.bits.res = 0;
+		cmd_eop_set_pram_address.header.parts.first.bits.chan = 0;
+		cmd_eop_set_pram_address.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+		cmd_eop_set_pram_address.header.parts.second.eop.bits.ecmd  = VIN_EOP_SETPRAM;
+		cmd_eop_set_pram_address.header.parts.second.eop.bits.length = 4;
+		cmd_eop_set_pram_address.high_addres1 = seg_addr_start_high;
+		cmd_eop_set_pram_address.low_addres1 = seg_addr_start_low;
+		cmd_eop_set_pram_address.high_addres2 = seg_addr_end_high;
+		cmd_eop_set_pram_address.low_addres2 = seg_addr_end_low;
+		if ((res = vin_write(ctx, &cmd_eop_set_pram_address, sizeof(union vin_cmd) + sizeof(u_int16_t)*4)) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+		// Read PRAM CRC
+		cmd_eop_crc_pram.header.parts.first.bits.rw = VIN_READ;
+		cmd_eop_crc_pram.header.parts.first.bits.sc = VIN_SC_NO;
+		cmd_eop_crc_pram.header.parts.first.bits.bc = VIN_BC_NO;
+		cmd_eop_crc_pram.header.parts.first.bits.cmd = VIN_CMD_EOP;
+		cmd_eop_crc_pram.header.parts.first.bits.res = 0;
+		cmd_eop_crc_pram.header.parts.first.bits.chan = 0;
+		cmd_eop_crc_pram.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+		cmd_eop_crc_pram.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_PRAM;
+		cmd_eop_crc_pram.header.parts.second.eop.bits.length = 1;
+		if ((res = vin_read(ctx, cmd_eop_crc_pram.header, &cmd_eop_crc_pram, sizeof(struct vin_cmd_eop_crc_pram)) < 0)) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+	}
+	printf("\npram: checksum=0x%04x\n", cmd_eop_crc_pram.crc);
 #endif
+	close(fd);
+
+	// Check for MBX-EMPTY
+	if (vin_check_mbx_empty(ctx) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_edsp_firmware_error;
+	}
+
 	// open DRAM file
 	if ((fd = open(ctx->dram_path, O_RDONLY)) < 0) {
 		ctx->errorline = __LINE__ - 1;
@@ -452,23 +515,6 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 		goto vin_download_edsp_firmware_error;
 	}
 	fd_offset = 0;
-#if 0
-	// Reset DRAM CRC
-	cmd_eop_crc_dram.header.parts.first.bits.rw = VIN_WRITE;
-	cmd_eop_crc_dram.header.parts.first.bits.sc = VIN_SC_NO;
-	cmd_eop_crc_dram.header.parts.first.bits.bc = VIN_BC_NO;
-	cmd_eop_crc_dram.header.parts.first.bits.cmd = VIN_CMD_EOP;
-	cmd_eop_crc_dram.header.parts.first.bits.res = 0;
-	cmd_eop_crc_dram.header.parts.first.bits.chan = 0;
-	cmd_eop_crc_dram.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
-	cmd_eop_crc_dram.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_DRAM;
-	cmd_eop_crc_dram.header.parts.second.eop.bits.length = 0;
-	if ((res = vin_write(ctx, &cmd_eop_crc_dram, sizeof(union vin_cmd)) < 0)) {
-		ctx->errorline = __LINE__ - 1;
-		ctx->error = errno;
-		goto vin_download_edsp_firmware_error;
-	}
-#endif
 	while (fd_offset < fd_stat.st_size)
 	{
 		// Read DRAM segment header
@@ -515,6 +561,7 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 				goto vin_download_edsp_firmware_error;
 			}
 			seg_chunk_size = (seg_size < 252) ? (seg_size) : (252);
+// 			printf("dram: %lu %lu\n", (unsigned long int)seg_chunk_size, (unsigned long int)seg_chunk_size);
 			if (read(fd, cmd_eop_access_dram.data, seg_chunk_size*2) < 0) {
 				ctx->errorline = __LINE__ - 1;
 				ctx->error = errno;
@@ -541,13 +588,6 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 			seg_size -= seg_chunk_size;
 		}
 	}
-	close(fd);
-	// Check for MBX-EMPTY
-	if (vin_check_mbx_empty(ctx) < 0) {
-		ctx->errorline = __LINE__ - 1;
-		ctx->error = errno;
-		goto vin_download_edsp_firmware_error;
-	}
 #if 0
 	// Reset DRAM CRC
 	cmd_eop_crc_dram.header.parts.first.bits.rw = VIN_WRITE;
@@ -564,7 +604,72 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 		ctx->error = errno;
 		goto vin_download_edsp_firmware_error;
 	}
+	fd_offset = 0;
+	while (fd_offset < fd_stat.st_size)
+	{
+		// Read DRAM segment header
+		if (lseek(fd, fd_offset, SEEK_SET) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+		if (read(fd, &xram_segment_header, sizeof(struct vin_xram_segment_header)) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+		seg_addr_start_high = be16toh(xram_segment_header.high);
+		seg_addr_start_low = be16toh(xram_segment_header.low);
+		seg_addr_start = (seg_addr_start_high << 16) + (seg_addr_start_low << 0);
+		seg_size = be32toh(xram_segment_header.size);
+		seg_addr_end = seg_addr_start + seg_size - 1;
+		seg_addr_end_high = (seg_addr_end >> 16) & 0xffff;
+		seg_addr_end_low = (seg_addr_end >> 0) & 0xffff;
+// 		printf("dram seg %08x:%08x - %lu\n", seg_addr_start, seg_addr_end, (unsigned long int)seg_size);
+		fd_offset += sizeof(struct vin_xram_segment_header) + seg_size*2;
+		// Set DRAM Address
+		cmd_eop_set_dram_address.header.parts.first.bits.rw = VIN_WRITE;
+		cmd_eop_set_dram_address.header.parts.first.bits.sc = VIN_SC_NO;
+		cmd_eop_set_dram_address.header.parts.first.bits.bc = VIN_BC_NO;
+		cmd_eop_set_dram_address.header.parts.first.bits.cmd = VIN_CMD_EOP;
+		cmd_eop_set_dram_address.header.parts.first.bits.res = 0;
+		cmd_eop_set_dram_address.header.parts.first.bits.chan = 0;
+		cmd_eop_set_dram_address.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+		cmd_eop_set_dram_address.header.parts.second.eop.bits.ecmd  = VIN_EOP_SET_DRAM;
+		cmd_eop_set_dram_address.header.parts.second.eop.bits.length = 2;
+		cmd_eop_set_dram_address.addres1 = seg_addr_start_low;
+		cmd_eop_set_dram_address.addres1 = seg_addr_end_low;
+		if ((res = vin_write(ctx, &cmd_eop_set_dram_address, sizeof(union vin_cmd) + sizeof(u_int16_t)*2)) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+		// Read DRAM CRC
+		cmd_eop_crc_dram.header.parts.first.bits.rw = VIN_READ;
+		cmd_eop_crc_dram.header.parts.first.bits.sc = VIN_SC_NO;
+		cmd_eop_crc_dram.header.parts.first.bits.bc = VIN_BC_NO;
+		cmd_eop_crc_dram.header.parts.first.bits.cmd = VIN_CMD_EOP;
+		cmd_eop_crc_dram.header.parts.first.bits.res = 0;
+		cmd_eop_crc_dram.header.parts.first.bits.chan = 0;
+		cmd_eop_crc_dram.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+		cmd_eop_crc_dram.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_DRAM;
+		cmd_eop_crc_dram.header.parts.second.eop.bits.length = 1;
+		if ((res = vin_read(ctx, cmd_eop_crc_dram.header, &cmd_eop_crc_dram, sizeof(struct vin_cmd_eop_crc_dram)) < 0)) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_edsp_firmware_error;
+		}
+	}
+	printf("\ndram: checksum=0x%04x\n", cmd_eop_crc_dram.crc);
 #endif
+	close(fd);
+
+	// Check for MBX-EMPTY
+	if (vin_check_mbx_empty(ctx) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_edsp_firmware_error;
+	}
 	// Download End
 	cmd.parts.first.bits.rw = VIN_WRITE;
 	cmd.parts.first.bits.sc = VIN_SC_NO;
@@ -611,10 +716,337 @@ int vin_download_edsp_firmvare(struct vinetic_context *ctx)
 	return 0;
 
 vin_download_edsp_firmware_error:
+	close(fd);
 	return -1;
 }
 
-int vin_coder_channel_jb_statistic_reset(struct vinetic_context *ctx, int chan)
+int vin_download_alm_dsp(struct vinetic_context *ctx, char *path)
+{
+	struct vin_cmd_eop_set_fpi_address cmd_eop_set_fpi_address;
+	struct vin_cmd_eop_access_fpi_memory cmd_eop_access_fpi_memory;
+// 	struct vin_cmd_eop_crc_fpi cmd_eop_crc_fpi;
+
+	u_int32_t addr_start, addr_end;
+	size_t data_size, data_chunk_size;
+	u_int16_t *data = NULL;
+	u_int16_t *datap;
+// 	u_int16_t checksum;
+// 	u_int16_t dschkr;
+
+	FILE * fp = NULL;
+	char fpbuf[32];
+	int flag_address = 0;
+	int flag_data = 0;
+	int flag_checksum = 0;
+	int flag_dschkr = 0;
+
+	ssize_t res;
+	size_t i;
+	u_int32_t tmp_u32;
+
+	// open ALM DSP patch file
+	if ((fp = fopen(path, "r")) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+
+	// get address
+	while (fgets(fpbuf, sizeof(fpbuf), fp))
+	{
+		if (!strncasecmp(fpbuf, "[ADDRESS]", strlen("[ADDRESS]"))) {
+			flag_address = 1;
+			break;
+		}
+	}
+	if (flag_address) {
+		// get start address
+		if (fgets(fpbuf, sizeof(fpbuf), fp)) {
+			if (sscanf(fpbuf, "0x%08X", &tmp_u32) != 1) {
+				ctx->errorline = __LINE__ - 1;
+				ctx->error = errno;
+				goto vin_download_alm_dsp_error;
+			}
+		} else {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+		addr_start = tmp_u32;
+		// get end address
+		if (fgets(fpbuf, sizeof(fpbuf), fp)) {
+			if (sscanf(fpbuf, "0x%08X", &tmp_u32) != 1) {
+				ctx->errorline = __LINE__ - 1;
+				ctx->error = errno;
+				goto vin_download_alm_dsp_error;
+			}
+		} else {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+		addr_end = tmp_u32;
+	} else {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+// 	printf("\naddr start=0x%08x\n", addr_start);
+// 	printf("addr end=0x%08x\n", addr_end);
+
+	// get data
+	data_size = (addr_end - addr_start + 1);
+// 	printf("data size=%lu\n", data_size);
+	while (fgets(fpbuf, sizeof(fpbuf), fp))
+	{
+		if (!strncasecmp(fpbuf, "[DATA]", strlen("[DATA]"))) {
+			flag_data = 1;
+			break;
+		}
+	}
+	if (flag_data) {
+		// alloc data buffer
+		if ((data = malloc(data_size * 2))) {
+			datap = data;
+			//
+			for (i=0; i<data_size; i++)
+			{
+				if (fgets(fpbuf, sizeof(fpbuf), fp)) {
+					if (sscanf(fpbuf, "0x%04X", &tmp_u32) != 1) {
+						ctx->errorline = __LINE__ - 1;
+						ctx->error = errno;
+						goto vin_download_alm_dsp_error;
+					}
+				} else {
+					ctx->errorline = __LINE__ - 1;
+					ctx->error = errno;
+					goto vin_download_alm_dsp_error;
+				}
+			*datap++ = tmp_u32 & 0xffff;
+			}
+		} else {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+	}
+
+	// get checksum
+	while (fgets(fpbuf, sizeof(fpbuf), fp))
+	{
+		if (!strncasecmp(fpbuf, "[CHECKSUM]", strlen("[CHECKSUM]"))) {
+			flag_checksum = 1;
+			break;
+		}
+	}
+	if (flag_checksum) {
+		if (fgets(fpbuf, sizeof(fpbuf), fp)) {
+			if (sscanf(fpbuf, "0x%04X", &tmp_u32) != 1) {
+				ctx->errorline = __LINE__ - 1;
+				ctx->error = errno;
+				goto vin_download_alm_dsp_error;
+			}
+		} else {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+// 		checksum = tmp_u32 & 0xffff;
+	}
+// 	printf("checksum=0x%04x\n", checksum);
+
+	// get dschkr
+	while (fgets(fpbuf, sizeof(fpbuf), fp))
+	{
+		if (!strncasecmp(fpbuf, "[DSCHKR]", strlen("[DSCHKR]"))) {
+			flag_dschkr = 1;
+			break;
+		}
+	}
+	if (flag_dschkr) {
+		if (fgets(fpbuf, sizeof(fpbuf), fp)) {
+			if (sscanf(fpbuf, "0x%04X", &tmp_u32) != 1) {
+				ctx->errorline = __LINE__ - 1;
+				ctx->error = errno;
+				goto vin_download_alm_dsp_error;
+			}
+		} else {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+// 		dschkr = tmp_u32 & 0xffff;
+	}
+// 	printf("dschkr=0x%04x\n", dschkr);
+
+	// Check for MBX-EMPTY
+	if (vin_check_mbx_empty(ctx) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+	// Set FPI Address
+	cmd_eop_set_fpi_address.header.parts.first.bits.rw = VIN_WRITE;
+	cmd_eop_set_fpi_address.header.parts.first.bits.sc = VIN_SC_NO;
+	cmd_eop_set_fpi_address.header.parts.first.bits.bc = VIN_BC_NO;
+	cmd_eop_set_fpi_address.header.parts.first.bits.cmd = VIN_CMD_EOP;
+	cmd_eop_set_fpi_address.header.parts.first.bits.res = 0;
+	cmd_eop_set_fpi_address.header.parts.first.bits.chan = 0;
+	cmd_eop_set_fpi_address.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+	cmd_eop_set_fpi_address.header.parts.second.eop.bits.ecmd  = VIN_EOP_SET_FPI;
+	cmd_eop_set_fpi_address.header.parts.second.eop.bits.length = 4;
+	cmd_eop_set_fpi_address.high_addres1 = (addr_start >> 16) & 0xffff;
+	cmd_eop_set_fpi_address.low_addres1 = addr_start & 0xffff;
+	cmd_eop_set_fpi_address.high_addres2 = (addr_end >> 16) & 0xffff;
+	cmd_eop_set_fpi_address.low_addres2 = addr_end & 0xffff;
+	if ((res = vin_write(ctx, &cmd_eop_set_fpi_address, sizeof(struct vin_cmd_eop_set_fpi_address))) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+#if 0
+	// CRC FPI - reset
+	cmd_eop_crc_fpi.header.parts.first.bits.rw = VIN_WRITE;
+	cmd_eop_crc_fpi.header.parts.first.bits.sc = VIN_SC_NO;
+	cmd_eop_crc_fpi.header.parts.first.bits.bc = VIN_BC_NO;
+	cmd_eop_crc_fpi.header.parts.first.bits.cmd = VIN_CMD_EOP;
+	cmd_eop_crc_fpi.header.parts.first.bits.res = 0;
+	cmd_eop_crc_fpi.header.parts.first.bits.chan = 0;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_FPI;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.length = 0;
+	if ((res = vin_write(ctx, &cmd_eop_crc_fpi, sizeof(union vin_cmd))) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+#endif
+	// Write FPI data
+	datap = data;
+	while (data_size)
+	{
+		// Check for MBX-EMPTY
+		if (vin_check_mbx_empty(ctx) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+		data_chunk_size = (data_size < 29) ? (data_size) : (29);
+		for (i=0; i<data_chunk_size; i++)
+			memcpy(&cmd_eop_access_fpi_memory.data[i], datap++, sizeof(u_int16_t));
+		// Access FPI Memory
+		cmd_eop_access_fpi_memory.header.parts.first.bits.rw = VIN_WRITE;
+		cmd_eop_access_fpi_memory.header.parts.first.bits.sc = VIN_SC_NO;
+		cmd_eop_access_fpi_memory.header.parts.first.bits.bc = VIN_BC_NO;
+		cmd_eop_access_fpi_memory.header.parts.first.bits.cmd = VIN_CMD_EOP;
+		cmd_eop_access_fpi_memory.header.parts.first.bits.res = 0;
+		cmd_eop_access_fpi_memory.header.parts.first.bits.chan = 0;
+		cmd_eop_access_fpi_memory.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+		cmd_eop_access_fpi_memory.header.parts.second.eop.bits.ecmd  = VIN_EOP_ACCESS_DRAM;
+		cmd_eop_access_fpi_memory.header.parts.second.eop.bits.length = data_chunk_size;
+		if ((res = vin_write(ctx, &cmd_eop_access_fpi_memory, sizeof(union vin_cmd) + data_chunk_size*2)) < 0) {
+			ctx->errorline = __LINE__ - 1;
+			ctx->error = errno;
+			goto vin_download_alm_dsp_error;
+		}
+		data_size -= data_chunk_size;
+	}
+
+#if 0
+	// CRC FPI - reset
+	cmd_eop_crc_fpi.header.parts.first.bits.rw = VIN_WRITE;
+	cmd_eop_crc_fpi.header.parts.first.bits.sc = VIN_SC_NO;
+	cmd_eop_crc_fpi.header.parts.first.bits.bc = VIN_BC_NO;
+	cmd_eop_crc_fpi.header.parts.first.bits.cmd = VIN_CMD_EOP;
+	cmd_eop_crc_fpi.header.parts.first.bits.res = 0;
+	cmd_eop_crc_fpi.header.parts.first.bits.chan = 0;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_FPI;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.length = 0;
+	if ((res = vin_write(ctx, &cmd_eop_crc_fpi, sizeof(union vin_cmd))) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+	// CRC FPI - read
+	cmd_eop_crc_fpi.header.parts.first.bits.rw = VIN_READ;
+	cmd_eop_crc_fpi.header.parts.first.bits.sc = VIN_SC_NO;
+	cmd_eop_crc_fpi.header.parts.first.bits.bc = VIN_BC_NO;
+	cmd_eop_crc_fpi.header.parts.first.bits.cmd = VIN_CMD_EOP;
+	cmd_eop_crc_fpi.header.parts.first.bits.res = 0;
+	cmd_eop_crc_fpi.header.parts.first.bits.chan = 0;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.mod = VIN_MOD_TEST;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.ecmd  = VIN_EOP_CRC_FPI;
+	cmd_eop_crc_fpi.header.parts.second.eop.bits.length = 1;
+	if (vin_read(ctx, cmd_eop_crc_fpi.header, &cmd_eop_crc_fpi, sizeof(struct vin_cmd_eop_crc_fpi)) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+	printf("crc=0x%04x\n", cmd_eop_crc_fpi.crc);
+#endif
+#if 0
+	// DSCHKR
+	struct vin_cmd_sop_dschkr cmd_sop_dschkr;
+	// read
+	cmd_sop_dschkr.header.parts.first.bits.rw = VIN_READ;
+	cmd_sop_dschkr.header.parts.first.bits.sc = VIN_SC_NO;
+	cmd_sop_dschkr.header.parts.first.bits.bc = VIN_BC_NO;
+	cmd_sop_dschkr.header.parts.first.bits.cmd = VIN_CMD_SOP;
+	cmd_sop_dschkr.header.parts.second.sop.bits.offset = VIN_SOP_DSCHKR;
+	cmd_sop_dschkr.header.parts.second.sop.bits.length  = 1;
+	if (vin_read(ctx, cmd_sop_dschkr.header, &cmd_sop_dschkr, sizeof(struct vin_cmd_sop_dschkr)) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_download_alm_dsp_error;
+	}
+	printf("crc=0x%04x\n", cmd_sop_dschkr.ds_check);
+#endif
+
+	free(data);
+	fclose(fp);
+	return 0;
+
+vin_download_alm_dsp_error:
+	if (data) free(data);
+	if (fp) fclose(fp);
+	return -1;
+}
+
+int vin_jump_alm_dsp(struct vinetic_context *ctx, unsigned int chan)
+{
+	struct vin_cmd_sop_ccr cmd_sop_ccr;
+
+	ssize_t res;
+
+	// Common Configuration Register
+	cmd_sop_ccr.header.parts.first.bits.rw = VIN_WRITE;
+	cmd_sop_ccr.header.parts.first.bits.sc = VIN_SC_NO;
+	cmd_sop_ccr.header.parts.first.bits.bc = VIN_BC_NO;
+	cmd_sop_ccr.header.parts.first.bits.cmd = VIN_CMD_SOP;
+	cmd_sop_ccr.header.parts.first.bits.res = 0;
+	cmd_sop_ccr.header.parts.first.bits.chan = chan;
+	cmd_sop_ccr.header.parts.second.sop.bits.offset = VIN_SOP_CCR;
+	cmd_sop_ccr.header.parts.second.sop.bits.length = 1;
+	cmd_sop_ccr.ccr.pd_cbias = 0;
+	cmd_sop_ccr.ccr.pd_cvcm = 0;
+	cmd_sop_ccr.ccr.jump_ac1 = 0;
+	cmd_sop_ccr.ccr.jump_ac2 = 0;
+	cmd_sop_ccr.ccr.jump_ac3 = 1;
+	cmd_sop_ccr.ccr.jump_dc = 0;
+	cmd_sop_ccr.ccr.jump_res0 = 0;
+	if ((res = vin_write(ctx, &cmd_sop_ccr, sizeof(struct vin_cmd_sop_ccr))) < 0) {
+		ctx->errorline = __LINE__ - 1;
+		ctx->error = errno;
+		goto vin_jump_alm_dsp_error;
+	}
+	return 0;
+
+vin_jump_alm_dsp_error:
+	return -1;
+}
+
+int vin_coder_channel_jb_statistic_reset(struct vinetic_context *ctx, unsigned int chan)
 {
 	union vin_cmd cmd;
 
@@ -655,9 +1087,8 @@ int vin_read_fw_version(struct vinetic_context *ctx)
 	cmd_eop_edsp_sw_version_register.header.parts.second.eop.bits.ecmd  = VIN_EOP_EDSPSWVERSREG;
 	cmd_eop_edsp_sw_version_register.header.parts.second.eop.bits.length = 2;
 
-	if (vin_read(ctx, cmd_eop_edsp_sw_version_register.header,
-					 &cmd_eop_edsp_sw_version_register,
-					 	sizeof(struct vin_cmd_eop_edsp_sw_version_register)) < 0) {
+	if (vin_read(ctx, cmd_eop_edsp_sw_version_register.header, &cmd_eop_edsp_sw_version_register,
+			sizeof(struct vin_cmd_eop_edsp_sw_version_register)) < 0) {
 		ctx->error = errno;
 		goto vin_read_fw_version_error;
 	}
