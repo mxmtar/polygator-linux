@@ -29,16 +29,12 @@ KERNEL_STG_DIR := /
 
 endif
 
-all: modules libvinetic
+all: modules
 
 modules:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) modules
 
-.PHONY: libvinetic
-libvinetic:
-	make -C libvinetic
-
-install: modules_install headers_install libvinetic_install
+install: modules_install headers_install
 
 modules_install:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) INSTALL_MOD_PATH=$(KERNEL_STG_DIR) INSTALL_MOD_DIR=$(KERNEL_MOD_DIR) modules_install
@@ -49,10 +45,6 @@ headers_install:
 		$(INSTALL) -m 644 $$header "$(DESTDIR)/usr/include/polygator" ; \
 	done
 
-libvinetic_install:
-	make -C libvinetic libvinetic_install
-
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean
-	make -C libvinetic clean
 	@rm -f *~ polygator/*~
