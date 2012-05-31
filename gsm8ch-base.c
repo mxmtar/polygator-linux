@@ -57,94 +57,98 @@ static void gsm8ch_pci_reset_0(uintptr_t cbdata)
 	mdelay(10);
 	outb(0x00, cbdata + PG_PCI_OFFSET_RESET);
 }
-#if 0
+
 static void gsm8ch_pci_reset_1(uintptr_t cbdata)
 {
 	outb(0x04, cbdata + PG_PCI_OFFSET_RESET);
 	mdelay(10);
 	outb(0x00, cbdata + PG_PCI_OFFSET_RESET);
 }
-#endif
+
 static void gsm8ch_pci_write_nwd_0(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 0 + 0);
 // 	debug("%04x\n", value);
 }
-#if 0
+
 static void gsm8ch_pci_write_nwd_1(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 0 + 0);
 // 	debug("%04x\n", value);
 }
-#endif
+
 static void gsm8ch_pci_write_eom_0(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 0 + 4);
 // 	debug("%04x\n", value);
 }
-#if 0
+
 static void gsm8ch_pci_write_eom_1(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 0 + 4);
 // 	debug("%04x\n", value);
 }
-#endif
+
 static u_int16_t gsm8ch_pci_read_nwd_0(uintptr_t cbdata)
 {
 	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 0);
 // 	debug("%04x\n", value);
 	return value;
 }
-#if 0
+
 static u_int16_t gsm8ch_pci_read_nwd_1(uintptr_t cbdata)
 {
 	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 0);
 // 	debug("%04x\n", value);
 	return value;
 }
-#endif
+
 static u_int16_t gsm8ch_pci_read_eom_0(uintptr_t cbdata)
 {
 	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 4);
 // 	debug("%04x\n", value);
 	return value;
 }
-#if 0
+
 static u_int16_t gsm8ch_pci_read_eom_1(uintptr_t cbdata)
 {
 	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 4);
 // 	debug("%04x\n", value);
 	return value;
 }
-#endif
+
 static size_t gsm8ch_pci_is_not_ready_0(uintptr_t cbdata)
 {
-// 	size_t st = (inb(cbdata + PG_PCI_VIN_ST_BASE) >> 0) & 1;
-	union vin_reg_ir reg_ir;
-	reg_ir.full = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
+	size_t st = (inb(cbdata + PG_PCI_VIN_ST_BASE) >> 0) & 1;
+	return st;
+// 	union vin_reg_ir reg_ir;
+// 	reg_ir.full = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
 // 	debug("%04x\n", reg_ir.full);
-	return reg_ir.bits.rdyq;
+// 	return reg_ir.bits.rdyq;
 }
-#if 0
+
 static size_t gsm8ch_pci_is_not_ready_1(uintptr_t cbdata)
 {
-// 	size_t st = (inb(cbdata + PG_PCI_VIN_ST_BASE) >> 1) & 1;
-	union vin_reg_ir reg_ir;
-	reg_ir.full = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
+	size_t st = (inb(cbdata + PG_PCI_VIN_ST_BASE) >> 1) & 1;
+	return st;
+// 	union vin_reg_ir reg_ir;
+// 	reg_ir.full = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
 // 	debug("%04x\n", reg_ir.full);
-	return reg_ir.bits.rdyq;
+// 	return reg_ir.bits.rdyq;
 }
-#endif
+
 static u_int16_t gsm8ch_pci_read_dia_0(uintptr_t cbdata)
 {
-	return inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
+	//return inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
+	return 0;
 }
-#if 0
+
 static u_int16_t gsm8ch_pci_read_dia_1(uintptr_t cbdata)
 {
-	return inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
+// 	return inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 8);
+	return 0;
 }
-#endif
+
 static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int rc;
@@ -183,8 +187,8 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 	vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp1", pci_board_vinetics[0], 1);
 	vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp2", pci_board_vinetics[0], 2);
 	vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp3", pci_board_vinetics[0], 3);
-#if 0
-	pci_board_vinetic[1] = vinetic_device_register(THIS_MODULE, "vin1", addr,
+
+	pci_board_vinetics[1] = vinetic_device_register(THIS_MODULE, "vin1", addr,
 													gsm8ch_pci_reset_1,
 													gsm8ch_pci_is_not_ready_1,
 												 	gsm8ch_pci_write_nwd_1,
@@ -192,7 +196,11 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 												 	gsm8ch_pci_read_nwd_1,
 											 		gsm8ch_pci_read_eom_1,
 													gsm8ch_pci_read_dia_1);
-#endif
+	vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp0", pci_board_vinetics[1], 0);
+	vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp1", pci_board_vinetics[1], 1);
+	vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp2", pci_board_vinetics[1], 2);
+	vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp3", pci_board_vinetics[1], 3);
+
 /*
 	// get board number
 	no = inb(addr + EGGSM_PCI_NUM_BASE) & 3;
@@ -231,9 +239,13 @@ static void __devexit gsm8ch_pci_remove(struct pci_dev *pdev)
 	vinetic_rtp_channel_unregister(pci_board_vinetics[0]->rtp_channels[2]);
 	vinetic_rtp_channel_unregister(pci_board_vinetics[0]->rtp_channels[3]);
 	vinetic_device_unregister(pci_board_vinetics[0]);
-#if 0
-	vinetic_device_unregister(pci_board_vinetic[1]);
-#endif
+
+	vinetic_rtp_channel_unregister(pci_board_vinetics[1]->rtp_channels[0]);
+	vinetic_rtp_channel_unregister(pci_board_vinetics[1]->rtp_channels[1]);
+	vinetic_rtp_channel_unregister(pci_board_vinetics[1]->rtp_channels[2]);
+	vinetic_rtp_channel_unregister(pci_board_vinetics[1]->rtp_channels[3]);
+	vinetic_device_unregister(pci_board_vinetics[1]);
+
 	pci_release_region(pdev, 0);
 }
 

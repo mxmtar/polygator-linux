@@ -888,8 +888,17 @@ struct vin_cmd_eop_coder_channel_jb_statistics {
  * \brief Control Commands
  */
 enum {
+	VIN_EOP_CERR_ACK = 0x00,
 	VIN_EOP_ENDIAN_CONT = 0x04,
 };
+/*!
+ * \brief Command_CERR_Acknowledge
+	This command clears the CERR bit in the BXSR1 register.
+ */
+struct vin_cmd_eop_cerr_acknowledge {
+	union vin_cmd header;
+} __attribute__((packed));
+
 /*!
  * \brief Command_Endian_Control
 	Description: This command controls the endian interpretation of the data words for the EOP/EVT/VOP commands.
