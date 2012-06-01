@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/timer.h>
+#include <linux/types.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
 
@@ -28,12 +29,12 @@
 #include "polygator/vinetic-ioctl.h"
 
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@ukr.net>");
-MODULE_DESCRIPTION("Polygator Linux module for VINETIC support");
+MODULE_DESCRIPTION("Polygator Linux module VINETIC support");
 MODULE_LICENSE("GPL");
 
 static int vinetic_major = 0;
 module_param(vinetic_major, int, 0);
-MODULE_PARM_DESC(vinetic_major, "Major Polygator linux module for VINETIC support");
+MODULE_PARM_DESC(vinetic_major, "Major number for Polygator Linux module VINETIC support");
 
 EXPORT_SYMBOL(vinetic_device_register);
 EXPORT_SYMBOL(vinetic_device_unregister);
@@ -70,9 +71,9 @@ EXPORT_SYMBOL(vinetic_rtp_channel_unregister);
 	#define class_destroy(_a) class_simple_destroy(_a)
 #endif
 
-#define verbose(_fmt, _args...) printk(KERN_INFO "[pg-%s] " _fmt, THIS_MODULE->name, ## _args)
-#define log(_level, _fmt, _args...) printk(_level "[pg-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "vinetic-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
-#define debug(_fmt, _args...) printk(KERN_DEBUG "[pg-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "vinetic-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+#define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
+#define log(_level, _fmt, _args...) printk(_level "polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "vinetic-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+#define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "vinetic-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
 #define VINETIC_WAIT_COUNT 50
 #define VINETIC_WAIT_TIMEOUT 2
@@ -1570,7 +1571,8 @@ struct vinetic *vinetic_device_register(struct module *owner,
 							u_int16_t (* read_dia)(uintptr_t cbdata))
 {
 	struct vinetic *vin;
-	int i;
+	size_t i;
+	int rc;
 	char devname[64];
 	int devno = 0;
 	int slot_alloc = 0;
@@ -1670,8 +1672,8 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	cdev_init(&vin->cdev, &vinetic_fops);
 	vin->cdev.owner = owner;
 	vin->cdev.ops = &vinetic_fops;
-	if ((i = cdev_add(&vin->cdev, devno, 1)) < 0) {
-		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, i);
+	if ((rc = cdev_add(&vin->cdev, devno, 1)) < 0) {
+		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_device_register_error;
 	}
 	snprintf(devname, sizeof(devname), "polygator!%s", name);
@@ -1701,7 +1703,10 @@ vinetic_device_register_error:
 
 void vinetic_device_unregister(struct vinetic *vin)
 {
-	int i;
+	size_t i;
+
+	CLASS_DEV_DESTROY(vinetic_class, vin->devno);
+	cdev_del(&vin->cdev);
 
 	verbose("\"%s\" unregistered\n", vin->name);
 
@@ -1723,15 +1728,14 @@ void vinetic_device_unregister(struct vinetic *vin)
 	// deleting vinetic polling timer
 	del_timer_sync(&vin->poll_timer);
 
-	CLASS_DEV_DESTROY(vinetic_class, vin->devno);
-	cdev_del(&vin->cdev);
 	kfree(vin);
 }
 
 struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, char *name, struct vinetic *vin, int index)
 {
 	struct vinetic_rtp_channel *rtp;
-	int i;
+	size_t i;
+	int rc;
 	char devname[64];
 	int devno = 0;
 	int slot_alloc = 0;
@@ -1807,8 +1811,8 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 	cdev_init(&rtp->cdev, &vinetic_rtp_channel_fops);
 	rtp->cdev.owner = owner;
 	rtp->cdev.ops = &vinetic_rtp_channel_fops;
-	if ((i = cdev_add(&rtp->cdev, devno, 1)) < 0) {
-		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, i);
+	if ((rc = cdev_add(&rtp->cdev, devno, 1)) < 0) {
+		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_rtp_channel_register_error;
 	}
 	snprintf(devname, sizeof(devname), "polygator!%s", name);
@@ -1838,9 +1842,12 @@ vinetic_rtp_channel_register_error:
 
 void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 {
-	int i;
+	size_t i;
 	
 	if (!rtp) return;
+
+	CLASS_DEV_DESTROY(vinetic_class, rtp->devno);
+	cdev_del(&rtp->cdev);
 
 	verbose("\"%s\" unregistered\n", rtp->name);
 
@@ -1863,15 +1870,13 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 	rtp->vinetic->rtp_channels[rtp->index] = NULL;
 	spin_unlock_bh(&rtp->vinetic->lock);
 
-	CLASS_DEV_DESTROY(vinetic_class, rtp->devno);
-	cdev_del(&rtp->cdev);
 	kfree(rtp);
 }
 
 static int __init vinetic_init(void)
 {
 	int rc;
-	int i;
+	size_t i;
 	dev_t devno;
 	int vinetic_major_reg = 0;
 
@@ -1915,8 +1920,6 @@ vinetic_init_error:
 
 static void __exit vinetic_exit(void)
 {
-	// Destroy test file
-	CLASS_DEV_DESTROY(vinetic_class, MKDEV(vinetic_major, 0));
 	// Unregister char device region
 	unregister_chrdev_region(MKDEV(vinetic_major, 0), VINETIC_DEVICE_MAXCOUNT);
 	// Destroy vinetic device class

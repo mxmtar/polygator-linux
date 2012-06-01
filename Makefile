@@ -7,7 +7,8 @@ KERNEL_MOD_DIR := polygator
 
 ifeq ($(TARGET_DEVICE), k5)
 
-obj-m := vinetic.o k5.o
+obj-m := polygator.o vinetic.o k5.o
+polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 k5-objs := k5-base.o
 
@@ -19,7 +20,8 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else
 
-obj-m := vinetic.o gsm8ch.o
+obj-m := polygator.o vinetic.o gsm8ch.o
+polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 gsm8ch-objs := gsm8ch-base.o
 
