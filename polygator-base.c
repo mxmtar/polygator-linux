@@ -6,10 +6,13 @@
 // #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 // #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
 
 #include <asm/uaccess.h>
 #include <asm/atomic.h>
@@ -19,6 +22,7 @@
 #endif
 
 #include "polygator/polygator-base.h"
+#include "polygator/polygator-ioctl.h"
 
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@ukr.net>");
 MODULE_DESCRIPTION("Polygator Linux base module");
@@ -67,57 +71,96 @@ EXPORT_SYMBOL(polygator_board_unregister);
 
 static struct cdev polygator_subsytem_cdev;
 
-static struct polygator_board polygator_board_list[POLYGATOR_BOARD_MAXCOUNT];
+static struct polygator_board *polygator_board_list[POLYGATOR_BOARD_MAXCOUNT];
 static DEFINE_SPINLOCK(polygator_board_list_lock);
+
+static int polygator_subsystem_open(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static int polygator_subsystem_release(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static int polygator_subsystem_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
+{
+	struct polygator_ioctl_get_board brd;
+	int res = 0;
+	void __user *argp = (void __user *)data;
+
+	switch (cmd)
+	{
+		case POLYGATOR_GET_BOARD:
+			if (copy_from_user(&brd, argp, sizeof(struct polygator_ioctl_get_board)))
+				return -EINVAL;
+			strcpy(brd.name, polygator_board_list[brd.no]->name);
+			if (copy_to_user(argp, &brd, sizeof(struct polygator_ioctl_get_board)))
+				return -EINVAL;
+			break;
+		default:
+			res = -ENOIOCTLCMD;
+			break;
+	}
+// polygator_subsystem_generic_ioctl_end:
+	return res;
+}
+
+#if defined(HAVE_UNLOCKED_IOCTL)
+static long polygator_subsystem_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
+{
+	return (long)polygator_subsystem_generic_ioctl(filp, cmd, data);
+}
+#else
+static int polygator_subsystem_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long data)
+{
+	return (long)polygator_subsystem_generic_ioctl(filp, cmd, data);
+}
+#endif
+
+#if defined(CONFIG_COMPAT) && defined(HAVE_COMPAT_IOCTL) && (HAVE_COMPAT_IOCTL == 1)
+static long polygator_subsystem_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
+{
+	return (long)polygator_subsystem_generic_ioctl(filp, cmd, data);
+}
+#endif
 
 static struct file_operations polygator_subsytem_fops = {
 	.owner   = THIS_MODULE,
-// 	.open    = vinetic_open,
-// 	.release = vinetic_release,
-// 	.read    = vinetic_read,
-// 	.write   = vinetic_write,
+	.open    = polygator_subsystem_open,
+	.release = polygator_subsystem_release,
+// 	.read    = polygator_subsystem_read,
+// 	.write   = polygator_subsystem_write,
 #if defined(HAVE_UNLOCKED_IOCTL)
-// 	.unlocked_ioctl = vinetic_unlocked_ioctl,
+	.unlocked_ioctl = polygator_subsystem_unlocked_ioctl,
 #else
-// 	.ioctl = vinetic_ioctl,
+	.ioctl = polygator_subsystem_ioctl,
 #endif
 #if defined(CONFIG_COMPAT) && defined(HAVE_COMPAT_IOCTL) && (HAVE_COMPAT_IOCTL == 1)
-// 	.compat_ioctl = vinetic_compat_ioctl,
+	.compat_ioctl = polygator_subsystem_compat_ioctl,
 #endif
-// 	.llseek = vinetic_llseek,
+// 	.llseek = polygator_subsystem_llseek,
 };
 
-static struct file_operations polygator_board_fops = {
-	.owner   = THIS_MODULE,
-// 	.open    = vinetic_open,
-// 	.release = vinetic_release,
-// 	.read    = vinetic_read,
-// 	.write   = vinetic_write,
-#if defined(HAVE_UNLOCKED_IOCTL)
-// 	.unlocked_ioctl = vinetic_unlocked_ioctl,
-#else
-// 	.ioctl = vinetic_ioctl,
-#endif
-#if defined(CONFIG_COMPAT) && defined(HAVE_COMPAT_IOCTL) && (HAVE_COMPAT_IOCTL == 1)
-// 	.compat_ioctl = vinetic_compat_ioctl,
-#endif
-// 	.llseek = vinetic_llseek,
-};
-
-struct polygator_board *polygator_board_register(struct module *owner, char *name, void * data)
+struct polygator_board *polygator_board_register(struct module *owner, char *name, struct cdev *cdev, struct file_operations *fops)
 {
 	size_t i;
 	char devname[POLYGATOR_BRDNAME_MAXLEN];
 	int rc;
-	int devno = 0;
-	int slot_alloc = 0;
-	struct polygator_board *brd = NULL;
+	int devno = -1;
+	struct polygator_board *brd;
+
+	if (!(brd = kmalloc(sizeof(struct polygator_board), GFP_KERNEL))) {
+		log(KERN_ERR, "\"%s\" - can't get memory for struct polygator_board\n", name);
+		goto polygator_board_register_error;
+	}
 
 	spin_lock(&polygator_board_list_lock);
 	// check for name is not used
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
-		if (!strcmp(polygator_board_list[i].name, name)) {
+		if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
 			spin_unlock(&polygator_board_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
 			goto polygator_board_register_error;
@@ -126,28 +169,27 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 	// get free slot
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
-		if (!polygator_board_list[i].data) {
+		if (!polygator_board_list[i]) {
 			devno = MKDEV(polygator_major, i);
-			polygator_board_list[i].devno = devno;
-			snprintf(polygator_board_list[i].name, POLYGATOR_BRDNAME_MAXLEN, "%s", name);
-			polygator_board_list[i].data = data;
-			brd = &polygator_board_list[i];
+			polygator_board_list[i] = brd;
+			brd->devno = devno;
+			snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "%s", name);
 			break;
 		}
 	}
 	spin_unlock(&polygator_board_list_lock);
-	
-	if (!brd) {
+
+	if (devno < 0) {
 		log(KERN_ERR, "\"%s\" - can't get free slot\n", name);
 		goto polygator_board_register_error;
 	}
-	slot_alloc = 1;
 
 	// Add char device to system
-	cdev_init(&brd->cdev, &polygator_board_fops);
-	brd->cdev.owner = owner;
-	brd->cdev.ops = &polygator_board_fops;
-	if ((rc = cdev_add(&brd->cdev, devno, 1)) < 0) {
+	cdev_init(cdev, fops);
+	cdev->owner = owner;
+	cdev->ops = fops;
+	brd->cdev = cdev;
+	if ((rc = cdev_add(cdev, devno, 1)) < 0) {
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto polygator_board_register_error;
 	}
@@ -158,19 +200,18 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 	return brd;
 
 polygator_board_register_error:
-	if (slot_alloc) {
+	if (devno >= 0) {
 		spin_lock(&polygator_board_list_lock);
 		for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 		{
-			if (!strcmp(polygator_board_list[i].name, name)) {
-				polygator_board_list[i].name[0] = '\0';
-				polygator_board_list[i].devno = 0;
-				polygator_board_list[i].data = NULL;
+			if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
+				polygator_board_list[i] = NULL;
 				break;
 			}
 		}
 		spin_unlock(&polygator_board_list_lock);
 	}
+	if (brd) kfree(brd);
 	return NULL;
 }
 
@@ -179,7 +220,7 @@ void polygator_board_unregister(struct polygator_board *brd)
 	size_t i;
 
 	CLASS_DEV_DESTROY(polygator_class, brd->devno);
-	cdev_del(&brd->cdev);
+	cdev_del(brd->cdev);
 
 	verbose("\"%s\" unregistered\n", brd->name);
 
@@ -187,10 +228,9 @@ void polygator_board_unregister(struct polygator_board *brd)
 
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
-		if (!strcmp(polygator_board_list[i].name, brd->name)) {
-			polygator_board_list[i].name[0] = '\0';
-			polygator_board_list[i].devno = 0;
-			polygator_board_list[i].data = NULL;
+		if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, brd->name))) {
+			kfree(polygator_board_list[i]);
+			polygator_board_list[i] = NULL;
 			break;
 		}
 	}
@@ -200,11 +240,15 @@ void polygator_board_unregister(struct polygator_board *brd)
 
 static int __init polygator_init(void)
 {
+	size_t i;
 	int rc;
 	dev_t devno;
 	int polygator_major_reg = 0;
 
 	verbose("loading ...\n");
+
+	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
+		polygator_board_list[i] = NULL;
 
 	// Registering polygator device class
 	polygator_class = class_create(THIS_MODULE, "polygator");

@@ -47,6 +47,16 @@ headers_install:
 		$(INSTALL) -m 644 $$header "$(DESTDIR)/usr/include/polygator" ; \
 	done
 
+uninstall: modules_uninstall headers_uninstall
+
+modules_uninstall:
+#	echo "/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
+	rm -rvf "/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
+	depmod
+
+headers_uninstall:
+	rm -rvf "$(DESTDIR)/usr/include/polygator"
+
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean
 	@rm -f *~ polygator/*~

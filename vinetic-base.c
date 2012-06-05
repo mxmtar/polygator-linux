@@ -757,176 +757,7 @@ vinetic_write_end:
 	return res;
 }
 
-#if defined(HAVE_UNLOCKED_IOCTL)
-static long vinetic_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
-{
-	u_int16_t phi;
-	size_t wait_count;
-	size_t cnt;
-	int not_ready;
-	long res = 0;
-	struct vinetic *vin = filp->private_data;
-	void __user *argp = (void __user *)data;
-
-// 	debug("%s cmd=0x%08x\n", vin->name, cmd);
-
-	switch (cmd)
-	{
-		case VINETIC_RESET:
-			vin->reset(vin->cbdata);
-			break;
-		case VINETIC_DISABLE_IRQ:
-			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x0801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x4020);
-			// write data to vinetic
-			for (cnt=0; cnt<32; cnt++)
-			{
-				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-				{
-					if (!vin->is_not_ready(vin->cbdata)) break;
-					udelay(VINETIC_WAIT_TIMEOUT);
-				}
-				if (wait_count == VINETIC_WAIT_COUNT) {
-					spin_unlock_bh(&vin->lock);
-					res = -EIO;
-					goto vinetic_unlocked_ioctl_end;
-				}
-				if (cnt == 31)
-					vin->write_eom(vin->cbdata, 0xffff);
-				else
-					vin->write_nwd(vin->cbdata, 0xffff);
-				}
-			spin_unlock_bh(&vin->lock);
-			break;
-		case VINETIC_GET_NOT_READY:
-			not_ready = vin->is_not_ready(vin->cbdata);
-			if (copy_to_user(argp, &not_ready, sizeof(int)))
-				res = -EINVAL;
-			break;
-		case VINETIC_READ_DIA:
-			phi = vin->read_dia(vin->cbdata);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
-				res = -EINVAL;
-			break;
-		case VINETIC_REVISION:
-			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8001);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			phi = vin->read_eom(vin->cbdata);
-			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
-				res = -EINVAL;
-			break;
-		case VINETIC_CHECKSUM:
-			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8901);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			phi = vin->read_eom(vin->cbdata);
-			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
-				res = -EINVAL;
-			break;
-		case VINETIC_SET_POLL:
-			if (copy_from_user(&vin->poll, argp, sizeof(int)))
-				res = -EINVAL;
-			del_timer_sync(&vin->poll_timer);
-			if (vin->poll) {
-				vin->poll_timer.function = vinetic_poll;
-				vin->poll_timer.data = (unsigned long)vin;
-				vin->poll_timer.expires = jiffies + 1;
-				add_timer(&vin->poll_timer);
-			}
-			break;
-		default:
-			res = -ENOIOCTLCMD;
-			break;
-	}
-vinetic_unlocked_ioctl_end:
-	return res;
-}
-#else
-static int vinetic_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long data)
+static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
 {
 	u_int16_t phi;
 	size_t wait_count;
@@ -978,7 +809,7 @@ static int vinetic_ioctl(struct inode *inode, struct file *filp, unsigned int cm
 				if (wait_count == VINETIC_WAIT_COUNT) {
 					spin_unlock_bh(&vin->lock);
 					res = -EIO;
-					goto vinetic_ioctl_end;
+					goto vinetic_generic_ioctl_end;
 				}
 				if (cnt == 31)
 					vin->write_eom(vin->cbdata, 0xffff);
@@ -1090,178 +921,26 @@ static int vinetic_ioctl(struct inode *inode, struct file *filp, unsigned int cm
 			res = -ENOIOCTLCMD;
 			break;
 	}
-vinetic_ioctl_end:
+vinetic_generic_ioctl_end:
 	return res;
+}
+
+#if defined(HAVE_UNLOCKED_IOCTL)
+static long vinetic_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
+{
+	return (long)vinetic_generic_ioctl(filp, cmd, data);
+}
+#else
+static int vinetic_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long data)
+{
+	return (long)vinetic_generic_ioctl(filp, cmd, data);
 }
 #endif
 
 #if defined(CONFIG_COMPAT) && defined(HAVE_COMPAT_IOCTL) && (HAVE_COMPAT_IOCTL == 1)
 static long vinetic_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
 {
-	u_int16_t phi;
-	size_t wait_count;
-	size_t cnt;
-	int not_ready;
-	long res = 0;
-	struct vinetic *vin = filp->private_data;
-	void __user *argp = (void __user *)data;
-
-// 	debug("%s cmd=0x%08x\n", vin->name, cmd);
-
-	switch (cmd)
-	{
-		case VINETIC_RESET:
-			vin->reset(vin->cbdata);
-			break;
-		case VINETIC_DISABLE_IRQ:
-			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x0801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x4020);
-			// write data to vinetic
-			for (cnt=0; cnt<32; cnt++)
-			{
-				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-				{
-					if (!vin->is_not_ready(vin->cbdata)) break;
-					udelay(VINETIC_WAIT_TIMEOUT);
-				}
-				if (wait_count == VINETIC_WAIT_COUNT) {
-					spin_unlock_bh(&vin->lock);
-					res = -EIO;
-					goto vinetic_compat_ioctl_end;
-				}
-				if (cnt == 31)
-					vin->write_eom(vin->cbdata, 0xffff);
-				else
-					vin->write_nwd(vin->cbdata, 0xffff);
-				}
-			spin_unlock_bh(&vin->lock);
-			break;
-		case VINETIC_GET_NOT_READY:
-			not_ready = vin->is_not_ready(vin->cbdata);
-			if (copy_to_user(argp, &not_ready, sizeof(int)))
-				res = -EINVAL;
-			break;
-		case VINETIC_READ_DIA:
-			phi = vin->read_dia(vin->cbdata);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
-				res = -EINVAL;
-			break;
-		case VINETIC_REVISION:
-			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8001);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			phi = vin->read_eom(vin->cbdata);
-			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
-				res = -EINVAL;
-			break;
-		case VINETIC_CHECKSUM:
-			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			vin->write_nwd(vin->cbdata, 0x8901);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
-				if (!vin->is_not_ready(vin->cbdata)) break;
-				udelay(VINETIC_WAIT_TIMEOUT);
-			}
-			if (wait_count == VINETIC_WAIT_COUNT) {
-				spin_unlock_bh(&vin->lock);
-				res = -EIO;
-				break;
-			}
-			phi = vin->read_eom(vin->cbdata);
-			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
-				res = -EINVAL;
-			break;
-		case VINETIC_SET_POLL:
-			if (copy_from_user(&vin->poll, argp, sizeof(int)))
-				res = -EINVAL;
-			del_timer_sync(&vin->poll_timer);
-			if (vin->poll) {
-				vin->poll_timer.function = vinetic_poll;
-				vin->poll_timer.data = (unsigned long)vin;
-				vin->poll_timer.expires = jiffies + 1;
-				add_timer(&vin->poll_timer);
-			}
-			break;
-		default:
-			res = -ENOIOCTLCMD;
-			break;
-	}
-vinetic_compat_ioctl_end:
-	return res;
+	return (long)vinetic_generic_ioctl(filp, cmd, data);
 }
 #endif
 
@@ -1581,6 +1260,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 		log(KERN_ERR, "\"%s\" - can't get memory\n", name);
 		goto vinetic_device_register_error;
 	}
+	memset(vin, 0, sizeof(struct vinetic));
 
 	spin_lock(&vinetic_device_list_lock);
 	// check for name is not used

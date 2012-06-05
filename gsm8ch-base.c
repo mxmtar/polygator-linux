@@ -1,7 +1,8 @@
 /******************************************************************************/
-/* vinetic-base.c                                                             */
+/* gsm8ch-base.c                                                              */
 /******************************************************************************/
 
+#include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -33,11 +34,13 @@ MODULE_LICENSE("GPL");
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "gsm8ch-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
 struct gsm8ch_board {
-	
+
 	struct polygator_board *pg_board;
+	struct cdev cdev;
 
 	u_int8_t rom[256];
-	u_int8_t romsize;
+	size_t romsize;
+	u_int32_t sn;
 
 	struct vinetic *vinetics[2];
 };
@@ -159,13 +162,42 @@ static u_int16_t gsm8ch_pci_read_dia_1(uintptr_t cbdata)
 	return 0;
 }
 
+static int gsm8ch_open(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static int gsm8ch_release(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static struct file_operations gsm8ch_fops = {
+	.owner   = THIS_MODULE,
+	.open    = gsm8ch_open,
+	.release = gsm8ch_release,
+// 	.read    = gsm8ch_read,
+// 	.write   = gsm8ch_write,
+#if defined(HAVE_UNLOCKED_IOCTL)
+// 	.unlocked_ioctl = gsm8ch_unlocked_ioctl,
+#else
+// 	.ioctl = gsm8ch_ioctl,
+#endif
+#if defined(CONFIG_COMPAT) && defined(HAVE_COMPAT_IOCTL) && (HAVE_COMPAT_IOCTL == 1)
+// 	.compat_ioctl = gsm8ch_compat_ioctl,
+#endif
+// 	.llseek = gsm8ch_llseek,
+};
+
 static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int rc;
 	unsigned long addr;
 // 	u_int32_t no;
 	u_int16_t type;
-	size_t i;
+	u_int32_t pow10;
+	size_t i,j;
+	char devname[POLYGATOR_BRDNAME_MAXLEN];
 	struct gsm8ch_board *brd = NULL;
 	int get_pci_region = 0;
 
@@ -187,6 +219,7 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		rc = -1;
 		goto gsm8ch_pci_probe_error;
 	}
+	memset(brd, 0, sizeof(struct gsm8ch_board));
 
 	// get starting address
 	addr = pci_resource_start(pdev, 0);
@@ -204,13 +237,6 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		type |= inb(addr + PG_PCI_ID_BASE) & 0x01;
 	}
 	verbose("found PCI board type=%04x\n", type & 0x00ff);
-	
-	// read board rom
-	memset(brd->rom, 0, 256);
-	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
-	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
-	for (i=0; i<brd->romsize; i++) brd->rom[i] = inb(addr + PG_PCI_ROM_BASE);
-	verbose("\"%.*s\"\n", brd->romsize, brd->rom);
 
 	if (((type & 0x00ff) != 0x0081) && ((type & 0x00ff) != 0x0082) && ((type & 0x00ff) != 0x0083)) {
 		log(KERN_ERR, "PCI board type=%04x unsupported\n", type & 0x00ff);
@@ -218,67 +244,52 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		goto gsm8ch_pci_probe_error;
 	}
 
+	// read board rom
+	memset(brd->rom, 0, 256);
+	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
+	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
+	for (i=0; i<brd->romsize; i++) brd->rom[i] = inb(addr + PG_PCI_ROM_BASE);
+	verbose("\"%.*s\"\n", (int)brd->romsize, brd->rom);
 
-
-	if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, "pci", brd))) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
+	// get board serial number
+	i = brd->romsize - 1;
+	pow10 = 1;
+	brd->sn = 0;
+	while (i--)
+	{
+		if ((brd->rom[i] < 0x30) || (brd->rom[i] > 0x39))
+			break;
+		brd->sn += (brd->rom[i] - 0x30) * pow10;
+		pow10 *= 10;
 	}
-
-	if (!(brd->vinetics[0] = vinetic_device_register(THIS_MODULE, "vin0", addr,
-													gsm8ch_pci_reset_0,
-													gsm8ch_pci_is_not_ready_0,
-													gsm8ch_pci_write_nwd_0,
-													gsm8ch_pci_write_eom_0,
-													gsm8ch_pci_read_nwd_0,
-													gsm8ch_pci_read_eom_0,
-													gsm8ch_pci_read_dia_0))) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp0", brd->vinetics[0], 0)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp1", brd->vinetics[0], 1)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp2", brd->vinetics[0], 2)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin0rtp3", brd->vinetics[0], 3)) {
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-gsm8ch-pci-%u", brd->sn);
+	if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, devname, &brd->cdev, &gsm8ch_fops))) {
 		rc = -1;
 		goto gsm8ch_pci_probe_error;
 	}
 
-	if (!(brd->vinetics[1] = vinetic_device_register(THIS_MODULE, "vin1", addr,
-													gsm8ch_pci_reset_1,
-													gsm8ch_pci_is_not_ready_1,
-												 	gsm8ch_pci_write_nwd_1,
-												 	gsm8ch_pci_write_eom_1,
-												 	gsm8ch_pci_read_nwd_1,
-											 		gsm8ch_pci_read_eom_1,
-													gsm8ch_pci_read_dia_1))) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp0", brd->vinetics[1], 0)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp1", brd->vinetics[1], 1)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp2", brd->vinetics[1], 2)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
-	}
-	if (!vinetic_rtp_channel_register(THIS_MODULE, "vin1rtp3", brd->vinetics[1], 3)) {
-		rc = -1;
-		goto gsm8ch_pci_probe_error;
+	for (j=0; j<2; j++)
+	{
+		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-gsm8ch-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
+		if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, addr,
+													(j)?(gsm8ch_pci_reset_1):(gsm8ch_pci_reset_0),
+													(j)?(gsm8ch_pci_is_not_ready_1):(gsm8ch_pci_is_not_ready_0),
+													(j)?(gsm8ch_pci_write_nwd_1):(gsm8ch_pci_write_nwd_0),
+													(j)?(gsm8ch_pci_write_eom_1):(gsm8ch_pci_write_eom_0),
+													(j)?(gsm8ch_pci_read_nwd_1):(gsm8ch_pci_read_nwd_0),
+													(j)?(gsm8ch_pci_read_eom_1):(gsm8ch_pci_read_eom_0),
+													(j)?(gsm8ch_pci_read_dia_1):(gsm8ch_pci_read_dia_0)))) {
+			rc = -1;
+			goto gsm8ch_pci_probe_error;
+		}
+		for (i=0; i<4; i++)
+		{
+			snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-gsm8ch-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i)) {
+				rc = -1;
+				goto gsm8ch_pci_probe_error;
+			}
+		}
 	}
 
 	pci_set_drvdata(pdev, brd);
@@ -287,29 +298,17 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 
 gsm8ch_pci_probe_error:
 	if (brd) {
-		if (brd->vinetics[0]) {
-			if (brd->vinetics[0]->rtp_channels[0])
-				vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[0]);
-			if (brd->vinetics[0]->rtp_channels[1])
-				vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[1]);
-			if (brd->vinetics[0]->rtp_channels[2])
-				vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[2]);
-			if (brd->vinetics[0]->rtp_channels[3])
-				vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[3]);
-			vinetic_device_unregister(brd->vinetics[0]);
+		for (j=0; j<2; j++)
+		{
+			if (brd->vinetics[j]) {
+				for (i=0; i<4; i++)
+				{
+					if (brd->vinetics[j]->rtp_channels[i])
+						vinetic_rtp_channel_unregister(brd->vinetics[j]->rtp_channels[i]);
+				}
+			vinetic_device_unregister(brd->vinetics[j]);
+			}
 		}
-		if (brd->vinetics[1]) {
-			if (brd->vinetics[1]->rtp_channels[0])
-				vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[0]);
-			if (brd->vinetics[1]->rtp_channels[1])
-				vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[1]);
-			if (brd->vinetics[1]->rtp_channels[2])
-				vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[2]);
-			if (brd->vinetics[1]->rtp_channels[3])
-				vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[3]);
-			vinetic_device_unregister(brd->vinetics[1]);
-		}
-
 		if (brd->pg_board) polygator_board_unregister(brd->pg_board);
 
 		kfree(brd);
@@ -320,19 +319,17 @@ gsm8ch_pci_probe_error:
 
 static void __devexit gsm8ch_pci_remove(struct pci_dev *pdev)
 {
+	size_t i,j;
 	struct gsm8ch_board *brd = pci_get_drvdata(pdev);
 
-	vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[0]);
-	vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[1]);
-	vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[2]);
-	vinetic_rtp_channel_unregister(brd->vinetics[0]->rtp_channels[3]);
-	vinetic_device_unregister(brd->vinetics[0]);
-
-	vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[0]);
-	vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[1]);
-	vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[2]);
-	vinetic_rtp_channel_unregister(brd->vinetics[1]->rtp_channels[3]);
-	vinetic_device_unregister(brd->vinetics[1]);
+	for (j=0; j<2; j++)
+	{
+		for (i=0; i<4; i++)
+		{
+			vinetic_rtp_channel_unregister(brd->vinetics[j]->rtp_channels[i]);
+		}
+		vinetic_device_unregister(brd->vinetics[j]);
+	}
 
 	polygator_board_unregister(brd->pg_board);
 
