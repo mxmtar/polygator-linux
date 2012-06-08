@@ -57,6 +57,16 @@ modules_uninstall:
 headers_uninstall:
 	rm -rvf "$(DESTDIR)/usr/include/polygator"
 
+insmod_all:
+	insmod vinetic.ko
+	insmod polygator.ko
+	insmod gsm8ch.ko
+
+rmmod_all:
+	rmmod gsm8ch
+	rmmod vinetic
+	rmmod polygator
+
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean
 	@rm -f *~ polygator/*~

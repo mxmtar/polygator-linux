@@ -69,6 +69,11 @@ static void gsm8ch_pci_reset_0(uintptr_t cbdata)
 	outb(0x02, cbdata + PG_PCI_OFFSET_RESET);
 	mdelay(10);
 	outb(0x00, cbdata + PG_PCI_OFFSET_RESET);
+	mdelay(10);
+	outb(0x02, cbdata + PG_PCI_OFFSET_RESET);
+	mdelay(10);
+	outb(0x00, cbdata + PG_PCI_OFFSET_RESET);
+	mdelay(2);
 }
 
 static void gsm8ch_pci_reset_1(uintptr_t cbdata)
@@ -76,6 +81,11 @@ static void gsm8ch_pci_reset_1(uintptr_t cbdata)
 	outb(0x04, cbdata + PG_PCI_OFFSET_RESET);
 	mdelay(10);
 	outb(0x00, cbdata + PG_PCI_OFFSET_RESET);
+	mdelay(10);
+	outb(0x04, cbdata + PG_PCI_OFFSET_RESET);
+	mdelay(10);
+	outb(0x00, cbdata + PG_PCI_OFFSET_RESET);
+	mdelay(2);
 }
 
 static void gsm8ch_pci_write_nwd_0(uintptr_t cbdata, u_int16_t value)
@@ -86,7 +96,7 @@ static void gsm8ch_pci_write_nwd_0(uintptr_t cbdata, u_int16_t value)
 
 static void gsm8ch_pci_write_nwd_1(uintptr_t cbdata, u_int16_t value)
 {
-	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 0 + 0);
+	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 8 + 0);
 // 	debug("%04x\n", value);
 }
 
@@ -98,7 +108,7 @@ static void gsm8ch_pci_write_eom_0(uintptr_t cbdata, u_int16_t value)
 
 static void gsm8ch_pci_write_eom_1(uintptr_t cbdata, u_int16_t value)
 {
-	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 0 + 4);
+	outw(value, cbdata + PG_PCI_VIN_DATA_BASE + 8 + 4);
 // 	debug("%04x\n", value);
 }
 
@@ -111,7 +121,7 @@ static u_int16_t gsm8ch_pci_read_nwd_0(uintptr_t cbdata)
 
 static u_int16_t gsm8ch_pci_read_nwd_1(uintptr_t cbdata)
 {
-	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 0);
+	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 8 + 0);
 // 	debug("%04x\n", value);
 	return value;
 }
@@ -125,7 +135,7 @@ static u_int16_t gsm8ch_pci_read_eom_0(uintptr_t cbdata)
 
 static u_int16_t gsm8ch_pci_read_eom_1(uintptr_t cbdata)
 {
-	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 0 + 4);
+	u_int16_t value = inw(cbdata + PG_PCI_VIN_DATA_BASE + 8 + 4);
 // 	debug("%04x\n", value);
 	return value;
 }

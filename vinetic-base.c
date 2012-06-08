@@ -94,7 +94,7 @@ static void vinetic_poll(unsigned long addr)
 
 	u_int16_t res;
 
-	size_t vop_pkt_len;
+	size_t vop_pkt_len = 0;
 
 	size_t wait_count;
 
@@ -773,6 +773,22 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 	{
 		case VINETIC_RESET:
 			vin->reset(vin->cbdata);
+			break;
+		case VINETIC_RESET_RDYQ:
+			spin_lock_bh(&vin->lock);
+			vin->write_nwd(vin->cbdata, VIN_rIR);
+			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+			{
+				if (!vin->is_not_ready(vin->cbdata)) break;
+				udelay(VINETIC_WAIT_TIMEOUT);
+			}
+			if (wait_count == VINETIC_WAIT_COUNT) {
+				spin_unlock_bh(&vin->lock);
+				res = -EIO;
+				break;
+			}
+			vin->read_eom(vin->cbdata);
+			spin_unlock_bh(&vin->lock);
 			break;
 		case VINETIC_DISABLE_IRQ:
 			spin_lock_bh(&vin->lock);
