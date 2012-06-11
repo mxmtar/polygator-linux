@@ -790,6 +790,98 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			vin->read_eom(vin->cbdata);
 			spin_unlock_bh(&vin->lock);
 			break;
+		case VINETIC_FLUSH_MBOX:
+			spin_lock_bh(&vin->lock);
+			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+			{
+				if (!vin->is_not_ready(vin->cbdata)) break;
+				udelay(VINETIC_WAIT_TIMEOUT);
+			}
+			if (wait_count == VINETIC_WAIT_COUNT) {
+				spin_unlock_bh(&vin->lock);
+				res = -EIO;
+				break;
+			}
+			vin->write_nwd(vin->cbdata, VIN_rOBXML);
+			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+			{
+				if (!vin->is_not_ready(vin->cbdata)) break;
+				udelay(VINETIC_WAIT_TIMEOUT);
+			}
+			if (wait_count == VINETIC_WAIT_COUNT) {
+				spin_unlock_bh(&vin->lock);
+				res = -EIO;
+				break;
+			}
+			phi = vin->read_eom(vin->cbdata);
+			vin->pdata_size = phi & 0xff;
+			vin->cdata_size = (phi >> 8) & 0x1f;
+			if (vin->pdata_size) {
+				// write short commands rPOBX
+				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+				{
+					if (!vin->is_not_ready(vin->cbdata)) break;
+					udelay(VINETIC_WAIT_TIMEOUT);
+				}
+				if (wait_count == VINETIC_WAIT_COUNT) {
+					spin_unlock_bh(&vin->lock);
+					res = -EIO;
+					break;
+				}
+				vin->write_nwd(vin->cbdata, VIN_rPOBX);
+				while (vin->pdata_size)
+				{
+					vin->pdata_size--;
+					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+					{
+						if (!vin->is_not_ready(vin->cbdata)) break;
+						udelay(VINETIC_WAIT_TIMEOUT);
+					}
+					if (wait_count == VINETIC_WAIT_COUNT) {
+						spin_unlock_bh(&vin->lock);
+						res = -EIO;
+						break;
+					}
+					if (vin->pdata_size)
+						vin->read_nwd(vin->cbdata);
+					else
+						vin->read_eom(vin->cbdata);
+				}
+			}
+			if (vin->cdata_size) {
+				// write short commands rCOBX
+				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+				{
+					if (!vin->is_not_ready(vin->cbdata)) break;
+					udelay(VINETIC_WAIT_TIMEOUT);
+				}
+				if (wait_count == VINETIC_WAIT_COUNT) {
+					spin_unlock_bh(&vin->lock);
+					res = -EIO;
+					break;
+				}
+				vin->write_nwd(vin->cbdata, VIN_rCOBX);
+				while (vin->cdata_size)
+				{
+					vin->cdata_size--;
+					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+					{
+						if (!vin->is_not_ready(vin->cbdata)) break;
+						udelay(VINETIC_WAIT_TIMEOUT);
+					}
+					if (wait_count == VINETIC_WAIT_COUNT) {
+						spin_unlock_bh(&vin->lock);
+						res = -EIO;
+						break;
+					}
+					if (vin->cdata_size)
+						vin->read_nwd(vin->cbdata);
+					else
+						vin->read_eom(vin->cbdata);
+				}
+			}
+			spin_unlock_bh(&vin->lock);
+			break;
 		case VINETIC_DISABLE_IRQ:
 			spin_lock_bh(&vin->lock);
 			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
