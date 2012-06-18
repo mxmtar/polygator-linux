@@ -22,7 +22,6 @@
 #endif
 
 #include "polygator/polygator-base.h"
-#include "polygator/polygator-ioctl.h"
 
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@ukr.net>");
 MODULE_DESCRIPTION("Polygator Linux base module");
@@ -69,6 +68,11 @@ EXPORT_SYMBOL(polygator_board_unregister);
 #define log(_level, _fmt, _args...) printk(_level "[%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "polygator-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "polygator-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
+struct subsystem_private_data {
+	char buff[0x8000];
+	size_t length;
+};
+
 static struct cdev polygator_subsytem_cdev;
 
 static struct polygator_board *polygator_board_list[POLYGATOR_BOARD_MAXCOUNT];
@@ -76,14 +80,72 @@ static DEFINE_SPINLOCK(polygator_board_list_lock);
 
 static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 {
+	ssize_t res;
+	size_t i;
+	size_t len;
+
+	struct subsystem_private_data *private_data;
+
+	if (!(private_data = kmalloc(sizeof(struct subsystem_private_data), GFP_KERNEL))) {
+		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct subsystem_private_data));
+		res = -ENOMEM;
+		goto polygator_subsystem_open_error;
+	}
+// 	memset(private_data, 0, sizeof(struct subsystem_private_data));
+
+	spin_lock(&polygator_board_list_lock);
+	len = 0;
+	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
+	{
+		if (polygator_board_list[i]) {
+			len += sprintf(private_data->buff+len, "%s\r\n", polygator_board_list[i]->name);
+		}
+	}
+	spin_unlock(&polygator_board_list_lock);
+
+	private_data->length = len;
+
+	filp->private_data = private_data;
+
 	return 0;
+
+polygator_subsystem_open_error:
+	if (private_data) kfree(private_data);
+	return res;
 }
 
 static int polygator_subsystem_release(struct inode *inode, struct file *filp)
 {
+	struct subsystem_private_data *private_data = filp->private_data;
+
+	kfree(private_data);
 	return 0;
 }
 
+static ssize_t polygator_subsystem_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
+{
+	size_t len;
+	ssize_t res;
+	struct subsystem_private_data *private_data = filp->private_data;
+
+	res = (private_data->length > filp->f_pos)?(private_data->length - filp->f_pos):(0);
+
+	if (res) {
+		len = res;
+		len = min(count, len);
+		if (copy_to_user(buff, private_data->buff + filp->f_pos, len)) {
+			res = -EINVAL;
+			goto polygator_subsystem_read_end;
+		}
+		*offp = filp->f_pos + len;
+	}
+
+polygator_subsystem_read_end:
+	return res;
+}
+
+
+#if 0
 static int polygator_subsystem_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
 {
 	struct polygator_ioctl_get_board brd;
@@ -125,13 +187,15 @@ static long polygator_subsystem_compat_ioctl(struct file *filp, unsigned int cmd
 	return (long)polygator_subsystem_generic_ioctl(filp, cmd, data);
 }
 #endif
+#endif
 
 static struct file_operations polygator_subsytem_fops = {
 	.owner   = THIS_MODULE,
 	.open    = polygator_subsystem_open,
 	.release = polygator_subsystem_release,
-// 	.read    = polygator_subsystem_read,
+	.read    = polygator_subsystem_read,
 // 	.write   = polygator_subsystem_write,
+#if 0
 #if defined(HAVE_UNLOCKED_IOCTL)
 	.unlocked_ioctl = polygator_subsystem_unlocked_ioctl,
 #else
@@ -139,6 +203,7 @@ static struct file_operations polygator_subsytem_fops = {
 #endif
 #if defined(CONFIG_COMPAT) && defined(HAVE_COMPAT_IOCTL) && (HAVE_COMPAT_IOCTL == 1)
 	.compat_ioctl = polygator_subsystem_compat_ioctl,
+#endif
 #endif
 // 	.llseek = polygator_subsystem_llseek,
 };

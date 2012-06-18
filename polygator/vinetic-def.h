@@ -498,7 +498,26 @@ enum {
 	VIN_SOP_DCCHKR = 0x00,
 	VIN_SOP_DSCHKR = 0x01,
 	VIN_SOP_CCR = 0x02,
+	VIN_SOP_LMRES = 0x03,
+	VIN_SOP_CCHKR = 0x04,
+	VIN_SOP_IOCTL1 = 0x05,
+	VIN_SOP_IOCTL2 = 0x06,
+	VIN_SOP_BCR1 = 0x07,
+	VIN_SOP_BCR2 = 0x08,
+	VIN_SOP_DSCR = 0x09,
+	VIN_SOP_LMCR = 0x0A,
+	VIN_SOP_RTR = 0x0B,
+	VIN_SOP_OFR = 0x0C,
+	VIN_SOP_AUTOMOD = 0x0D,
+	VIN_SOP_TSTR1 = 0x0E,
+	VIN_SOP_TSTR2 = 0x0F,
+	VIN_SOP_TSTR3 = 0x10,
 };
+
+struct vin_cmd_sop_generic {
+	union vin_cmd header;
+	u_int16_t word;
+} __attribute__((packed));
 
 struct vin_cmd_sop_dcchkr {
 	union vin_cmd header;
@@ -512,15 +531,223 @@ struct vin_cmd_sop_dschkr {
 
 struct vin_cmd_sop_ccr {
 	union vin_cmd header;
-	struct vin_ccr {
+	struct vin_sop_ccr {
 		u_int16_t pd_cbias:1;
 		u_int16_t pd_cvcm:1;
 		u_int16_t jump_ac1:1;
 		u_int16_t jump_ac2:1;
 		u_int16_t jump_ac3:1;
 		u_int16_t jump_dc:1;
-		u_int16_t jump_res0:10;
-	} __attribute__((packed)) ccr;
+		u_int16_t res0:10;
+	} __attribute__((packed)) sop_ccr;
+} __attribute__((packed));
+
+struct vin_cmd_sop_lmres {
+	union vin_cmd header;
+	u_int16_t lm_res;
+} __attribute__((packed));
+
+struct vin_cmd_sop_cchkr {
+	union vin_cmd header;
+	u_int16_t c_check;
+} __attribute__((packed));
+
+struct vin_cmd_sop_ioctl1 {
+	union vin_cmd header;
+	struct vin_sop_ioctl1 {
+		u_int16_t oen_io0:1;
+		u_int16_t oen_io1:1;
+		u_int16_t oen_io2:1;
+		u_int16_t oen_io3:1;
+		u_int16_t oen_io4:1;
+		u_int16_t res0:3;
+		u_int16_t inen_io0:1;
+		u_int16_t inen_io1:1;
+		u_int16_t inen_io2:1;
+		u_int16_t inen_io3:1;
+		u_int16_t inen_io4:1;
+		u_int16_t res1:3;
+	} __attribute__((packed)) sop_ioctl1;
+} __attribute__((packed));
+
+struct vin_cmd_sop_ioctl2 {
+	union vin_cmd header;
+	struct vin_sop_ioctl2 {
+		u_int16_t dup_io:4;
+		u_int16_t dup:4;
+		u_int16_t dd_io0:1;
+		u_int16_t dd_io1:1;
+		u_int16_t dd_io2:1;
+		u_int16_t dd_io3:1;
+		u_int16_t dd_io4:1;
+		u_int16_t dup_ovt:3;
+	} __attribute__((packed)) sop_ioctl2;
+} __attribute__((packed));
+
+struct vin_cmd_sop_bcr1 {
+	union vin_cmd header;
+	struct vin_sop_bcr1 {
+		u_int16_t sel_slic:4;
+		u_int16_t test_en:1;
+		u_int16_t en_ik:1;
+		u_int16_t dc_hold:1;
+		u_int16_t lmabs_en:1;
+		u_int16_t him_an:1;
+		u_int16_t him_res:1;
+		u_int16_t pram_dcc:1;
+		u_int16_t lmac64:1;
+		u_int16_t dup_gndk:4;
+	} __attribute__((packed)) sop_bcr1;
+} __attribute__((packed));
+
+struct vin_cmd_sop_bcr2 {
+	union vin_cmd header;
+	struct vin_sop_bcr2 {
+		u_int16_t hpr_dis:1;
+		u_int16_t hpx_dis:1;
+		u_int16_t frr_dis:1;
+		u_int16_t frx_dis:1;
+		u_int16_t ar_dis:1;
+		u_int16_t ax_dis:1;
+		u_int16_t im_dis:1;
+		u_int16_t th_dis:1;
+		u_int16_t res0:1;
+		u_int16_t ac_short_en:1;
+		u_int16_t rev_pol:1;
+		u_int16_t ttx_12k:1;
+		u_int16_t ttx_en:1;
+		u_int16_t soft_dis:1;
+		u_int16_t cram_en:1;
+		u_int16_t lprx_cr:1;
+	} __attribute__((packed)) sop_bcr2;
+} __attribute__((packed));
+
+struct vin_cmd_sop_dscr {
+	union vin_cmd header;
+	struct vin_sop_dscr {
+		u_int16_t tg1_en:1;
+		u_int16_t tg2_en:1;
+		u_int16_t ptg:1;
+		u_int16_t cor8:1;
+		u_int16_t dg_key:4;
+		u_int16_t res0:8;
+	} __attribute__((packed)) sop_dscr;
+} __attribute__((packed));
+
+struct vin_cmd_sop_lmcr {
+	union vin_cmd header;
+	struct vin_sop_lmcr {
+		u_int16_t lm_sel:4;
+		u_int16_t ramp_en:1;
+		u_int16_t lm_rect:1;
+		u_int16_t lm_filt:1;
+		u_int16_t lm_filt_sel:1;
+		u_int16_t dc_ad16:1;
+		u_int16_t lm_once:1;
+		u_int16_t lm2pcm:1;
+		u_int16_t lm_en:1;
+		u_int16_t lm_itime:4;
+	} __attribute__((packed)) sop_lmcr;
+} __attribute__((packed));
+
+struct vin_cmd_sop_rtr {
+	union vin_cmd header;
+	struct vin_sop_rtr {
+		u_int16_t rext_en:1;
+		u_int16_t asynch_r:1;
+		u_int16_t ring_offset:2;
+		u_int16_t pcm2dc:1;
+		u_int16_t rtr_fast:1;
+		u_int16_t rtr_sel:1;
+		u_int16_t rtr_exts:1;
+		u_int16_t lcas_en:1;
+		u_int16_t res0:7;
+	} __attribute__((packed)) sop_rtr;
+} __attribute__((packed));
+
+struct vin_cmd_sop_ofr {
+	union vin_cmd header;
+	u_int16_t dc_offset;
+} __attribute__((packed));
+
+struct vin_cmd_sop_automod {
+	union vin_cmd header;
+	struct vin_sop_automod {
+		u_int16_t pdot_dis:1;
+		u_int16_t auto_bat:1;
+		u_int16_t auto_offh:1;
+		u_int16_t res0:13;
+	} __attribute__((packed)) sop_automod;
+} __attribute__((packed));
+
+struct vin_cmd_sop_tstr1 {
+	union vin_cmd header;
+	struct vin_sop_tstr1 {
+		u_int16_t pd_hvi:1;
+		u_int16_t pd_iref:1;
+		u_int16_t pd_acref:1;
+		u_int16_t pd_ovtc:1;
+		u_int16_t pd_ofhc:1;
+		u_int16_t pd_gnkc:1;
+		u_int16_t pd_dcref:1;
+		u_int16_t pd_akdith:1;
+		u_int16_t pd_dcbuf:1;
+		u_int16_t pd_dc_da:1;
+		u_int16_t pd_dc_ad:1;
+		u_int16_t pd_dc_pr:1;
+		u_int16_t pd_ac_da:1;
+		u_int16_t pd_ac_ad:1;
+		u_int16_t pd_ac_po:1;
+		u_int16_t pd_ac_pr:1;
+	} __attribute__((packed)) sop_tstr1;
+} __attribute__((packed));
+
+struct vin_cmd_sop_tstr2 {
+	union vin_cmd header;
+	struct vin_sop_tstr2 {
+		u_int16_t cox_16:1;
+		u_int16_t cor_64:1;
+		u_int16_t opim_hw:1;
+		u_int16_t opim_an:1;
+		u_int16_t low_perf:2;
+		u_int16_t ac_xgain:1;
+		u_int16_t ac_rgain:1;
+		u_int16_t ac_short:1;
+		u_int16_t ac_dlb_8k:1;
+		u_int16_t ac_dlb_32k:1;
+		u_int16_t ac_dlb_128k:1;
+		u_int16_t ac_dlb_16m:1;
+		u_int16_t ac_alb_16m:1;
+		u_int16_t ac_alb_pp:1;
+		u_int16_t res0:1;
+	} __attribute__((packed)) sop_tstr2;
+} __attribute__((packed));
+
+struct vin_cmd_sop_tstr3 {
+	union vin_cmd header;
+	struct vin_sop_tstr3 {
+		u_int16_t no_auto_dith_ac:1;
+		u_int16_t no_dith_ac:1;
+		u_int16_t atst_res0:1;
+		u_int16_t atst_res1:1;
+		u_int16_t atst_res2:1;
+		u_int16_t atst_res3:1;
+		u_int16_t atst_res4:1;
+		u_int16_t atst_res5:1;
+		u_int16_t dc_lp1_dis:1;
+		u_int16_t dc_lp2_dis:1;
+		u_int16_t dcc_dis:1;
+		u_int16_t res0:1;
+		u_int16_t dc_pofi_hi:1;
+		u_int16_t dc_dlb_1m:1;
+		u_int16_t dc_alb_1m:1;
+		u_int16_t dc_alb_pp:1;
+	} __attribute__((packed)) sop_tstr3;
+} __attribute__((packed));
+
+struct vin_cmd_cop_generic {
+	union vin_cmd header;
+	u_int16_t word[4];
 } __attribute__((packed));
 
 enum {
@@ -542,7 +769,7 @@ enum {
  */
 struct vin_cmd_eop_pcm_interface_control {
 	union vin_cmd header;
-	struct vin_pcm_interface_control {
+	struct vin_eop_pcm_interface_control {
 		u_int16_t pcmro:3;
 		u_int16_t shift:1;
 		u_int16_t drive_0:1;
@@ -553,7 +780,7 @@ struct vin_cmd_eop_pcm_interface_control {
 		u_int16_t res:3;
 		u_int16_t ds:1;
 		u_int16_t en:1;
-	} __attribute__((packed)) pcm_interface_control;
+	} __attribute__((packed)) eop_pcm_interface_control;
 } __attribute__((packed));
 /*!
  * \brief PCM Receive Offset
@@ -611,7 +838,7 @@ enum {
  */
 struct vin_cmd_eop_pcm_interface_channel {
 	union vin_cmd header;
-	struct vin_pcm_interface_channel {
+	struct vin_eop_pcm_interface_channel {
 		u_int16_t i1:6;
 		u_int16_t bp:1;
 		u_int16_t hp:1;
@@ -632,7 +859,7 @@ struct vin_cmd_eop_pcm_interface_channel {
 		u_int16_t res2:2;
 		u_int16_t i4:6;
 		u_int16_t res3:2;
-	} __attribute__((packed)) pcm_interface_channel;
+	} __attribute__((packed)) eop_pcm_interface_channel;
 } __attribute__((packed));
 /*!
  * \brief Bit Packing
@@ -679,7 +906,7 @@ enum {
  */
 struct vin_cmd_eop_pcm_near_end_lec {
 	union vin_cmd header;
-	struct vin_pcm_near_end_lec {
+	struct vin_eop_pcm_near_end_lec {
 		u_int16_t lecnr:4;
 		u_int16_t nlpm:2;
 		u_int16_t nlp:1;
@@ -688,7 +915,7 @@ struct vin_cmd_eop_pcm_near_end_lec {
 		u_int16_t dtm:1;
 		u_int16_t res:5;
 		u_int16_t en:1;
-	} __attribute__((packed)) near_end_lec;
+	} __attribute__((packed)) eop_pcm_near_end_lec;
 } __attribute__((packed));
 /*!
  * \brief NLP Mode
@@ -734,10 +961,10 @@ enum {
  */
 struct vin_cmd_eop_coder_control {
 	union vin_cmd header;
-	struct vin_coder_control {
+	struct vin_eop_coder_control {
 		u_int16_t res:15;
 		u_int16_t en:1;
-	} __attribute__((packed)) coder_control;
+	} __attribute__((packed)) eop_coder_control;
 } __attribute__((packed));
 /*!
  * \brief Command_Coder_Channel_Speech_Compression
@@ -745,7 +972,7 @@ struct vin_cmd_eop_coder_control {
  */
 struct vin_cmd_eop_coder_channel_speech_compression {
 	union vin_cmd header;
-	struct vin_coder_channel_speech_compression {
+	struct vin_eop_coder_channel_speech_compression {
 		u_int16_t i1:6;
 		u_int16_t res0:1;
 		u_int16_t ns:1;
@@ -772,7 +999,7 @@ struct vin_cmd_eop_coder_channel_speech_compression {
 		u_int16_t res4:2;
 		u_int16_t i4:6;
 		u_int16_t res5:2;
-	} __attribute__((packed)) coder_channel_speech_compression;
+	} __attribute__((packed)) eop_coder_channel_speech_compression;
 } __attribute__((packed));
 enum {
 	VIN_NS_INACTIVE = 0,
@@ -818,7 +1045,7 @@ enum {
  */
 struct vin_cmd_eop_coder_channel_jb_statistics {
 	union vin_cmd header;
-	struct vin_coder_channel_jb_statistics {
+	struct vin_eop_coder_channel_jb_statistics {
 		u_int16_t packet_pod; /*! Packet play out delay for the last received packet in timestamp units (125 μs). */
 		u_int16_t max_packet_pod; /*! Maximum packet play out delay in timestamp units (125 μs)
 									since the beginning of the connection or since the last statistic reset.  */
@@ -882,7 +1109,7 @@ struct vin_cmd_eop_coder_channel_jb_statistics {
 		u_int16_t sid_hw; /*! Total number of comfort noise samples since the beginning of the connection or since the last statistic reset.
 							This counter contains the total sum off all silence periods which are generated by the decoder. */
 		u_int16_t sid_lw;
-	} __attribute__((packed)) coder_channel_jb_statistics;
+	} __attribute__((packed)) eop_coder_channel_jb_statistics;
 } __attribute__((packed));
 /*!
  * \brief Control Commands
@@ -905,10 +1132,10 @@ struct vin_cmd_eop_cerr_acknowledge {
  */
 struct vin_cmd_eop_endian_control {
 	union vin_cmd header;
-	struct vin_endian_control {
+	struct vin_eop_endian_control {
 		u_int16_t le:1;
 		u_int16_t res:15;
-	} __attribute__((packed)) endian_control;
+	} __attribute__((packed)) eop_endian_control;
 } __attribute__((packed));
 enum {
 	VIN_BIG_ENDIAN = 0,
@@ -933,14 +1160,14 @@ enum {
 
 struct vin_cmd_eop_edsp_sw_version_register {
 	union vin_cmd header;
-	struct vin_edsp_sw_version_register {
+	struct vin_eop_edsp_sw_version_register {
 		u_int16_t main_version:6;
 		u_int16_t features:6;
 		u_int16_t prt:1;
 		u_int16_t mv:2;
 		u_int16_t cv:1;
 		u_int16_t release;
-	} __attribute__((packed)) edsp_sw_version_register;
+	} __attribute__((packed)) eop_edsp_sw_version_register;
 } __attribute__((packed));
 
 /*!
