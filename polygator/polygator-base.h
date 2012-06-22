@@ -16,6 +16,7 @@ enum {
 	POLYGATOR_MODULE_TYPE_SIM300 = 1,
 	POLYGATOR_MODULE_TYPE_SIM900 = 2,
 	POLYGATOR_MODULE_TYPE_M10 = 3,
+	POLYGATOR_MODULE_TYPE_SIM5215 = 4,
 };
 
 #ifdef __KERNEL__
@@ -37,6 +38,7 @@ struct polygator_board {
 
 struct polygator_board *polygator_board_register(struct module *owner, char *name, struct cdev *cdef, struct file_operations *fops);
 void polygator_board_unregister(struct polygator_board  *brd);
+char *polygator_print_gsm_module_type(int type);
 
 #endif //__KERNEL__
 

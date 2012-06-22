@@ -33,6 +33,7 @@ MODULE_PARM_DESC(polygator_major, "Major number for Polygator Linux base module"
 
 EXPORT_SYMBOL(polygator_board_register);
 EXPORT_SYMBOL(polygator_board_unregister);
+EXPORT_SYMBOL(polygator_print_gsm_module_type);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, NULL, "%s", _name)
@@ -98,7 +99,7 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
 		if (polygator_board_list[i]) {
-			len += sprintf(private_data->buff+len, "%s\r\n", polygator_board_list[i]->name);
+			len += sprintf(private_data->buff+len, "%s %s\r\n", polygator_board_list[i]->cdev->owner->name, polygator_board_list[i]->name);
 		}
 	}
 	spin_unlock(&polygator_board_list_lock);
@@ -301,6 +302,18 @@ void polygator_board_unregister(struct polygator_board *brd)
 	}
 	spin_unlock(&polygator_board_list_lock);
 
+}
+
+char *polygator_print_gsm_module_type(int type)
+{
+	switch (type)
+	{
+		case POLYGATOR_MODULE_TYPE_SIM300: return "SIM300";
+		case POLYGATOR_MODULE_TYPE_SIM900: return "SIM900";
+		case POLYGATOR_MODULE_TYPE_M10: return "M10";
+		case POLYGATOR_MODULE_TYPE_SIM5215: return "SIM5215";
+		default: return "UNKNOWN";
+	}
 }
 
 static int __init polygator_init(void)
