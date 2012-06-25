@@ -37,10 +37,7 @@ struct vinetic {
 	// OBXML
 	size_t cdata_size;
 	size_t pdata_size;
-
 	wait_queue_head_t free_cbox_waitq;
-	wait_queue_head_t free_pbox_waitq;
-
 	wait_queue_head_t seek_cbox_waitq;
 	wait_queue_head_t read_cbox_waitq;
 	u_int16_t read_cbox_data[32];
@@ -60,23 +57,32 @@ struct vinetic {
 	struct cdev cdev;
 };
 
+struct rtp_packet_slot {
+	u_int16_t data[256];
+	size_t length;
+};
+
 struct vinetic_rtp_channel {
 	char *name;
 	int devno;
 	spinlock_t lock;
 
 	wait_queue_head_t poll_waitq;
+	wait_queue_head_t read_slot_count_waitq;
+	wait_queue_head_t write_slot_count_waitq;
 
 	struct vinetic *vinetic;
 	int index;
-	
-	struct rtp_packet_slot {
-		u_int16_t data[256];
-		size_t length;
-		} recv_slot[VINETIC_PACKETSLOT_MAXCOUNT];
-	size_t recv_slot_read;
-	size_t recv_slot_write;
-	size_t recv_slot_count;
+
+	struct rtp_packet_slot read_slot[VINETIC_PACKETSLOT_MAXCOUNT];
+	size_t read_slot_read;
+	size_t read_slot_write;
+	size_t read_slot_count;
+
+	struct rtp_packet_slot write_slot[VINETIC_PACKETSLOT_MAXCOUNT];
+	size_t write_slot_read;
+	size_t write_slot_write;
+	size_t write_slot_count;
 
 	struct cdev cdev;
 };

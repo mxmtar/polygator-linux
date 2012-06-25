@@ -88,13 +88,20 @@ struct vinetic_device {
 static struct vinetic_device vinetic_device_list[VINETIC_DEVICE_MAXCOUNT];
 static DEFINE_SPINLOCK(vinetic_device_list_lock);
 
-static void vinetic_poll(unsigned long addr)
+static void vinetic_poll_proc(unsigned long addr)
 {
 	union vin_cmd cmd;
 
 	u_int16_t res;
 
-	size_t vop_pkt_len = 0;
+	size_t ch;
+	size_t pkt_write[8];
+
+	size_t wr;
+
+	size_t len;
+
+	size_t cnt = 0;
 
 	size_t wait_count;
 
@@ -114,7 +121,7 @@ static void vinetic_poll(unsigned long addr)
 	}
 	if (wait_count == VINETIC_WAIT_COUNT) {
 		debug("%s: timeout\n", vin->name);
-		goto vinetic_poll_end;
+		goto vinetic_poll_proc_end;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rOBXML);
 	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
@@ -122,7 +129,10 @@ static void vinetic_poll(unsigned long addr)
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
-	if (wait_count == VINETIC_WAIT_COUNT) goto vinetic_poll_end;
+	if (wait_count == VINETIC_WAIT_COUNT) {
+		debug("%s: timeout\n", vin->name);
+		goto vinetic_poll_proc_end;
+	}
 	res = vin->read_eom(vin->cbdata);
 	vin->pdata_size = res & 0xff;
 	vin->cdata_size = (res >> 8) & 0x1f;
@@ -135,10 +145,12 @@ static void vinetic_poll(unsigned long addr)
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
-		if (wait_count == VINETIC_WAIT_COUNT)
-			goto vinetic_poll_end;
+		if (wait_count == VINETIC_WAIT_COUNT) {
+			debug("%s: timeout\n", vin->name);
+			goto vinetic_poll_proc_end;
+		}
 		vin->write_nwd(vin->cbdata, VIN_rPOBX);
-// 		debug("%s: 1 vin->pdata_size=%lu, vop_pkt_len=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)vop_pkt_len);
+// 		debug("%s: 1 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
 		while (vin->pdata_size)
 		{
 			// read vop/evt packet first part
@@ -150,7 +162,7 @@ static void vinetic_poll(unsigned long addr)
 			}
 			if (wait_count == VINETIC_WAIT_COUNT) {
 				debug("%s: timeout\n", vin->name);
-				goto vinetic_poll_end;
+				goto vinetic_poll_proc_end;
 			}
 			cmd.parts.first.full = vin->read_nwd(vin->cbdata);
 // 			debug("cmd.parts.first.full=%04x\n", cmd.parts.first.full);
@@ -163,15 +175,15 @@ static void vinetic_poll(unsigned long addr)
 			}
 			if (wait_count == VINETIC_WAIT_COUNT) {
 				debug("%s: timeout\n", vin->name);
-				goto vinetic_poll_end;
+				goto vinetic_poll_proc_end;
 			}
 			cmd.parts.second.full = vin->read_nwd(vin->cbdata);
 // 			debug("cmd.parts.second.full=%04x\n", cmd.parts.second.full);
 			// get packet data length
-			vop_pkt_len = cmd.parts.second.vop.bits.length;
-			if (vop_pkt_len > 253) {
-				debug("%s: wrong voice packet length=%lu\n", vin->name, (long unsigned int)vop_pkt_len);
-				goto vinetic_poll_end;
+			cnt = cmd.parts.second.vop.bits.length;
+			if (cnt > 253) {
+				debug("%s: wrong voice packet length=%lu\n", vin->name, (long unsigned int)cnt);
+				goto vinetic_poll_proc_end;
 			}
 			// sort packet by channel
 			rtp = vin->rtp_channels[cmd.parts.first.bits.chan];
@@ -179,14 +191,14 @@ static void vinetic_poll(unsigned long addr)
 
 				spin_lock(&rtp->lock);
 
-				rtp->recv_slot[rtp->recv_slot_write].length = vop_pkt_len * 2;
-				if(cmd.parts.second.vop.bits.odd) rtp->recv_slot[rtp->recv_slot_write].length--;
-				datap = rtp->recv_slot[rtp->recv_slot_write].data;
-// 				debug("%s: 3 vin->pdata_size=%lu, vop_pkt_len=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)vop_pkt_len);
-				while (vin->pdata_size && vop_pkt_len)
+				rtp->read_slot[rtp->read_slot_write].length = cnt * 2;
+				if(cmd.parts.second.vop.bits.odd) rtp->read_slot[rtp->read_slot_write].length--;
+				datap = rtp->read_slot[rtp->read_slot_write].data;
+// 				debug("%s: 3 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
+				while (vin->pdata_size && cnt)
 				{
 					vin->pdata_size--;
-					vop_pkt_len--;
+					cnt--;
 					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 					{
 						if (!vin->is_not_ready(vin->cbdata)) break;
@@ -195,37 +207,40 @@ static void vinetic_poll(unsigned long addr)
 					if (wait_count == VINETIC_WAIT_COUNT) {
 						spin_unlock(&rtp->lock);
 						debug("%s: timeout\n", vin->name);
-						goto vinetic_poll_end;
+						goto vinetic_poll_proc_end;
 					}
 					if (vin->pdata_size)
 						*datap++ = vin->read_nwd(vin->cbdata);
 					else
 						*datap++ = vin->read_eom(vin->cbdata);
-// 					debug("%s: 4 vin->pdata_size=%lu, vop_pkt_len=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)vop_pkt_len);
+// 					debug("%s: 4 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
 				}
-				// adjust packet slot index
-				rtp->recv_slot_count++;
-				if (rtp->recv_slot_count >= VINETIC_PACKETSLOT_MAXCOUNT) {
-					rtp->recv_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
-					rtp->recv_slot_read++;
-					if (rtp->recv_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
-						rtp->recv_slot_read = 0;
+				// adjust read packet slot index
+				rtp->read_slot_count++;
+				if (rtp->read_slot_count >= VINETIC_PACKETSLOT_MAXCOUNT) {
+					rtp->read_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
+					rtp->read_slot_read++;
+					if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+						rtp->read_slot_read = 0;
 				}
-				rtp->recv_slot_write++;
-				if (rtp->recv_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT)
-					rtp->recv_slot_write = 0;
+				rtp->read_slot_write++;
+				if (rtp->read_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT)
+					rtp->read_slot_write = 0;
 
-				spin_unlock(&rtp->lock);
+				// wake read_slot_count waitqueue
+				wake_up_interruptible(&rtp->read_slot_count_waitq);
 
 				// wake poll waitqueue
 				wake_up_interruptible(&rtp->poll_waitq);
 
+				spin_unlock(&rtp->lock);
+
 			} else {
 				// unknown data packet - flush out mailbox
-				while (vin->pdata_size && vop_pkt_len)
+				while (vin->pdata_size && cnt)
 				{
 					vin->pdata_size--;
-					vop_pkt_len--;
+					cnt--;
 					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 					{
 						if (!vin->is_not_ready(vin->cbdata)) break;
@@ -233,7 +248,7 @@ static void vinetic_poll(unsigned long addr)
 					}
 					if (wait_count == VINETIC_WAIT_COUNT) {
 						debug("%s: timeout\n", vin->name);
-						goto vinetic_poll_end;
+						goto vinetic_poll_proc_end;
 					}
 					if (vin->pdata_size)
 						vin->read_nwd(vin->cbdata);
@@ -241,12 +256,11 @@ static void vinetic_poll(unsigned long addr)
 						vin->read_eom(vin->cbdata);
 				}
 			}
-// 			debug("%s: 2 vin->pdata_size=%lu, vop_pkt_len=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)vop_pkt_len);
+// 			debug("%s: 2 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
 		}
 	}
 
 	// read command data from mailbox
-	
 	if (vin->cdata_size) {
 // 		debug("cdata_size=%lu\n", vin->cdata_size);
 		// write short commands rCOBX
@@ -257,7 +271,7 @@ static void vinetic_poll(unsigned long addr)
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
 			debug("%s: timeout\n", vin->name);
-			goto vinetic_poll_end;
+			goto vinetic_poll_proc_end;
 			}
 		vin->write_nwd(vin->cbdata, VIN_rCOBX);
 		// read rest data
@@ -273,7 +287,7 @@ static void vinetic_poll(unsigned long addr)
 			}
 			if (wait_count == VINETIC_WAIT_COUNT) {
 				debug("%s: timeout\n", vin->name);
-				goto vinetic_poll_end;
+				goto vinetic_poll_proc_end;
 			}
 			if (vin->cdata_size)
 				*datap++ = vin->read_nwd(vin->cbdata);
@@ -282,7 +296,137 @@ static void vinetic_poll(unsigned long addr)
 		}
 		wake_up_interruptible(&vin->read_cbox_waitq);
 	}
+#if 1
+	// write voice packet into vinetic
+	for (ch=0; ch<8; ch++)
+		pkt_write[ch] = 1;
+	wr = 1;
+	while (wr)
+	{
+		// test for write is actual
+		wr = 0;
+		for (ch=0; ch<8; ch++)
+		{
+			if (pkt_write[ch]) {
+				wr = 1;
+				break;
+			}
+		}
 
+		// check free mailbox space
+		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+		{
+			if (!vin->is_not_ready(vin->cbdata)) break;
+			udelay(VINETIC_WAIT_TIMEOUT);
+		}
+		if (wait_count == VINETIC_WAIT_COUNT) {
+			debug("%s: timeout\n", vin->name);
+			goto vinetic_poll_proc_end;
+		}
+		vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
+		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+		{
+			if (!vin->is_not_ready(vin->cbdata)) break;
+			udelay(VINETIC_WAIT_TIMEOUT);
+		}
+		if (wait_count == VINETIC_WAIT_COUNT) {
+			debug("%s: timeout\n", vin->name);
+			goto vinetic_poll_proc_end;
+		}
+		res = vin->read_eom(vin->cbdata);
+		vin->free_pbox_space = res & 0xff;
+
+		for (ch=0; ch<8; ch++)
+		{
+			if (pkt_write[ch]) {
+				rtp = vin->rtp_channels[ch];
+				if (rtp) {
+					spin_lock(&rtp->lock);
+					if (rtp->write_slot_count) {
+						len = rtp->write_slot[rtp->write_slot_read].length/2;
+						if (rtp->write_slot[rtp->write_slot_read].length%2)
+							len++;
+// 						debug("%lu: count=%lu slot=%lu f=%lu n=%lu\n", (unsigned long int)ch, (unsigned long int)rtp->write_slot_count, (unsigned long int)rtp->write_slot_read, (unsigned long int)vin->free_pbox_space, (unsigned long int)(len + 2));
+						if (vin->free_pbox_space >= (len + 2)) {
+							cmd.parts.first.bits.rw = VIN_WRITE;
+							cmd.parts.first.bits.sc = VIN_SC_NO;
+							cmd.parts.first.bits.bc = VIN_BC_NO;
+							cmd.parts.first.bits.cmd = VIN_CMD_VOP;
+							cmd.parts.first.bits.res = 0;
+							cmd.parts.first.bits.chan = ch;
+							cmd.parts.second.vop.bits.res1 = 0;
+							cmd.parts.second.vop.bits.odd = rtp->write_slot[rtp->write_slot_read].length%2;
+							cmd.parts.second.vop.bits.res0 = 0;
+							cmd.parts.second.vop.bits.length = len;
+// 							debug("%lu: length=%lu\n", (unsigned long int)ch, (unsigned long int)cmd.parts.second.vop.bits.length);
+// 							debug("%lu: %04x:%04x\n", (unsigned long int)ch, cmd.parts.first.full, cmd.parts.second.full);
+							// write voice packet header to vinetic
+							for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+							{
+								if (!vin->is_not_ready(vin->cbdata)) break;
+								udelay(VINETIC_WAIT_TIMEOUT);
+							}
+							if (wait_count == VINETIC_WAIT_COUNT) {
+								spin_unlock(&rtp->lock);
+								debug("%s: timeout\n", vin->name);
+								goto vinetic_poll_proc_end;
+							}
+							vin->write_nwd(vin->cbdata, cmd.parts.first.full);
+							for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+							{
+								if (!vin->is_not_ready(vin->cbdata)) break;
+								udelay(VINETIC_WAIT_TIMEOUT);
+							}
+							if (wait_count == VINETIC_WAIT_COUNT) {
+								spin_unlock(&rtp->lock);
+								debug("%s: timeout\n", vin->name);
+								goto vinetic_poll_proc_end;
+							}
+							vin->write_nwd(vin->cbdata, cmd.parts.second.full);
+							// write voice packet data to vinetic
+							for (cnt=0; cnt<len; cnt++)
+							{
+								for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
+								{
+									if (!vin->is_not_ready(vin->cbdata)) break;
+									udelay(VINETIC_WAIT_TIMEOUT);
+								}
+								if (wait_count == VINETIC_WAIT_COUNT) {
+									spin_unlock(&rtp->lock);
+									debug("%s: timeout\n", vin->name);
+									goto vinetic_poll_proc_end;
+								}
+								if (cnt == (len-1))
+									vin->write_eom(vin->cbdata, rtp->write_slot[rtp->write_slot_read].data[cnt]);
+								else
+									vin->write_nwd(vin->cbdata, rtp->write_slot[rtp->write_slot_read].data[cnt]);
+							}
+
+							// adjust free pbox space
+							vin->free_pbox_space -= (len+2);
+
+							// adjust write packet slot index
+							rtp->write_slot_read++;
+							if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+								rtp->write_slot_read = 0;
+							rtp->write_slot_count--;
+	
+							// wake write_slot_count waitqueue
+							wake_up_interruptible(&rtp->write_slot_count_waitq);
+
+							pkt_write[ch]--;
+						}
+					} else {
+						pkt_write[ch] = 0;
+					}
+					spin_unlock(&rtp->lock);
+				} else {
+					pkt_write[ch] = 0;
+				}
+			}
+		}
+	}
+#endif
 	// check free mailbox space
 	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 	{
@@ -291,7 +435,7 @@ static void vinetic_poll(unsigned long addr)
 	}
 	if (wait_count == VINETIC_WAIT_COUNT) {
 		debug("%s: timeout\n", vin->name);
-		goto vinetic_poll_end;
+		goto vinetic_poll_proc_end;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
 	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
@@ -299,16 +443,16 @@ static void vinetic_poll(unsigned long addr)
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
-	if (wait_count == VINETIC_WAIT_COUNT) goto vinetic_poll_end;
+	if (wait_count == VINETIC_WAIT_COUNT) {
+		debug("%s: timeout\n", vin->name);
+		goto vinetic_poll_proc_end;
+	}
 	res = vin->read_eom(vin->cbdata);
-	vin->free_pbox_space = res & 0xff;
-	if (vin->free_pbox_space)
-		wake_up_interruptible(&vin->free_pbox_waitq);
 	vin->free_cbox_space = (res >> 8) & 0xff;
 	if (vin->free_cbox_space)
 		wake_up_interruptible(&vin->free_cbox_waitq);
 
-vinetic_poll_end:
+vinetic_poll_proc_end:
 	spin_unlock(&vin->lock);
 	if (vin->poll)
 		mod_timer(&vin->poll_timer, jiffies + 1);
@@ -1019,7 +1163,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				res = -EINVAL;
 			del_timer_sync(&vin->poll_timer);
 			if (vin->poll) {
-				vin->poll_timer.function = vinetic_poll;
+				vin->poll_timer.function = vinetic_poll_proc;
 				vin->poll_timer.data = (unsigned long)vin;
 				vin->poll_timer.expires = jiffies + 1;
 				add_timer(&vin->poll_timer);
@@ -1128,10 +1272,15 @@ static int vinetic_rtp_channel_open(struct inode *inode, struct file *filp)
 
 	spin_lock_bh(&rtp->lock);
 
-	// reset recv packet slot counters
-	rtp->recv_slot_read = 0;
-	rtp->recv_slot_write = 0;
-	rtp->recv_slot_count = 0;
+	// reset read packet slot counters
+	rtp->read_slot_read = 0;
+	rtp->read_slot_write = 0;
+	rtp->read_slot_count = 0;
+
+	// reset write packet slot counters
+	rtp->write_slot_read = 0;
+	rtp->write_slot_write = 0;
+	rtp->write_slot_count = 0;
 
 	spin_unlock_bh(&rtp->lock);
 
@@ -1145,143 +1294,101 @@ static int vinetic_rtp_channel_release(struct inode *inode, struct file *filp)
 
 static ssize_t vinetic_rtp_channel_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
 {
-	struct rtp_packet_slot recv_slot;
+	struct rtp_packet_slot read_slot;
 	struct vinetic_rtp_channel *rtp = filp->private_data;
 
 	spin_lock_bh(&rtp->lock);
-	
+
 	for (;;)
 	{
 		// successfull return
-		if(rtp->recv_slot_count > 0)
+		if (rtp->read_slot_count > 0)
 			break;
 
 		spin_unlock_bh(&rtp->lock);
 
-		if(filp->f_flags & O_NONBLOCK)
+		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
 		// sleeping
-		udelay(125);	// :FIXME: must be added advanced sleeping scenario
+		wait_event_interruptible(rtp->read_slot_count_waitq, rtp->read_slot_count > 0);
 
 		spin_lock_bh(&rtp->lock);
 	}
 	// copy data out of lock area
-	recv_slot.length = rtp->recv_slot[rtp->recv_slot_read].length;
-	memcpy(recv_slot.data, rtp->recv_slot[rtp->recv_slot_read].data, recv_slot.length);
+	read_slot.length = rtp->read_slot[rtp->read_slot_read].length;
+	memcpy(read_slot.data, rtp->read_slot[rtp->read_slot_read].data, read_slot.length);
 	// adjust read position of receiving buffer
-	rtp->recv_slot_read++;
-	if (rtp->recv_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
-		rtp->recv_slot_read = 0;
+	rtp->read_slot_read++;
+	if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+		rtp->read_slot_read = 0;
 
-	if (rtp->recv_slot_count)
-		rtp->recv_slot_count--;
+	if (rtp->read_slot_count)
+		rtp->read_slot_count--;
 
 	spin_unlock_bh(&rtp->lock);
 
 	// copy to user
-	recv_slot.length = min(recv_slot.length, count);
-	if(copy_to_user(buff, recv_slot.data, recv_slot.length))
+	read_slot.length = min(read_slot.length, count);
+	if (copy_to_user(buff, read_slot.data, read_slot.length))
 		return -EFAULT;
 
-	return recv_slot.length;
+	return read_slot.length;
 }
 
 static ssize_t vinetic_rtp_channel_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
 {
-	u_int16_t data[256];
-	size_t cnt, length;
-	size_t wait_count;
 	ssize_t res;
-
-	union vin_cmd *cmd;
-
+	struct rtp_packet_slot write_slot;
 	struct vinetic_rtp_channel *rtp = filp->private_data;
-	struct vinetic *vin = rtp->vinetic;
-	
-	cnt = 510;
-	cnt = min(count, cnt);
-	res = cnt;
-	
-	cmd = (union vin_cmd *)data;
-	cmd->parts.first.bits.rw = VIN_WRITE;
-	cmd->parts.first.bits.sc = VIN_SC_NO;
-	cmd->parts.first.bits.bc = VIN_BC_NO;
-	cmd->parts.first.bits.cmd = VIN_CMD_VOP;
-	cmd->parts.first.bits.res = 0;
-	cmd->parts.first.bits.chan = rtp->index;
-	cmd->parts.second.vop.bits.res1 = 0;
-	cmd->parts.second.vop.bits.odd = res%2;
-	cmd->parts.second.vop.bits.res0 = 0;
-	cmd->parts.second.vop.bits.length = res/2 + ((res%2)?(1):(0));
-	length = cmd->parts.second.vop.bits.length + 2;
-	// get user space data
-	if (copy_from_user(&data[2], buff, res)) {
+
+	// copy from user
+	write_slot.length = 506;
+	write_slot.length = min(write_slot.length, count);
+	if (copy_from_user(write_slot.data, buff, write_slot.length)) {
 		res = -EFAULT;
 		goto vinetic_rtp_channel_write_end;
 	}
-	// check for free space in mailbox
-	spin_lock_bh(&vin->lock);
+
+	spin_lock_bh(&rtp->lock);
+
 	for (;;)
 	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
-			if (!vin->is_not_ready(vin->cbdata)) break;
-			udelay(VINETIC_WAIT_TIMEOUT);
-		}
-		if (wait_count == VINETIC_WAIT_COUNT) {
-			spin_unlock_bh(&vin->lock);
-			res = -EIO;
-			goto vinetic_rtp_channel_write_end;
-		}
-		vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
-			if (!vin->is_not_ready(vin->cbdata)) break;
-			udelay(VINETIC_WAIT_TIMEOUT);
-		}
-		if (wait_count == VINETIC_WAIT_COUNT) {
-			spin_unlock_bh(&vin->lock);
-			res = -EIO;
-			goto vinetic_rtp_channel_write_end;
-		}
+		// successfull return
+		if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT)
+			break;
 
-		vin->free_pbox_space = vin->read_eom(vin->cbdata) & 0xff;
+		spin_unlock_bh(&rtp->lock);
 
-		if (vin->free_pbox_space >= length) break;
+		if (filp->f_flags & O_NONBLOCK)
+			return -EAGAIN;
 
-		if (filp->f_flags & O_NONBLOCK) {
-			spin_unlock_bh(&vin->lock);
-			res = -EAGAIN;
-			goto vinetic_rtp_channel_write_end;
-		}
 		// sleeping
-		spin_unlock_bh(&vin->lock);
-		wait_event_interruptible_timeout(vin->free_pbox_waitq, vin->free_pbox_space >= length, 1);
-		if (res) {
-			goto vinetic_rtp_channel_write_end;
-		}
-		spin_lock_bh(&vin->lock);
+		wait_event_interruptible(rtp->write_slot_count_waitq, rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT);
+
+		spin_lock_bh(&rtp->lock);
 	}
-	// write data to vinetic
-	for (cnt=0; cnt<length; cnt++)
-	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
-			if (!vin->is_not_ready(vin->cbdata)) break;
-			udelay(VINETIC_WAIT_TIMEOUT);
-		}
-		if (wait_count == VINETIC_WAIT_COUNT) {
-			spin_unlock_bh(&vin->lock);
-			res = -EIO;
-			goto vinetic_rtp_channel_write_end;
-		}
-		if (cnt == length-1)
-			vin->write_eom(vin->cbdata, data[cnt]);
-		else
-			vin->write_nwd(vin->cbdata, data[cnt]);
+
+	// copy data to lock area
+	rtp->write_slot[rtp->write_slot_write].length = write_slot.length;
+	memcpy(rtp->write_slot[rtp->write_slot_write].data, write_slot.data, write_slot.length);
+
+	// adjust write position of transmiting buffer
+	rtp->write_slot_write++;
+	if (rtp->write_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT)
+		rtp->write_slot_write = 0;
+
+	rtp->write_slot_count++;
+	if (rtp->write_slot_count >= VINETIC_PACKETSLOT_MAXCOUNT) {
+		rtp->write_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
+		rtp->write_slot_read++;
+		if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+			rtp->write_slot_read = 0;
 	}
-	spin_unlock_bh(&vin->lock);
+
+	spin_unlock_bh(&rtp->lock);
+
+	res = write_slot.length;
 
 vinetic_rtp_channel_write_end:
 	return res;
@@ -1289,51 +1396,23 @@ vinetic_rtp_channel_write_end:
 
 static unsigned int vinetic_rtp_channel_poll(struct file *filp, struct poll_table_struct *wait_table)
 {
-// 	size_t wait_count;
-// 	size_t fps;
 	unsigned int res;
-
 	struct vinetic_rtp_channel *rtp = filp->private_data;
-// 	struct vinetic *vin = rtp->vinetic;
 
 	res = 0;
 
 	poll_wait(filp, &rtp->poll_waitq, wait_table);
-#if 0
-	spin_lock_bh(&vin->lock);
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
-		if (!vin->is_not_ready(vin->cbdata)) break;
-			udelay(VINETIC_WAIT_TIMEOUT);
-	}
-	if (wait_count == VINETIC_WAIT_COUNT) {
-		spin_unlock_bh(&vin->lock);
-		goto vinetic_rtp_channel_poll_end;
-	}
-	vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
-		if (!vin->is_not_ready(vin->cbdata)) break;
-		udelay(VINETIC_WAIT_TIMEOUT);
-	}
-	if (wait_count == VINETIC_WAIT_COUNT) {
-		spin_unlock_bh(&vin->lock);
-		goto vinetic_rtp_channel_poll_end;
-	}
 
-	fps = vin->read_eom(vin->cbdata) & 0xff;
+	spin_lock_bh(&rtp->lock);
 
-	if (fps >= 88)
+	if (rtp->read_slot_count > 0)
+		res |= POLLIN | POLLRDNORM;
+
+	if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT)
 		res |= POLLOUT | POLLWRNORM;
 
-	spin_unlock_bh(&vin->lock); 
-#endif
-	spin_lock_bh(&rtp->lock);
-	if (rtp->recv_slot_count > 0)
-		res |= POLLIN | POLLRDNORM;
 	spin_unlock_bh(&rtp->lock);
 
-// vinetic_rtp_channel_poll_end:
 	return res;
 	}
 
@@ -1406,7 +1485,6 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	for (i=0; i<8; i++) vin->rtp_channels[i] = NULL;
 	spin_lock_init(&vin->lock);
 	init_waitqueue_head(&vin->free_cbox_waitq);
-	init_waitqueue_head(&vin->free_pbox_waitq);
 	init_waitqueue_head(&vin->read_cbox_waitq);
 	init_waitqueue_head(&vin->seek_cbox_waitq);
 	init_timer(&vin->poll_timer);
@@ -1532,6 +1610,7 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 		log(KERN_ERR, "\"%s\" - can't get memory\n", name);
 		goto vinetic_rtp_channel_register_error;
 	}
+	memset(rtp, 0, sizeof(struct vinetic_rtp_channel));
 
 	spin_lock(&vinetic_device_list_lock);
 	// check for name is not used
@@ -1591,6 +1670,8 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 	spin_lock_init(&rtp->lock);
 
 	init_waitqueue_head(&rtp->poll_waitq);
+	init_waitqueue_head(&rtp->read_slot_count_waitq);
+	init_waitqueue_head(&rtp->write_slot_count_waitq);
 	
 	rtp->index = index;
 	rtp->vinetic = vin;
