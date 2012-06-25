@@ -155,8 +155,9 @@ static void __iomem * k5_cs4_base_ptr = NULL;
 static void k5_vinetic_reset(uintptr_t cbdata)
 {
 	iowrite16(0, cbdata + 0x20);
-	mdelay(1);
+	mdelay(10);
 	iowrite16(1, cbdata + 0x20);
+	mdelay(2);
 }
 static void k5_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
 {
