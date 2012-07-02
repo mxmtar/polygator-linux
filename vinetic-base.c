@@ -413,6 +413,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	
 							// wake write_slot_count waitqueue
 							wake_up_interruptible(&rtp->write_slot_count_waitq);
+							
+							// wake poll waitqueue
+							wake_up_interruptible(&rtp->poll_waitq);
 
 							pkt_write[ch]--;
 						}
