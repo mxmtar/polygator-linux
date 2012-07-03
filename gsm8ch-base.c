@@ -93,6 +93,8 @@ struct gsm8ch_tty_at_channel {
 
 	struct tty_port port;
 
+	spinlock_t lock;
+
 	uintptr_t cbdata;
 
 	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
@@ -307,6 +309,8 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 
 	len = 0;
 
+	spin_lock(&ch->lock);
+
 	// read status register
 	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 	// check for ready receiving data
@@ -317,6 +321,8 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 	}
+
+	spin_unlock(&ch->lock);
 
 	if (len) {
 		tty = tty_port_tty_get(&ch->port);
@@ -357,11 +363,11 @@ static int gsm8ch_board_open(struct inode *inode, struct file *filp)
 	for (i=0; i<2; i++)
 	{
 		if (brd->vinetics[i]) {
-			len += sprintf(private_data->buff+len, "VIN%lu brd-gsm8ch-pci-%u-vin%lu\r\n", (unsigned long int)i, brd->sn, (unsigned long int)i);
+			len += sprintf(private_data->buff+len, "VIN%lu board-gsm8ch-pci-%u-vin%lu\r\n", (unsigned long int)i, brd->sn, (unsigned long int)i);
 			for (j=0; j<4; j++)
 			{
 				if (brd->vinetics[i]->rtp_channels[j])
-					len += sprintf(private_data->buff+len, "VIN%luRTP%lu brd-gsm8ch-pci-%u-vin%lu-rtp%lu\r\n", (unsigned long int)i, (unsigned long int)j, brd->sn, (unsigned long int)i, (unsigned long int)j);
+					len += sprintf(private_data->buff+len, "VIN%luRTP%lu board-gsm8ch-pci-%u-vin%lu-rtp%lu\r\n", (unsigned long int)i, (unsigned long int)j, brd->sn, (unsigned long int)i, (unsigned long int)j);
 			}
 		}
 	}
@@ -533,7 +539,7 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		brd->sn += (brd->rom[i] - 0x30) * pow10;
 		pow10 *= 10;
 	}
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-gsm8ch-pci-%u", brd->sn);
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-gsm8ch-pci-%u", brd->sn);
 	if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, devname, &brd->cdev, &gsm8ch_board_fops))) {
 		rc = -1;
 		goto gsm8ch_pci_probe_error;
@@ -541,7 +547,7 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 
 	for (j=0; j<2; j++)
 	{
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-gsm8ch-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
+		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-gsm8ch-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
 		if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, addr,
 													(j)?(gsm8ch_pci_reset_1):(gsm8ch_pci_reset_0),
 													(j)?(gsm8ch_pci_is_not_ready_1):(gsm8ch_pci_is_not_ready_0),
@@ -555,7 +561,7 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		}
 		for (i=0; i<4; i++)
 		{
-			snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-gsm8ch-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+			snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-gsm8ch-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
 			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i)) {
 				rc = -1;
 				goto gsm8ch_pci_probe_error;
@@ -589,7 +595,7 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 				goto gsm8ch_pci_probe_error;
 			}
 			memset(brd->tty_at_channels[i], 0, sizeof(struct gsm8ch_tty_at_channel));
-			//
+			spin_lock_init(&brd->tty_at_channels[i]->lock);
 			tty_port_init(&brd->tty_at_channels[i]->port);
 			brd->tty_at_channels[i]->port.ops = &gsm8ch_tty_at_port_ops;
 			brd->tty_at_channels[i]->port.close_delay = 0;
@@ -776,29 +782,43 @@ static void gsm8ch_tty_at_close(struct tty_struct *tty, struct file *filp)
 
 static int gsm8ch_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
 {
+	int res;
 	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+
+	spin_lock_bh(&ch->lock);
 
 	// read status register
 	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 
 	if (ch->status.bits.com_rdy_wr) {
 		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *buf);
-		return 1;
+		res = 1;
 	} else
-		return 0;
+		res = 0;
+
+	spin_unlock_bh(&ch->lock);
+
+	return res ;
 }
 
 static int gsm8ch_tty_at_write_room(struct tty_struct *tty)
 {
+	int res;
 	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+
+	spin_lock_bh(&ch->lock);
 
 	// read status register
 	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 
 	if (ch->status.bits.com_rdy_wr)
-		return 1;
+		res = 1;
 	else
-		return 0;
+		res = 0;
+
+	spin_unlock_bh(&ch->lock);
+
+	return res;
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
@@ -808,14 +828,26 @@ static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 #endif
 {
 	speed_t baud;
+	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
 
 	baud = tty_get_baud_rate(tty);
-	
-	if (baud == 115200) {
-		;
-	} else {
-		;
+
+	spin_lock_bh(&ch->lock);
+
+	switch (baud)
+	{
+		case 9600:
+			ch->control.bits.gap1 = 3;
+			break;
+		default:
+			ch->control.bits.gap1 = 2;
+			break;
 	}
+
+	ch->mod_control(ch->cbdata, ch->pos_on_board, ch->control.full);
+
+	spin_unlock_bh(&ch->lock);
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 	tty_encode_baud_rate(tty, baud, baud);
 #endif

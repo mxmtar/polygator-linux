@@ -81,6 +81,8 @@ struct k5_tty_at_channel {
 
 	struct tty_port port;
 
+	spinlock_t lock;
+
 	uintptr_t cbdata;
 
 	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
@@ -244,6 +246,8 @@ static void k5_tty_at_poll(unsigned long addr)
 
 	len = 0;
 
+	spin_lock(&ch->lock);
+
 	// check for ready receiving data
 	while(len < sizeof(buff))
 	{
@@ -257,6 +261,8 @@ static void k5_tty_at_poll(unsigned long addr)
 // 		debug("%lu : %02x : %c\n", (long unsigned int)len, buff[len], buff[len]);
 		len++;
 	}
+
+	spin_unlock(&ch->lock);
 
 	if (len) {
 		tty = tty_port_tty_get(&ch->port);
@@ -421,28 +427,42 @@ static void k5_tty_at_close(struct tty_struct *tty, struct file *filp)
 
 static int k5_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
 {
+	int res;
 	struct k5_tty_at_channel *ch = tty->driver_data;
+
+	spin_lock_bh(&ch->lock);
 
 	// read status register
 	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 	if (ch->status.bits.at_wr_empty) {
 		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *buf);
-		return 1;
+		res = 1;
 	} else
-		return 0;
+		res = 0;
+
+	spin_unlock_bh(&ch->lock);
+	
+	return res;
 }
 
 static int k5_tty_at_write_room(struct tty_struct *tty)
 {
+	int res;
 	struct k5_tty_at_channel *ch = tty->driver_data;
+
+	spin_lock_bh(&ch->lock);
 
 	// read status register
 	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 
 	if (ch->status.bits.at_wr_empty)
-		return 1;
+		res = 1;
 	else
-		return 0;
+		res = 0;
+
+	spin_unlock_bh(&ch->lock);
+	
+	return res;
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
@@ -456,6 +476,8 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_te
 
 	baud = tty_get_baud_rate(tty);
 
+	spin_lock_bh(&ch->lock);
+
 	switch (baud)
 	{
 		case 9600:
@@ -465,6 +487,11 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_te
 			ch->control.bits.at_baudrate = 2;
 			break;
 	}
+	
+	ch->mod_control(ch->cbdata, ch->pos_on_board, ch->control.full);
+
+	spin_unlock_bh(&ch->lock);
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 	tty_encode_baud_rate(tty, baud, baud);
 #endif
@@ -659,6 +686,7 @@ static int __init k5_init(void)
 		k5_board->tty_at_channels[i]->control.bits.cn_speed_b = 0;
 		k5_board->tty_at_channels[i]->control.bits.at_baudrate = 2;
 
+		spin_lock_init(&k5_board->tty_at_channels[i]->lock);
 		tty_port_init(&k5_board->tty_at_channels[i]->port);
 		k5_board->tty_at_channels[i]->port.ops = &k5_tty_at_port_ops;
 		k5_board->tty_at_channels[i]->port.close_delay = 0;
