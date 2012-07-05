@@ -297,7 +297,7 @@ static int k5_board_open(struct inode *inode, struct file *filp)
 	{
 		if (brd->tty_at_channels[i]) {
 			brd->tty_at_channels[i]->status.full = brd->tty_at_channels[i]->mod_status(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board);
-			len += sprintf(private_data->buff+len, "AT%lu k5AT%d %s VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.status);
+			len += sprintf(private_data->buff+len, "GSM%lu k5AT%d %s VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.status);
 		}
 	}
 	if (brd->vinetic) {
@@ -375,22 +375,28 @@ static ssize_t k5_board_write(struct file *filp, const char __user *buff, size_t
 		if (private_data->board->tty_at_channels[0]) {
 			private_data->board->tty_at_channels[0]->control.bits.vbat = pwr_state;
 			private_data->board->tty_at_channels[0]->mod_control(private_data->board->tty_at_channels[0]->cbdata, 0, private_data->board->tty_at_channels[0]->control.full);
-		}
-	} else if (sscanf(cmd, "AT%u KEY=%u", &at_chan, &key_state) == 2) {
+			res = len;
+		} else
+			res= -ENODEV;
+	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 1) && (private_data->board->tty_at_channels[at_chan])) {
 			private_data->board->tty_at_channels[at_chan]->control.bits.pkey = !key_state;
 			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
-		}
-	} else if (sscanf(cmd, "AT%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
+			res = len;
+		} else
+			res= -ENODEV;
+	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 1) && (private_data->board->tty_at_channels[at_chan])) {
 			if (baudrate == 9600)
 				private_data->board->tty_at_channels[at_chan]->control.bits.at_baudrate = 0;
 			else
 				private_data->board->tty_at_channels[at_chan]->control.bits.at_baudrate = 2;
 			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
-		}
-	}
-	res = len;
+			res = len;
+		} else
+			res= -ENODEV;
+	} else
+		res = -ENOMSG;
 
 k5_board_write_end:
 	return res;

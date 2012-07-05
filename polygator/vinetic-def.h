@@ -249,6 +249,21 @@ union vin_reg_hwsr2 {
 	u_int16_t full;
 } __attribute__((packed));
 
+union vin_reg_srgpio {
+	struct vin_reg_srgpio_bits {
+		u_int16_t gpio0:1;
+		u_int16_t gpio1:1;
+		u_int16_t gpio2:1;
+		u_int16_t gpio3:1;
+		u_int16_t gpio4:1;
+		u_int16_t gpio5:1;
+		u_int16_t gpio6:1;
+		u_int16_t gpio7:1;
+		u_int16_t res:8;
+	} __attribute__((packed)) bits;
+	u_int16_t full;
+} __attribute__((packed));
+
 /*!
  * \brief VINETIC Short Command
  */
@@ -309,6 +324,13 @@ struct vin_read_hwsr {
 } __attribute__((packed));
 
 typedef struct vin_read_hwsr vin_read_hwsr_t;
+
+struct vin_status_registers {
+	vin_read_sr_bc_t sr;
+	vin_read_hwsr_t hwsr;
+	vin_read_bxsr_t bxsr;
+};
+
 
 enum {
 	VIN_SH_CMD_CODE_rIR			= 0x000, // 0 0000 0000

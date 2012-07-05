@@ -357,7 +357,7 @@ static int gsm8ch_board_open(struct inode *inode, struct file *filp)
 	{
 		if (brd->tty_at_channels[i]) {
 			brd->tty_at_channels[i]->status.full = brd->tty_at_channels[i]->mod_status(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board);
-			len += sprintf(private_data->buff+len, "AT%lu gsm8chAT%d %s VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.vio);
+			len += sprintf(private_data->buff+len, "GSM%lu gsm8chAT%d %s VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.vio);
 		}
 	}
 	for (i=0; i<2; i++)
@@ -434,26 +434,32 @@ static ssize_t gsm8ch_board_write(struct file *filp, const char __user *buff, si
 		goto gsm8ch_board_write_end;
 	}
 
-	if (sscanf(cmd, "AT%u PWR=%u", &at_chan, &pwr_state) == 2) {
+	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
 			private_data->board->tty_at_channels[at_chan]->control.bits.pwr_off = !pwr_state;
 			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
-		}
-	} else if (sscanf(cmd, "AT%u KEY=%u", &at_chan, &key_state) == 2) {
+			res = len;
+		} else
+			res = - ENODEV;
+	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
 			private_data->board->tty_at_channels[at_chan]->control.bits.mod_off = !key_state;
 			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
-		}
-	} else if (sscanf(cmd, "AT%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
+			res = len;
+		} else
+			res = -ENODEV;
+	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
 			if ((baudrate == 9600) || (private_data->board->tty_at_channels[at_chan]->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300))
 				private_data->board->tty_at_channels[at_chan]->control.bits.gap1 = 3;
 			else
 				private_data->board->tty_at_channels[at_chan]->control.bits.gap1 = 2;
 			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
-		}
-	}
-	res = len;
+			res = len;
+		} else
+			res = -ENODEV;
+	} else
+		res = -ENOMSG;
 
 gsm8ch_board_write_end:
 	return res;

@@ -12,6 +12,8 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
+#include "vinetic-def.h"
+
 #define VINETIC_DEVICE_MAXCOUNT 256
 #define VINETIC_DEVNAME_MAXLEN 256
 
@@ -30,6 +32,13 @@ struct vinetic {
 	spinlock_t lock;
 	struct timer_list poll_timer;
 	int poll;
+	int error;
+
+	// status
+	int status_ready;
+	struct vin_status_registers status;
+	struct vin_status_registers status_mask;
+	wait_queue_head_t status_waitq;
 
 	// FIBXMS
 	size_t free_cbox_space;
