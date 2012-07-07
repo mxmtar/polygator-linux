@@ -1130,7 +1130,11 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 	switch (cmd)
 	{
 		case VINETIC_RESET:
+			spin_lock_bh(&vin->lock);
 			vin->reset(vin->cbdata);
+			vin->status_ready = 0;
+			vin->error = 0;
+			spin_unlock_bh(&vin->lock);
 			break;
 		case VINETIC_RESET_RDYQ:
 			spin_lock_bh(&vin->lock);
