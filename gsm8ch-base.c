@@ -95,6 +95,10 @@ struct gsm8ch_tty_at_channel {
 
 	spinlock_t lock;
 
+	size_t xmit_count;
+	size_t xmit_head;
+	size_t xmit_tail;
+
 	uintptr_t cbdata;
 
 	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
@@ -141,6 +145,7 @@ static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct ktermios *o
 #else
 static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct termios *old_termios);
 #endif
+static void gsm8ch_tty_at_flush_buffer(struct tty_struct *tty);
 static void gsm8ch_tty_at_hangup(struct tty_struct *tty);
 
 static struct tty_operations gsm8ch_tty_at_ops = {
@@ -150,7 +155,7 @@ static struct tty_operations gsm8ch_tty_at_ops = {
 	.write_room = gsm8ch_tty_at_write_room,
 // 	.chars_in_buffer = gsm8ch_tty_at_chars_in_buffer,
 	.set_termios = gsm8ch_tty_at_set_termios,
-// 	.flush_buffer = gsm8ch_tty_at_flush_buffer,
+	.flush_buffer = gsm8ch_tty_at_flush_buffer,
 	.hangup = gsm8ch_tty_at_hangup,
 };
 
@@ -311,16 +316,29 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 
 	spin_lock(&ch->lock);
 
-	// read status register
-	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-	// check for ready receiving data
-	while((!ch->status.bits.com_rdy_rd) && (len < sizeof(buff)))
+	// read received data
+	while(len < sizeof(buff))
 	{
-		// put char to receiving buffer
-		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+		if (ch->status.bits.com_rdy_rd)
+			break;		
+		// put char to receiving buffer
+		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 	}
+	do {
+		// read status register
+		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+		// check for transmitter is ready
+		if (ch->xmit_count && ch->status.bits.com_rdy_wr) {
+// 			verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
+			ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
+			ch->xmit_tail++;
+			if (ch->xmit_tail == SERIAL_XMIT_SIZE)
+				ch->xmit_tail = 0;
+			ch->xmit_count--;
+		}
+	} while (ch->xmit_count);
 
 	spin_unlock(&ch->lock);
 
@@ -788,19 +806,39 @@ static void gsm8ch_tty_at_close(struct tty_struct *tty, struct file *filp)
 
 static int gsm8ch_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
 {
-	int res;
+	int res = 0;
+	size_t len;
 	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
 
 	spin_lock_bh(&ch->lock);
 
-	// read status register
-	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+	if (ch->xmit_count < SERIAL_XMIT_SIZE) {
+		while (1)
+		{
+			if (ch->xmit_head == ch->xmit_tail) {
+				if (ch->xmit_count)
+					len = 0;
+				else
+					len = SERIAL_XMIT_SIZE - ch->xmit_head;
+			} else if (ch->xmit_head > ch->xmit_tail)
+				len = SERIAL_XMIT_SIZE - ch->xmit_head;
+			else
+				len = ch->xmit_tail - ch->xmit_head;
 
-	if (ch->status.bits.com_rdy_wr) {
-		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *buf);
-		res = 1;
-	} else
-		res = 0;
+			len = min(len, (size_t)count);
+			if (!len)
+				break;
+
+			memcpy(ch->port.xmit_buf + ch->xmit_head, buf, len);
+			ch->xmit_head += len;
+			if (ch->xmit_head == SERIAL_XMIT_SIZE)
+				ch->xmit_head = 0;
+			ch->xmit_count += len;
+			buf += len;
+			count -= len;
+			res += len;
+		}
+	}
 
 	spin_unlock_bh(&ch->lock);
 
@@ -814,13 +852,7 @@ static int gsm8ch_tty_at_write_room(struct tty_struct *tty)
 
 	spin_lock_bh(&ch->lock);
 
-	// read status register
-	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-
-	if (ch->status.bits.com_rdy_wr)
-		res = 1;
-	else
-		res = 0;
+	res = SERIAL_XMIT_SIZE - ch->xmit_count;
 
 	spin_unlock_bh(&ch->lock);
 
@@ -859,6 +891,16 @@ static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 #endif
 }
 
+static void gsm8ch_tty_at_flush_buffer(struct tty_struct *tty)
+{
+	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+
+	spin_lock_bh(&ch->lock);
+	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
+	spin_unlock_bh(&ch->lock);
+	tty_wakeup(tty);
+}
+
 static void gsm8ch_tty_at_hangup(struct tty_struct *tty)
 {
 	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
@@ -878,6 +920,10 @@ static int gsm8ch_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 {
 	struct gsm8ch_tty_at_channel *ch = container_of(port, struct gsm8ch_tty_at_channel, port);
 
+	if (tty_port_alloc_xmit_buf(port) < 0)
+		return -ENOMEM;
+	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
+
 	ch->poll_timer.function = gsm8ch_tty_at_poll;
 	ch->poll_timer.data = (unsigned long)ch;
 	ch->poll_timer.expires = jiffies + 1;
@@ -891,6 +937,8 @@ static void gsm8ch_tty_at_port_shutdown(struct tty_port *port)
 	struct gsm8ch_tty_at_channel *ch = container_of(port, struct gsm8ch_tty_at_channel, port);
 
 	del_timer_sync(&ch->poll_timer);
+
+	tty_port_free_xmit_buf(port);
 }
 
 static int __init gsm8ch_init(void)
@@ -919,6 +967,7 @@ static int __init gsm8ch_init(void)
 	gsm8ch_tty_at_driver->subtype = SERIAL_TYPE_NORMAL;
 	gsm8ch_tty_at_driver->init_termios = tty_std_termios;
 	gsm8ch_tty_at_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
+	gsm8ch_tty_at_driver->init_termios.c_lflag &= ~ECHO;
 	gsm8ch_tty_at_driver->init_termios.c_ispeed = 9600;
 	gsm8ch_tty_at_driver->init_termios.c_ospeed = 9600;
 	gsm8ch_tty_at_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;

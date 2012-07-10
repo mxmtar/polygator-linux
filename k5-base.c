@@ -31,9 +31,9 @@ static int tty_at_major = 0;
 module_param(tty_at_major, int, 0);
 MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator K5 device");
 
-#define verbose(_fmt, _args...) printk(KERN_INFO "[pg-%s] " _fmt, THIS_MODULE->name, ## _args)
-#define log(_level, _fmt, _args...) printk(_level "[pg-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k5-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
-#define debug(_fmt, _args...) printk(KERN_DEBUG "[pg-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k5-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+#define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
+#define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k5-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+#define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k5-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
 /*! */
 #define K5_CS_STATUS_1	0x10C0
@@ -83,6 +83,10 @@ struct k5_tty_at_channel {
 
 	spinlock_t lock;
 
+	size_t xmit_count;
+	size_t xmit_head;
+	size_t xmit_tail;
+
 	uintptr_t cbdata;
 
 	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
@@ -121,6 +125,7 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_t
 #else
 static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_termios);
 #endif
+static void k5_tty_at_flush_buffer(struct tty_struct *tty);
 static void k5_tty_at_hangup(struct tty_struct *tty);
 
 static struct tty_operations k5_tty_at_ops = {
@@ -130,7 +135,7 @@ static struct tty_operations k5_tty_at_ops = {
 	.write_room = k5_tty_at_write_room,
 // 	.chars_in_buffer = k5_tty_at_chars_in_buffer,
 	.set_termios = k5_tty_at_set_termios,
-// 	.flush_buffer = k5_tty_at_flush_buffer,
+	.flush_buffer = k5_tty_at_flush_buffer,
 	.hangup = k5_tty_at_hangup,
 };
 
@@ -248,19 +253,29 @@ static void k5_tty_at_poll(unsigned long addr)
 
 	spin_lock(&ch->lock);
 
-	// check for ready receiving data
+	// read received data
 	while(len < sizeof(buff))
 	{
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-// 		debug("status=0x%02x\n", ch->status.full);
 		if (ch->status.bits.at_rd_empty)
 			break;
 		// put char to receiving buffer
-		buff[len] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
-// 		debug("%lu : %02x : %c\n", (long unsigned int)len, buff[len], buff[len]);
-		len++;
+		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 	}
+	do {
+		// read status register
+		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+		// check for transmitter is ready
+		if (ch->xmit_count && ch->status.bits.at_wr_empty) {
+// 			verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
+			ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
+			ch->xmit_tail++;
+			if (ch->xmit_tail == SERIAL_XMIT_SIZE)
+				ch->xmit_tail = 0;
+			ch->xmit_count--;
+		}
+	} while (ch->xmit_count);
 
 	spin_unlock(&ch->lock);
 
@@ -301,11 +316,11 @@ static int k5_board_open(struct inode *inode, struct file *filp)
 		}
 	}
 	if (brd->vinetic) {
-		len += sprintf(private_data->buff+len, "VIN0 brd-k5-vin0\r\n");
+		len += sprintf(private_data->buff+len, "VIN0 board-k5-vin0\r\n");
 		for (i=0; i<4; i++)
 		{
 			if (brd->vinetic->rtp_channels[i])
-				len += sprintf(private_data->buff+len, "VIN0RTP%lu brd-k5-vin0-rtp%lu\r\n", (unsigned long int)i, (unsigned long int)i);
+				len += sprintf(private_data->buff+len, "VIN0RTP%lu board-k5-vin0-rtp%lu\r\n", (unsigned long int)i, (unsigned long int)i);
 		}
 	}
 
@@ -371,7 +386,7 @@ static ssize_t k5_board_write(struct file *filp, const char __user *buff, size_t
 		goto k5_board_write_end;
 	}
 
-	if (sscanf(cmd, "PWR=%u", &pwr_state) == 1) {
+	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
 		if (private_data->board->tty_at_channels[0]) {
 			private_data->board->tty_at_channels[0]->control.bits.vbat = pwr_state;
 			private_data->board->tty_at_channels[0]->mod_control(private_data->board->tty_at_channels[0]->cbdata, 0, private_data->board->tty_at_channels[0]->control.full);
@@ -433,18 +448,39 @@ static void k5_tty_at_close(struct tty_struct *tty, struct file *filp)
 
 static int k5_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
 {
-	int res;
+	int res = 0;
+	size_t len;
 	struct k5_tty_at_channel *ch = tty->driver_data;
 
 	spin_lock_bh(&ch->lock);
 
-	// read status register
-	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-	if (ch->status.bits.at_wr_empty) {
-		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *buf);
-		res = 1;
-	} else
-		res = 0;
+	if (ch->xmit_count < SERIAL_XMIT_SIZE) {
+		while (1)
+		{
+			if (ch->xmit_head == ch->xmit_tail) {
+				if (ch->xmit_count)
+					len = 0;
+				else
+					len = SERIAL_XMIT_SIZE - ch->xmit_head;
+			} else if (ch->xmit_head > ch->xmit_tail)
+				len = SERIAL_XMIT_SIZE - ch->xmit_head;
+			else
+				len = ch->xmit_tail - ch->xmit_head;
+
+			len = min(len, (size_t)count);
+			if (!len)
+				break;
+
+			memcpy(ch->port.xmit_buf + ch->xmit_head, buf, len);
+			ch->xmit_head += len;
+			if (ch->xmit_head == SERIAL_XMIT_SIZE)
+				ch->xmit_head = 0;
+			ch->xmit_count += len;
+			buf += len;
+			count -= len;
+			res += len;
+		}
+	}
 
 	spin_unlock_bh(&ch->lock);
 	
@@ -458,13 +494,7 @@ static int k5_tty_at_write_room(struct tty_struct *tty)
 
 	spin_lock_bh(&ch->lock);
 
-	// read status register
-	ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-
-	if (ch->status.bits.at_wr_empty)
-		res = 1;
-	else
-		res = 0;
+	res = SERIAL_XMIT_SIZE - ch->xmit_count;
 
 	spin_unlock_bh(&ch->lock);
 	
@@ -503,6 +533,16 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_te
 #endif
 }
 
+static void k5_tty_at_flush_buffer(struct tty_struct *tty)
+{
+	struct k5_tty_at_channel *ch = tty->driver_data;
+
+	spin_lock_bh(&ch->lock);
+	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
+	spin_unlock_bh(&ch->lock);
+	tty_wakeup(tty);
+}
+
 static void k5_tty_at_hangup(struct tty_struct *tty)
 {
 	struct k5_tty_at_channel *ch = tty->driver_data;
@@ -522,6 +562,10 @@ static int k5_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty
 {
 	struct k5_tty_at_channel *ch = container_of(port, struct k5_tty_at_channel, port);
 
+	if (tty_port_alloc_xmit_buf(port) < 0)
+		return -ENOMEM;
+	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
+
 	ch->poll_timer.function = k5_tty_at_poll;
 	ch->poll_timer.data = (unsigned long)ch;
 	ch->poll_timer.expires = jiffies + 1;
@@ -535,6 +579,8 @@ static void k5_tty_at_port_shutdown(struct tty_port *port)
 	struct k5_tty_at_channel *ch = container_of(port, struct k5_tty_at_channel, port);
 
 	del_timer_sync(&ch->poll_timer);
+
+	tty_port_free_xmit_buf(port);
 }
 
 static int __init k5_init(void)
@@ -555,7 +601,7 @@ static int __init k5_init(void)
 	// Configure PIOC for using CS3, CS4
 	at91_sys_write(AT91_PIOC + PIO_PDR, (1 << 14)|(1 << 8)); /* Disable Register */
 	data = at91_sys_read(AT91_PIOC + PIO_PSR); /* Status Register */
-	at91_sys_write(AT91_PIOC + PIO_ASR, (1 << 14)|(1 << 8)); /* Peripheral A Select Register */	
+	at91_sys_write(AT91_PIOC + PIO_ASR, (1 << 14)|(1 << 8)); /* Peripheral A Select Register */
 	data = at91_sys_read(AT91_PIOC + PIO_ABSR); /* AB Status Register */
 
 	// Configure SMC CS3 timings
@@ -620,6 +666,7 @@ static int __init k5_init(void)
 	k5_tty_at_driver->subtype = SERIAL_TYPE_NORMAL;
 	k5_tty_at_driver->init_termios = tty_std_termios;
 	k5_tty_at_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
+	k5_tty_at_driver->init_termios.c_lflag &= ~ECHO;
 	k5_tty_at_driver->init_termios.c_ispeed = 9600;
 	k5_tty_at_driver->init_termios.c_ospeed = 9600;
 	k5_tty_at_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
@@ -649,13 +696,13 @@ static int __init k5_init(void)
 	}
 	memset(k5_board, 0, sizeof(struct k5_board));
 
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "brd-k5");
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k5");
 	if (!(k5_board->pg_board =  polygator_board_register(THIS_MODULE, devname, &k5_board->cdev, &k5_board_fops))) {
 		rc = -1;
 		goto k5_init_error;
 	}
 	// Register vinetic
-	if (!(k5_board->vinetic = vinetic_device_register(THIS_MODULE, "brd-k5-vin0", (uintptr_t)k5_cs4_base_ptr,
+	if (!(k5_board->vinetic = vinetic_device_register(THIS_MODULE, "board-k5-vin0", (uintptr_t)k5_cs4_base_ptr,
 													k5_vinetic_reset,
 													k5_vinetic_is_not_ready,
 													k5_vinetic_write_nwd,
@@ -668,7 +715,7 @@ static int __init k5_init(void)
 	}
 	for (i=0; i<4; i++)
 	{
-		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "brd-k5-vin0-rtp%lu", (unsigned long int)i);
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k5-vin0-rtp%lu", (unsigned long int)i);
 		if (!(vinetic_rtp_channel_register(THIS_MODULE, devname, k5_board->vinetic, i))) {
 			rc = -1;
 			goto k5_init_error;
