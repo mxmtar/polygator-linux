@@ -38,6 +38,7 @@ MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator
 /*! */
 #define K5_CS_STATUS_1	0x10C0
 #define K5_CS_AT_COM_1	0x10D0
+#define K5_MODE_AUTONOM	0x1190
 #define K5_RESET_BOARD	0x11F0
 #define K5_CS_STATUS_2	0x1200
 #define K5_CS_AT_COM_2	0x1210
@@ -254,7 +255,7 @@ static void k5_tty_at_poll(unsigned long addr)
 	spin_lock(&ch->lock);
 
 	// read received data
-	while(len < sizeof(buff))
+	while (len < sizeof(buff))
 	{
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
@@ -263,11 +264,11 @@ static void k5_tty_at_poll(unsigned long addr)
 		// put char to receiving buffer
 		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 	}
-	do {
+	if (ch->xmit_count) {
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 		// check for transmitter is ready
-		if (ch->xmit_count && ch->status.bits.at_wr_empty) {
+		if (ch->status.bits.at_wr_empty) {
 // 			verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
 			ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
 			ch->xmit_tail++;
@@ -275,7 +276,7 @@ static void k5_tty_at_poll(unsigned long addr)
 				ch->xmit_tail = 0;
 			ch->xmit_count--;
 		}
-	} while (ch->xmit_count);
+	}
 
 	spin_unlock(&ch->lock);
 
@@ -665,6 +666,7 @@ static int __init k5_init(void)
 	k5_tty_at_driver->type = TTY_DRIVER_TYPE_SERIAL;
 	k5_tty_at_driver->subtype = SERIAL_TYPE_NORMAL;
 	k5_tty_at_driver->init_termios = tty_std_termios;
+	k5_tty_at_driver->init_termios.c_iflag &= ~ICRNL;
 	k5_tty_at_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
 	k5_tty_at_driver->init_termios.c_lflag &= ~ECHO;
 	k5_tty_at_driver->init_termios.c_ispeed = 9600;
@@ -687,6 +689,8 @@ static int __init k5_init(void)
 	mdelay(10);
 	iowrite8(1, k5_cs3_base_ptr + K5_RESET_BOARD);
 #endif
+	// Set AUTONOM SIM CARD
+	iowrite8(1, k5_cs3_base_ptr + K5_MODE_AUTONOM);
 
 	// alloc memory for board data
 	if (!(k5_board = kmalloc(sizeof(struct k5_board), GFP_KERNEL))) {

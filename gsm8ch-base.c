@@ -317,7 +317,7 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 	spin_lock(&ch->lock);
 
 	// read received data
-	while(len < sizeof(buff))
+	while (len < sizeof(buff))
 	{
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
@@ -326,11 +326,11 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 		// put char to receiving buffer
 		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 	}
-	do {
+	 if (ch->xmit_count) {
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
 		// check for transmitter is ready
-		if (ch->xmit_count && ch->status.bits.com_rdy_wr) {
+		if (ch->status.bits.com_rdy_wr) {
 // 			verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
 			ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
 			ch->xmit_tail++;
@@ -338,7 +338,7 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 				ch->xmit_tail = 0;
 			ch->xmit_count--;
 		}
-	} while (ch->xmit_count);
+	}
 
 	spin_unlock(&ch->lock);
 
@@ -966,6 +966,7 @@ static int __init gsm8ch_init(void)
 	gsm8ch_tty_at_driver->type = TTY_DRIVER_TYPE_SERIAL;
 	gsm8ch_tty_at_driver->subtype = SERIAL_TYPE_NORMAL;
 	gsm8ch_tty_at_driver->init_termios = tty_std_termios;
+	gsm8ch_tty_at_driver->init_termios.c_iflag &= ~ICRNL;
 	gsm8ch_tty_at_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
 	gsm8ch_tty_at_driver->init_termios.c_lflag &= ~ECHO;
 	gsm8ch_tty_at_driver->init_termios.c_ispeed = 9600;

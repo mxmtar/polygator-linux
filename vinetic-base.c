@@ -586,7 +586,11 @@ static void vinetic_poll_proc(unsigned long addr)
 
 	spin_unlock(&vin->lock);
 	if (vin->poll)
+#if HZ >= 200
+		mod_timer(&vin->poll_timer, jiffies + (5*HZ)/1000);
+#else
 		mod_timer(&vin->poll_timer, jiffies + 1);
+#endif
 	return;
 
 vinetic_poll_proc_error:

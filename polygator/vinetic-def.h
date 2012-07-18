@@ -1197,30 +1197,30 @@ struct vin_cmd_eop_edsp_sw_version_register {
  */
 /*! List bellow is valid for VINETIC®-4VIP, V1.4, RTP Versions (PRT=0) */
 enum {
-	VIN_4VIP1_RTP4 = 000000, /*! firmware (type 0) 4VIP1-RTP4, G.729A/B/E, G.723.1, G.711, G.726 included. */
-	VIN_4VIP2_RTP4 = 000100, /*! firmware (type 4) 4VIP2-RTP4, G.729A/B, G.728, G.723.1, G.711, G.726 included. */
-	VIN_4VIP4_RTP4 = 001100, /*! firmware (type 12) 4VIP4-RTP4, G.728, G.729A/B/E, G.711, G.726 included. */
-	VIN_4VIP6_RTP4 = 010000, /*! firmware (type 16) 4VIP6-RTP4, Fax data pump (T.38) + G.729A/B/E, G.711, G.726 included. */
-	VIN_4VIP7_RTP4 = 010100, /*! firmware (type 20) 4VIP7-RTP4, Fax data pump, G.728, G.729A/B included. */
-	VIN_4VIP8_RTP4 = 011000, /*! firmware (type 24) 4VIP8-RTP4, Fax data pump, G.728, G.723.1 included. */
+	VIN_4VIP1_RTP4 = 0x00, /*! firmware (type 0) 4VIP1-RTP4, G.729A/B/E, G.723.1, G.711, G.726 included. */
+	VIN_4VIP2_RTP4 = 0x04, /*! firmware (type 4) 4VIP2-RTP4, G.729A/B, G.728, G.723.1, G.711, G.726 included. */
+	VIN_4VIP4_RTP4 = 0x0c, /*! firmware (type 12) 4VIP4-RTP4, G.728, G.729A/B/E, G.711, G.726 included. */
+	VIN_4VIP6_RTP4 = 0x10, /*! firmware (type 16) 4VIP6-RTP4, Fax data pump (T.38) + G.729A/B/E, G.711, G.726 included. */
+	VIN_4VIP7_RTP4 = 0x14, /*! firmware (type 20) 4VIP7-RTP4, Fax data pump, G.728, G.729A/B included. */
+	VIN_4VIP8_RTP4 = 0x18, /*! firmware (type 24) 4VIP8-RTP4, Fax data pump, G.728, G.723.1 included. */
 };
 /*! List bellow is valid for VINETIC®-4VIP, V1.4, AAL Versions (PRT=1) */
 enum {
-	VIN_4VIP1_AAL4 = 000000, /*! firmware (type 64) 4VIP1-AAL4, G.729A/B/E, G.723.1, G.711, G.726 included. */
-	VIN_4VIP2_AAL4 = 000100, /*! firmware (type 68) 4VIP2-AAL4, G.729A/B, G.728, G.723.1, G.711, G.726 included. */
-	VIN_4VIP4_AAL4 = 001100, /*! firmware (type 76) 4VIP4-AAL4, G.728, G.729A/B/E, G.711, G.726 included. */
+	VIN_4VIP1_AAL4 = 0x00, /*! firmware (type 64) 4VIP1-AAL4, G.729A/B/E, G.723.1, G.711, G.726 included. */
+	VIN_4VIP2_AAL4 = 0x04, /*! firmware (type 68) 4VIP2-AAL4, G.729A/B, G.728, G.723.1, G.711, G.726 included. */
+	VIN_4VIP4_AAL4 = 0x0c, /*! firmware (type 76) 4VIP4-AAL4, G.728, G.729A/B/E, G.711, G.726 included. */
 };
 /*! List bellow is valid for VINETIC®-4C, V2.2, (PRT=0) */
 enum {
-	VIN_4C_TDM = 100000, /*! firmware (type 32) 4C-TDM, without coder module. */
+	VIN_4C_TDM = 0x20, /*! firmware (type 32) 4C-TDM, without coder module. */
 };
 /*! List bellow is valid for VINETIC®-4M (MV=10B), V2.2, RTP Version (PRT=0) */
 enum {
-	VIN_4M5_RTP4 = 000000, /*! firmware (type 256) 4M-RTP4, G.711, G.726 included. */
+	VIN_4M5_RTP4 = 0x00, /*! firmware (type 256) 4M-RTP4, G.711, G.726 included. */
 };
 /*! List bellow is valid for VINETIC®-4M (MV=10B), V2.2, AAL Version (PRT=1) */
 enum {
-	VIN_4M5_AAL4 = 000000, /*! firmware (type 320) 4M-AAL4, G.711, G.726 included. */
+	VIN_4M5_AAL4 = 0x00, /*! firmware (type 320) 4M-AAL4, G.711, G.726 included. */
 };
 
 enum {
