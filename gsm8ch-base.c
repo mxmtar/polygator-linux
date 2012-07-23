@@ -375,7 +375,10 @@ static int gsm8ch_board_open(struct inode *inode, struct file *filp)
 	{
 		if (brd->tty_at_channels[i]) {
 			brd->tty_at_channels[i]->status.full = brd->tty_at_channels[i]->mod_status(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu gsm8chAT%d %s VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.vio);
+			len += sprintf(private_data->buff+len, "GSM%lu gsm8chAT%d %s VIN%luALM%lu VIO=%u\r\n",
+															(unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type),
+															(unsigned long int)(i/4), (unsigned long int)(i%4),
+															brd->tty_at_channels[i]->status.bits.vio);
 		}
 	}
 	for (i=0; i<2; i++)

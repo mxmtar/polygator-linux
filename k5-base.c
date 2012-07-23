@@ -38,6 +38,7 @@ MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator
 /*! */
 #define K5_CS_STATUS_1	0x10C0
 #define K5_CS_AT_COM_1	0x10D0
+#define K5_CS_SWITCH	0x1170
 #define K5_MODE_AUTONOM	0x1190
 #define K5_RESET_BOARD	0x11F0
 #define K5_CS_STATUS_2	0x1200
@@ -313,7 +314,10 @@ static int k5_board_open(struct inode *inode, struct file *filp)
 	{
 		if (brd->tty_at_channels[i]) {
 			brd->tty_at_channels[i]->status.full = brd->tty_at_channels[i]->mod_status(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu k5AT%d %s VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.status);
+			if (i)
+				len += sprintf(private_data->buff+len, "GSM%lu k5AT%d %s VIN0PCM0 VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.status);
+			else
+				len += sprintf(private_data->buff+len, "GSM%lu k5AT%d %s VIN0ALM3 VIO=%u\r\n", (unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type), brd->tty_at_channels[i]->status.bits.status);
 		}
 	}
 	if (brd->vinetic) {
@@ -691,6 +695,8 @@ static int __init k5_init(void)
 #endif
 	// Set AUTONOM SIM CARD
 	iowrite8(1, k5_cs3_base_ptr + K5_MODE_AUTONOM);
+	// Set audio path to channel 1 M10
+	iowrite8(0, k5_cs3_base_ptr + K5_CS_SWITCH);
 
 	// alloc memory for board data
 	if (!(k5_board = kmalloc(sizeof(struct k5_board), GFP_KERNEL))) {

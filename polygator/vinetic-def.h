@@ -360,6 +360,9 @@ enum {
 	VIN_SH_CMD_CODE_wSWRST		= 0x031, // 0 0011 0001
 	VIN_SH_CMD_CODE_wRESYNC		= 0x032, // 0 0011 0010
 	VIN_SH_CMD_CODE_wPHIERR		= 0x033, // 0 0011 0011
+
+	VIN_OP_MODE_POWER_DOWN_HIGH_IMPEDANCE	= 0x100, // 1 0000 0000
+	VIN_OP_MODE_ACTIVE_HIGH_VBATH			= 0x120, // 1 0010 0000
 };
 
 #define VIN_CMD_SHORT_BUILD(_rw, _bc, _om, _cmd, _subcmd, _chan) \
@@ -442,6 +445,13 @@ enum {
 
 #define VIN_wPHIERR \
 	VIN_CMD_SHORT_BUILD(VIN_WRITE, 0, (VIN_SH_CMD_CODE_wPHIERR >> 8) & 0x1, (VIN_SH_CMD_CODE_wPHIERR >> 4) & 0xf, VIN_SH_CMD_CODE_wPHIERR & 0xf, 0)
+
+
+#define VIN_POWER_DOWN_HIGH_IMPEDANCE(_chan) \
+	VIN_CMD_SHORT_BUILD(VIN_WRITE, 0, (VIN_SH_CMD_CODE_POWER_DOWN_HIGH_IMPEDANCE >> 8) & 0x1, (VIN_SH_CMD_CODE_POWER_DOWN_HIGH_IMPEDANCE >> 4) & 0xf, VIN_SH_CMD_CODE_POWER_DOWN_HIGH_IMPEDANCE & 0xf, _chan)
+
+#define VIN_ACTIVE_HIGH_VBATH(_chan) \
+	VIN_CMD_SHORT_BUILD(VIN_WRITE, 0, (VIN_SH_CMD_CODE_ACTIVE_HIGH_VBATH >> 8) & 0x1, (VIN_SH_CMD_CODE_ACTIVE_HIGH_VBATH >> 4) & 0xf, VIN_SH_CMD_CODE_ACTIVE_HIGH_VBATH & 0xf, _chan)
 
 /*!
  * \brief VINETIC Command
@@ -774,6 +784,7 @@ struct vin_cmd_cop_generic {
 
 enum {
 	VIN_MOD_PCM = 0x0,
+	VIN_MOD_ALI = 0x1,
 	VIN_MOD_CODER = 0x3,
 	VIN_MOD_CONT = 0x5,
 	VIN_MOD_TEST = 0x7,
@@ -970,11 +981,71 @@ enum {
 	VIN_DTM_OFF = 1, /*! Turbo mode is off */
 };
 /*!
+ * \brief Analog Line Interface Module (ALI)
+ */
+enum {
+	VIN_EOP_ALI_CONT = 0x00,
+	VIN_EOP_ALI_CHAN = 0x01,
+	VIN_EOP_ALI_NEAR_END_LEC = 0x02,
+};
+/*!
+ * \brief Command_Analog_Line_Interface_Control
+	Description: This command activates or deactivates the SW Analog line interface handling.
+ */
+struct vin_cmd_eop_ali_control {
+	union vin_cmd header;
+	struct vin_eop_ali_control {
+		u_int16_t res:15;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_ali_control;
+} __attribute__((packed));
+/*!
+ * \brief Command_Analog_Line_Interface_Channel
+	Description: This command configures the Analog Line Interface channels.
+ */
+struct vin_cmd_eop_ali_channel {
+	union vin_cmd header;
+	struct vin_eop_ali_channel {
+		u_int16_t i1:6;
+		u_int16_t res0:9;
+		u_int16_t en:1;
+		u_int16_t gainr:8;
+		u_int16_t gainx:8;
+		u_int16_t i3:6;
+		u_int16_t res1:2;
+		u_int16_t i2:6;
+		u_int16_t res2:2;
+		u_int16_t i5:6;
+		u_int16_t res3:2;
+		u_int16_t i4:6;
+		u_int16_t res4:2;
+	} __attribute__((packed)) eop_ali_channel;
+} __attribute__((packed));
+/*!
+ * \brief Command_ALI_Near_End_LEC
+	Description: This command activates one of the near end LEC's in the addressed channel.
+ */
+struct vin_cmd_eop_ali_near_end_lec {
+	union vin_cmd header;
+	struct vin_eop_ali_near_end_lec {
+		u_int16_t lecnr:4;
+		u_int16_t nlpm:2;
+		u_int16_t nlp:1;
+		u_int16_t as:1;
+		u_int16_t oldc:1;
+		u_int16_t dtm:1;
+		u_int16_t res:5;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_ali_near_end_lec;
+} __attribute__((packed));
+/*!
  * \brief Coder-Module
  */
 enum {
 	VIN_EOP_CODER_CONT = 0x00,
 	VIN_EOP_CODER_CHAN_SC = 0x01,
+	VIN_EOP_CODER_CONF = 0x10,
+	VIN_EOP_CODER_CONF_RTP = 0x11,
 	VIN_EOP_CODER_JBSTAT = 0x14,
 };
 /*!
@@ -1061,6 +1132,91 @@ enum {
 	VIN_ENC_G7231_5_3 = 0x1c, /*! G.723.1, 5.3 kbit/s */
 	VIN_ENC_G7231_6_3 = 0x1d, /*! G.723.1, 6.3 kbit/s */
 };
+/*!
+ * \brief Command_Coder_Configuration_RTP_Support
+	Description: This command determines the start value for the timestamp.
+	It can also be used to overwrite or to read the actual
+	timestamp. The timestamp is used for all active channels.
+ */
+struct vin_cmd_eop_coder_configuration_rtp_support {
+	union vin_cmd header;
+	struct vin_eop_coder_configuration_rtp_support {
+		u_int16_t time_stamp_hw;
+		u_int16_t time_stamp_lw;
+	} __attribute__((packed)) eop_coder_configuration_rtp_support;
+} __attribute__((packed));
+/*!
+ * \brief Command_Coder_Channel_Configuration_RTP_Support
+	Description: This command configures one coder channel.
+ */
+struct vin_cmd_eop_coder_channel_configuration_rtp_support {
+	union vin_cmd header;
+	struct vin_eop_coder_channel_configuration_rtp_support {
+		u_int16_t ssrc_hw; // 1
+		u_int16_t ssrc_lw; // 2
+		u_int16_t seq_nr; // 3
+		u_int16_t pt_00011:7; // 4
+		u_int16_t sid_00011:1;
+		u_int16_t pt_00010:7;
+		u_int16_t sid_00010:1;
+		u_int16_t pt_00101:7; // 5
+		u_int16_t sid_00101:1;
+		u_int16_t pt_00100:7;
+		u_int16_t sid_00100:1;
+		u_int16_t pt_00111:7; // 6
+		u_int16_t sid_00111:1;
+		u_int16_t pt_00110:7;
+		u_int16_t sid_00110:1;
+		u_int16_t pt_01001:7; // 7
+		u_int16_t sid_01001:1;
+		u_int16_t pt_01000:7;
+		u_int16_t sid_01000:1;
+		u_int16_t pt_01011:7; // 8
+		u_int16_t sid_01011:1;
+		u_int16_t pt_01010:7;
+		u_int16_t sid_01010:1;
+		u_int16_t pt_01101:7; // 9
+		u_int16_t sid_01101:1;
+		u_int16_t pt_01100:7;
+		u_int16_t sid_01100:1;
+		u_int16_t pt_01111:7; // 10
+		u_int16_t sid_01111:1;
+		u_int16_t pt_01110:7;
+		u_int16_t sid_01110:1;
+		u_int16_t pt_10001:7; // 11
+		u_int16_t sid_10001:1;
+		u_int16_t pt_10000:7;
+		u_int16_t sid_10000:1;
+		u_int16_t pt_10011:7; // 12
+		u_int16_t sid_10011:1;
+		u_int16_t pt_10010:7;
+		u_int16_t sid_10010:1;
+		u_int16_t pt_10101:7; // 13
+		u_int16_t sid_10101:1;
+		u_int16_t pt_10100:7;
+		u_int16_t sid_10100:1;
+		u_int16_t pt_10111:7; // 14
+		u_int16_t sid_10111:1;
+		u_int16_t pt_10110:7;
+		u_int16_t sid_10110:1;
+		u_int16_t pt_11001:7; // 15
+		u_int16_t sid_11001:1;
+		u_int16_t pt_11000:7;
+		u_int16_t sid_11000:1;
+		u_int16_t pt_11011:7; // 16
+		u_int16_t sid_11011:1;
+		u_int16_t pt_11010:7;
+		u_int16_t sid_11010:1;
+		u_int16_t pt_11101:7; // 17
+		u_int16_t sid_11101:1;
+		u_int16_t pt_11100:7;
+		u_int16_t sid_11100:1;
+		u_int16_t pt_11111:7; // 18
+		u_int16_t sid_11111:1;
+		u_int16_t pt_11110:7;
+		u_int16_t sid_11110:1;
+	} __attribute__((packed)) eop_coder_channel_configuration_rtp_support;
+} __attribute__((packed));
 /*!
  * \brief Command_Coder_Channel_JB_Statistics
 	Description: This command delivers statistic information for the Voice Play Out Unit.

@@ -1397,6 +1397,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			vin->status_ready = 1;
 			wake_up_interruptible(&vin->status_waitq);
 			spin_unlock_bh(&vin->lock);
+			break;
 		default:
 			res = -ENOIOCTLCMD;
 			break;
