@@ -12,9 +12,6 @@ polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 k5-objs := k5-base.o
 
-#export ARCH=arm
-#export CROSS_COMPILE=arm-polygator-linux-gnueabi-
-
 KERNEL_SRC_DIR := $(KERNEL_SRC)
 KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
@@ -50,8 +47,7 @@ headers_install:
 uninstall: modules_uninstall headers_uninstall
 
 modules_uninstall:
-#	echo "/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
-	rm -rvf "/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
+	rm -rvf "$(DESTDIR)/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
 	depmod
 
 headers_uninstall:

@@ -246,14 +246,12 @@ static u_int8_t k5_mod_at_read(uintptr_t cbdata, size_t pos)
 
 static void k5_tty_at_poll(unsigned long addr)
 {
-	char buff[1024];
+	char buff[512];
 	size_t len;
 	struct tty_struct *tty;
 	struct k5_tty_at_channel *ch = (struct k5_tty_at_channel *)addr;
 
 	len = 0;
-
-	spin_lock(&ch->lock);
 
 	// read received data
 	while (len < sizeof(buff))
@@ -265,6 +263,8 @@ static void k5_tty_at_poll(unsigned long addr)
 		// put char to receiving buffer
 		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 	}
+
+	spin_lock(&ch->lock);
 	if (ch->xmit_count) {
 		// read status register
 		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
@@ -278,7 +278,6 @@ static void k5_tty_at_poll(unsigned long addr)
 			ch->xmit_count--;
 		}
 	}
-
 	spin_unlock(&ch->lock);
 
 	if (len) {
@@ -517,8 +516,6 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_te
 
 	baud = tty_get_baud_rate(tty);
 
-	spin_lock_bh(&ch->lock);
-
 	switch (baud)
 	{
 		case 9600:
@@ -530,8 +527,6 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_te
 	}
 	
 	ch->mod_control(ch->cbdata, ch->pos_on_board, ch->control.full);
-
-	spin_unlock_bh(&ch->lock);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 	tty_encode_baud_rate(tty, baud, baud);
@@ -610,11 +605,17 @@ static int __init k5_init(void)
 	data = at91_sys_read(AT91_PIOC + PIO_ABSR); /* AB Status Register */
 
 	// Configure SMC CS3 timings
+#if 0
 	at91_sys_write(AT91_SMC + 0x30 + 0x0, 0x03030303);
 	at91_sys_write(AT91_SMC + 0x30 + 0x4, 0x100d100d);
 	at91_sys_write(AT91_SMC + 0x30 + 0x8, 0x00000000);
 	at91_sys_write(AT91_SMC + 0x30 + 0xc, 0x10001103);
-
+#else
+	at91_sys_write(AT91_SMC + 0x30 + 0x0, 0x01020102);
+	at91_sys_write(AT91_SMC + 0x30 + 0x4, 0x0f0d0f0d);
+	at91_sys_write(AT91_SMC + 0x30 + 0x8, 0x00150015);
+	at91_sys_write(AT91_SMC + 0x30 + 0xc, 0x10111003);
+#endif
 	// Configure SMC CS4 timings
 	at91_sys_write(AT91_SMC + 0x40 + 0x0, 0x01020102);
 	at91_sys_write(AT91_SMC + 0x40 + 0x4, 0x0f0d0f0d);
@@ -687,12 +688,10 @@ static int __init k5_init(void)
 	}
 	debug("tty_at_major=%d\n", k5_tty_at_driver->major);
 
-#if 1
 	// Reset K5 board
 	iowrite8(0, k5_cs3_base_ptr + K5_RESET_BOARD);
 	mdelay(10);
 	iowrite8(1, k5_cs3_base_ptr + K5_RESET_BOARD);
-#endif
 	// Set AUTONOM SIM CARD
 	iowrite8(1, k5_cs3_base_ptr + K5_MODE_AUTONOM);
 	// Set audio path to channel 1 M10

@@ -307,7 +307,7 @@ static u_int8_t gsm8ch_pci_mod_at_read(uintptr_t cbdata, size_t pos)
 
 static void gsm8ch_tty_at_poll(unsigned long addr)
 {
-	char buff[256];
+	char buff[512];
 	size_t len;
 	struct tty_struct *tty;
 	struct gsm8ch_tty_at_channel *ch = (struct gsm8ch_tty_at_channel *)addr;
