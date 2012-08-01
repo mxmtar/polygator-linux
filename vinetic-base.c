@@ -296,7 +296,6 @@ static void vinetic_poll_proc(unsigned long addr)
 		}
 		wake_up_interruptible(&vin->read_cbox_waitq);
 	}
-#if 1
 	// write voice packet into vinetic
 	for (ch=0; ch<8; ch++)
 		pkt_write[ch] = 1;
@@ -429,8 +428,6 @@ static void vinetic_poll_proc(unsigned long addr)
 			}
 		}
 	}
-#endif
-#if 1
 	// read edsp channel status
 	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 	{
@@ -558,7 +555,6 @@ static void vinetic_poll_proc(unsigned long addr)
 		vin->status_ready = 1;
 		wake_up_interruptible(&vin->status_waitq);
 	}
-#endif
 	// check free mailbox space
 	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 	{
@@ -581,8 +577,10 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	res = vin->read_eom(vin->cbdata);
 	vin->free_cbox_space = (res >> 8) & 0xff;
-	if (vin->free_cbox_space)
+	if (vin->free_cbox_space) {
 		wake_up_interruptible(&vin->free_cbox_waitq);
+		wake_up_interruptible(&vin->seek_cbox_waitq);
+	}
 
 	spin_unlock(&vin->lock);
 	if (vin->poll)
@@ -644,15 +642,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 	if (vin->error) res = -EIO;
 	spin_unlock_bh(&vin->lock);
 	if (res) {
-		spin_lock_bh(&vin->lock);
-		*offp = 0;
-		spin_unlock_bh(&vin->lock);
 		log(KERN_ERR, "\"%s\": error detected\n", vin->name);
 		goto vinetic_read_end;
 	}
 
 	cmd.full = filp->f_pos & 0xffffffff;
-// 	debug("cmd.full=0x%08x\n", cmd.full);
 
 	// read vinetic status
 	if (cmd.full == 0xffffffff) {
@@ -661,12 +655,8 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		spin_unlock_bh(&vin->lock);
 		// sleeping
 		res = wait_event_interruptible(vin->status_waitq, vin->status_ready != 0);
-		if (res) {
-			spin_lock_bh(&vin->lock);
-			*offp = 0;
-			spin_unlock_bh(&vin->lock);
+		if (res)
 			goto vinetic_read_end;
-		}
 		// copy status
 		spin_lock_bh(&vin->lock);
 		memcpy(&status, &vin->status, sizeof(struct vin_status_registers));
@@ -678,16 +668,10 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			res = -EFAULT;
 		else
 			res = cnt;
-		spin_lock_bh(&vin->lock);
-		*offp = 0;
-		spin_unlock_bh(&vin->lock);
 		goto vinetic_read_end;
 	}
 	// check for is read command
 	if (cmd.parts.first.bits.rw != VIN_READ) {
-		spin_lock_bh(&vin->lock);
-		*offp = 0;
-		spin_unlock_bh(&vin->lock);
 		log(KERN_ERR, "\"%s\": is write command=0x%08x\n", vin->name, cmd.full);
 		res = -EINVAL;
 		goto vinetic_read_end;
@@ -704,7 +688,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EIO;
 			goto vinetic_read_end;
@@ -731,7 +714,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 							res = 2;
 							break;
 						default:
-							*offp = 0;
 							spin_unlock_bh(&vin->lock);
 							log(KERN_ERR, "\"%s\": rSR/rI_SR wrong channel index=%u\n", vin->name, cmd_short.bits.chan);
 							res = -EINVAL;
@@ -765,19 +747,16 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				res = 1;
 				break;
 			case VIN_SH_CMD_CODE_rPOBX:
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				log(KERN_ERR, "\"%s\": rPOBX unsupported from userspace\n", vin->name);
 				res = -EINVAL;
 				goto vinetic_read_end;
 			case VIN_SH_CMD_CODE_rCOBX:
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				log(KERN_ERR, "\"%s\": rCOBX unsupported from userspace\n", vin->name);
 				res = -EINVAL;
 				goto vinetic_read_end;
 			default:
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				log(KERN_ERR, "\"%s\": unknown short command=0x%04x\n", vin->name, cmd_short.full);
 				res = -EINVAL;
@@ -792,7 +771,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count == VINETIC_WAIT_COUNT) {
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				res = -EIO;
 				goto vinetic_read_end;
@@ -804,13 +782,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		}
 		// check data count
 		if (count < res*2) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			log(KERN_ERR, "\"%s\": data count=%lu less than actual readed=%lu\n", vin->name, (long unsigned int)count, (long unsigned int)res*2);
 			res = -EINVAL;
 			goto vinetic_read_end;
 		}
-		*offp = 0;
 		spin_unlock_bh(&vin->lock);
 		// copy data to user
 		if (copy_to_user(buff, data, res*2)) {
@@ -830,7 +806,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count == VINETIC_WAIT_COUNT) {
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				res = -EIO;
 				goto vinetic_read_end;
@@ -842,7 +817,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count == VINETIC_WAIT_COUNT) {
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				res = -EIO;
 				goto vinetic_read_end;
@@ -852,7 +826,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			if (vin->free_cbox_space >= 2) break;
 
 			if (filp->f_flags & O_NONBLOCK) {
-				*offp = 0;
 				spin_unlock_bh(&vin->lock);
 				res = -EAGAIN;
 				goto vinetic_read_end;
@@ -860,12 +833,8 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			// sleeping
 			spin_unlock_bh(&vin->lock);
 			res = wait_event_interruptible_timeout(vin->free_cbox_waitq, vin->free_cbox_space >= 2, 1);
-			if (res) {
-				spin_lock_bh(&vin->lock);
-				*offp = 0;
-				spin_unlock_bh(&vin->lock);
+			if (res)
 				goto vinetic_read_end;
-			}
 			spin_lock_bh(&vin->lock);
 		}
 		// write command to vinetic
@@ -875,7 +844,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EIO;
 			goto vinetic_read_end;
@@ -887,7 +855,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EIO;
 			goto vinetic_read_end;
@@ -896,16 +863,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		vin->read_cbox_length = 0;
 		spin_unlock_bh(&vin->lock);
 		res = wait_event_interruptible(vin->read_cbox_waitq, vin->read_cbox_length != 0);
-		if (res) {
-			spin_lock_bh(&vin->lock);
-			*offp = 0;
-			spin_unlock_bh(&vin->lock);
+		if (res)
 			goto vinetic_read_end;
-		}
 		spin_lock_bh(&vin->lock);
 		res = vin->read_cbox_length * 2;
 		memcpy(data, vin->read_cbox_data, vin->read_cbox_length * 2);
-		*offp = 0;
 		spin_unlock_bh(&vin->lock);
 		// check data count
 		if (count < res) {
@@ -919,9 +881,12 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			goto vinetic_read_end;
 		}
 	}
+
 vinetic_read_end:
-// 	debug("res=%ld\n", (long int)res);
+	spin_lock_bh(&vin->lock);
+	*offp = 0;
 	wake_up_interruptible(&vin->seek_cbox_waitq);
+	spin_unlock_bh(&vin->lock);
 	return res;
 }
 
@@ -944,15 +909,11 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	if (vin->error) res = -EIO;
 	spin_unlock_bh(&vin->lock);
 	if (res) {
-		spin_lock_bh(&vin->lock);
-		*offp = 0;
-		spin_unlock_bh(&vin->lock);
 		log(KERN_ERR, "\"%s\": error detected\n", vin->name);
 		goto vinetic_write_end;
 	}
 
 	cmd.full = filp->f_pos & 0xffffffff;
-// 	debug("cmd.full=0x%08x\n", cmd.full);
 
 	// set vinetic status mask
 	if (cmd.full == 0xffffffff) {
@@ -966,16 +927,12 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		// copy status mask
 		spin_lock_bh(&vin->lock);
 		memcpy(&vin->status_mask, &mask, sizeof(struct vin_status_registers));
-		*offp = 0;
 		spin_unlock_bh(&vin->lock);
 		res = cnt;
 		goto vinetic_write_end;
 	}
 	// check for is write command
 	if (cmd.parts.first.bits.rw != VIN_WRITE) {
-		spin_lock_bh(&vin->lock);
-		*offp = 0;
-		spin_unlock_bh(&vin->lock);
 		log(KERN_ERR, "\"%s\": is read command=0x%08x\n", vin->name, cmd.full);
 		res = -EINVAL;
 		goto vinetic_write_end;
@@ -1011,9 +968,6 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 				length = cmd.parts.second.eop.bits.length + 2;
 				break;
 			default:
-				spin_lock_bh(&vin->lock);
-				*offp = 0;
-				spin_unlock_bh(&vin->lock);
 				log(KERN_ERR, "\"%s\": unknown cmd=%d\n", vin->name, cmd.parts.first.bits.cmd);
 				res = -EINVAL;
 				goto vinetic_write_end;
@@ -1021,9 +975,6 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	}
 	// check data count
 	if (count != res*2) {
-		spin_lock_bh(&vin->lock);
-		*offp = 0;
-		spin_unlock_bh(&vin->lock);
 		log(KERN_ERR, "\"%s\": data count=%lu mismatch to %lu\n", vin->name, (long unsigned int)count, (long unsigned int)res*2);
 		res = -EINVAL;
 		goto vinetic_write_end;
@@ -1032,9 +983,6 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	// get user space data
 	if (res > 0) {
 		if (copy_from_user(&data[2], buff, res*2)) {
-			spin_lock_bh(&vin->lock);
-			*offp = 0;
-			spin_unlock_bh(&vin->lock);
 			res = -EFAULT;
 			goto vinetic_write_end;
 		}
@@ -1049,7 +997,6 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EIO;
 			goto vinetic_write_end;
@@ -1061,7 +1008,6 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EIO;
 			goto vinetic_write_end;
@@ -1072,7 +1018,6 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		if (vin->free_cbox_space >= length) break;
 
 		if (filp->f_flags & O_NONBLOCK) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EAGAIN;
 			goto vinetic_write_end;
@@ -1080,12 +1025,8 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		// sleeping
 		spin_unlock_bh(&vin->lock);
 		res = wait_event_interruptible_timeout(vin->free_cbox_waitq, vin->free_cbox_space >= length, 1);
-		if (res) {
-			spin_lock_bh(&vin->lock);
-			*offp = 0;
-			spin_unlock_bh(&vin->lock);
+		if (res)
 			goto vinetic_write_end;
-		}
 		spin_lock_bh(&vin->lock);
 	}
 	// write data to vinetic
@@ -1097,25 +1038,24 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count == VINETIC_WAIT_COUNT) {
-			*offp = 0;
 			spin_unlock_bh(&vin->lock);
 			res = -EIO;
 			goto vinetic_write_end;
 		}
 		if (cnt == length-1) {
 			vin->write_eom(vin->cbdata, data[cnt]);
-// 			debug("%03lu: 0x%04x\n", cnt, data[cnt]);
 		} else {
 			vin->write_nwd(vin->cbdata, data[cnt]);
-// 			debug("%03lu: 0x%04x\n", cnt, data[cnt]);
 		}
 	}
-	*offp = 0;
 	spin_unlock_bh(&vin->lock);
 	res *= 2;
 
 vinetic_write_end:
+	spin_lock_bh(&vin->lock);
+	*offp = 0;
 	wake_up_interruptible(&vin->seek_cbox_waitq);
+	spin_unlock_bh(&vin->lock);
 	return res;
 }
 

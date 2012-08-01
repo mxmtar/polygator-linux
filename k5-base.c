@@ -605,17 +605,10 @@ static int __init k5_init(void)
 	data = at91_sys_read(AT91_PIOC + PIO_ABSR); /* AB Status Register */
 
 	// Configure SMC CS3 timings
-#if 0
-	at91_sys_write(AT91_SMC + 0x30 + 0x0, 0x03030303);
-	at91_sys_write(AT91_SMC + 0x30 + 0x4, 0x100d100d);
-	at91_sys_write(AT91_SMC + 0x30 + 0x8, 0x00000000);
+	at91_sys_write(AT91_SMC + 0x30 + 0x0, 0x01020102); // old at91_sys_write(AT91_SMC + 0x30 + 0x0, 0x03030303);
+	at91_sys_write(AT91_SMC + 0x30 + 0x4, 0x0f0d0f0d); // old at91_sys_write(AT91_SMC + 0x30 + 0x4, 0x100d100d);
+	at91_sys_write(AT91_SMC + 0x30 + 0x8, 0x00150015); // old at91_sys_write(AT91_SMC + 0x30 + 0x8, 0x00000000);
 	at91_sys_write(AT91_SMC + 0x30 + 0xc, 0x10001103);
-#else
-	at91_sys_write(AT91_SMC + 0x30 + 0x0, 0x01020102);
-	at91_sys_write(AT91_SMC + 0x30 + 0x4, 0x0f0d0f0d);
-	at91_sys_write(AT91_SMC + 0x30 + 0x8, 0x00150015);
-	at91_sys_write(AT91_SMC + 0x30 + 0xc, 0x10111003);
-#endif
 	// Configure SMC CS4 timings
 	at91_sys_write(AT91_SMC + 0x40 + 0x0, 0x01020102);
 	at91_sys_write(AT91_SMC + 0x40 + 0x4, 0x0f0d0f0d);
