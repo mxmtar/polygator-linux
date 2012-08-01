@@ -785,6 +785,7 @@ struct vin_cmd_cop_generic {
 enum {
 	VIN_MOD_PCM = 0x0,
 	VIN_MOD_ALI = 0x1,
+	VIN_MOD_SIG = 0x2,
 	VIN_MOD_CODER = 0x3,
 	VIN_MOD_CONT = 0x5,
 	VIN_MOD_TEST = 0x7,
@@ -1023,7 +1024,7 @@ struct vin_cmd_eop_ali_channel {
 } __attribute__((packed));
 /*!
  * \brief Command_ALI_Near_End_LEC
-	Description: This command activates one of the near end LEC's in the addressed channel.
+ * Description: This command activates one of the near end LEC's in the addressed channel.
  */
 struct vin_cmd_eop_ali_near_end_lec {
 	union vin_cmd header;
@@ -1039,7 +1040,77 @@ struct vin_cmd_eop_ali_near_end_lec {
 	} __attribute__((packed)) eop_ali_near_end_lec;
 } __attribute__((packed));
 /*!
- * \brief Coder-Module
+ * \brief Signaling Module
+ */
+enum {
+	VIN_EOP_SIG_CONT		= 0x00,
+	VIN_EOP_SIG_CHAN		= 0x01,
+	VIN_EOP_DTMFREC			= 0x04,
+	VIN_EOP_SIG_CONF_RTP	= 0x10,
+};
+/*!
+ * \brief Command_Signaling_Control
+ * Description: This command activates or deactivates the Signaling Module.
+ */
+struct vin_cmd_eop_signaling_control {
+	union vin_cmd header;
+	struct vin_eop_signaling_control {
+		u_int16_t res:15;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_signaling_control;
+} __attribute__((packed));
+/*!
+ * \brief Command_Signaling_Channel
+ * Description: This command activates one Signaling channel.
+ */
+struct vin_cmd_eop_signaling_channel {
+	union vin_cmd header;
+	struct vin_eop_signaling_channel {
+		u_int16_t i2:6;
+		u_int16_t res0:2;
+		u_int16_t i1:6;
+		u_int16_t res1:1;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_signaling_channel;
+} __attribute__((packed));
+/*!
+ * \brief Command_DTMF_Receiver
+ * Description: This command activates the DTMF Receiver in the addressed channel.
+ */
+struct vin_cmd_eop_dtmf_receiver {
+	union vin_cmd header;
+	struct vin_eop_dtmf_receiver {
+		u_int16_t dtrnr:4;
+		u_int16_t as:1;
+		u_int16_t is:1;
+		u_int16_t res:8;
+		u_int16_t et:1;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_dtmf_receiver;
+} __attribute__((packed));
+/*!
+ * \brief Input Signal
+ */
+enum {
+	VIN_IS_SIGINA = 0, /*! Signal SIG-InA of Signaling-Module is input for the DTMF Receiver */
+	VIN_IS_SIGINB = 1, /*! Signal SIG-InB of Signaling-Module is input for the DTMF Receiver */
+};
+/*!
+ * \brief Command_Signaling_Chan_Configuration_RTP_Support
+ * Description: This command configures one signaling channel.
+ */ 
+struct vin_cmd_eop_signaling_channel_configuration_rtp_support {
+	union vin_cmd header;
+	struct vin_eop_signaling_channel_configuration_rtp_support {
+		u_int16_t ssrc_hw;
+		u_int16_t ssrc_lw;
+		u_int16_t res0;
+		u_int16_t evt_pt:7;
+		u_int16_t res1:9;
+	} __attribute__((packed)) eop_signaling_channel_configuration_rtp_support;
+} __attribute__((packed));
+/*!
+ * \brief Coder Module
  */
 enum {
 	VIN_EOP_CODER_CONT = 0x00,
@@ -1050,7 +1121,7 @@ enum {
 };
 /*!
  * \brief Command_Coder_Control
-	Description: This command activates or deactivates the Coder-Module.
+ * Description: This command activates or deactivates the Coder-Module.
  */
 struct vin_cmd_eop_coder_control {
 	union vin_cmd header;
@@ -1061,7 +1132,7 @@ struct vin_cmd_eop_coder_control {
 } __attribute__((packed));
 /*!
  * \brief Command_Coder_Channel_Speech_Compression
-	Description: This command activates one coder channel.
+ * Description: This command activates one coder channel.
  */
 struct vin_cmd_eop_coder_channel_speech_compression {
 	union vin_cmd header;
