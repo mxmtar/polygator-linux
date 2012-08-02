@@ -217,7 +217,7 @@ static void vinetic_poll_proc(unsigned long addr)
 				}
 				// adjust read packet slot index
 				rtp->read_slot_count++;
-				if (rtp->read_slot_count >= VINETIC_PACKETSLOT_MAXCOUNT) {
+				if (rtp->read_slot_count > VINETIC_PACKETSLOT_MAXCOUNT) {
 					rtp->read_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
 					rtp->read_slot_read++;
 					if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
@@ -1494,8 +1494,7 @@ static ssize_t vinetic_rtp_channel_read(struct file *filp, char __user *buff, si
 	if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
 		rtp->read_slot_read = 0;
 
-	if (rtp->read_slot_count)
-		rtp->read_slot_count--;
+	rtp->read_slot_count--;
 
 	spin_unlock_bh(&rtp->lock);
 
@@ -1551,7 +1550,7 @@ static ssize_t vinetic_rtp_channel_write(struct file *filp, const char __user *b
 		rtp->write_slot_write = 0;
 
 	rtp->write_slot_count++;
-	if (rtp->write_slot_count >= VINETIC_PACKETSLOT_MAXCOUNT) {
+	if (rtp->write_slot_count > VINETIC_PACKETSLOT_MAXCOUNT) {
 		rtp->write_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
 		rtp->write_slot_read++;
 		if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)

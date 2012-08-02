@@ -1205,9 +1205,9 @@ enum {
 };
 /*!
  * \brief Command_Coder_Configuration_RTP_Support
-	Description: This command determines the start value for the timestamp.
-	It can also be used to overwrite or to read the actual
-	timestamp. The timestamp is used for all active channels.
+ * Description: This command determines the start value for the timestamp.
+ * It can also be used to overwrite or to read the actual
+ * timestamp. The timestamp is used for all active channels.
  */
 struct vin_cmd_eop_coder_configuration_rtp_support {
 	union vin_cmd header;
@@ -1218,7 +1218,7 @@ struct vin_cmd_eop_coder_configuration_rtp_support {
 } __attribute__((packed));
 /*!
  * \brief Command_Coder_Channel_Configuration_RTP_Support
-	Description: This command configures one coder channel.
+ * Description: This command configures one coder channel.
  */
 struct vin_cmd_eop_coder_channel_configuration_rtp_support {
 	union vin_cmd header;
