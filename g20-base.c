@@ -805,13 +805,23 @@ static int __init g20_init(void)
 					goto g20_init_error;
 				}
 				memset(g20_boards[k]->tty_at_channels[i], 0, sizeof(struct g20_tty_at_channel));
-				verbose("modtype=%u\n", modtype);
-				if (modtype == 4)
-					g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
-				else if (modtype == 6)
-					g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
-				else if (modtype == 7)
-					g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+				// select GSM module type
+				switch (modtype)
+				{
+					case 4:
+					case 5:
+						g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
+						break;
+					case 6:
+						g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
+						break;
+					case 7:
+						g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+						break;
+					default:
+						verbose("unsupported GSM module type=%u\n", modtype);
+						break;
+				}
 				g20_boards[k]->tty_at_channels[i]->control.bits.vbat = 1;
 				g20_boards[k]->tty_at_channels[i]->control.bits.pkey = 1;
 				g20_boards[k]->tty_at_channels[i]->control.bits.cn_speed_a = 0;
@@ -848,7 +858,7 @@ static int __init g20_init(void)
 					goto g20_init_error;
 				}
 				// register device on sysfs
-				g20_boards[k]->tty_at_channels[i]->device = tty_register_device(g20_tty_at_driver, i, NULL);
+				g20_boards[k]->tty_at_channels[i]->device = tty_register_device(g20_tty_at_driver, g20_boards[k]->tty_at_channels[i]->tty_at_minor, NULL);
 				if (IS_ERR(g20_boards[k]->tty_at_channels[i]->device)) {
 					log(KERN_ERR, "can't register tty device\n");
 					rc = -1;
@@ -870,7 +880,7 @@ g20_init_error:
 	{
 		if (g20_boards[k]) {
 			for (i=0; i<4; i++)
-			{	
+			{
 				if (g20_boards[k]->tty_at_channels[i]) {
 					del_timer_sync(&g20_boards[k]->tty_at_channels[i]->poll_timer);
 					if (g20_boards[k]->tty_at_channels[i]->device)
