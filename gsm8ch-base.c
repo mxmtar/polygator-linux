@@ -607,6 +607,8 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 					gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
 				else if (brd->rom[i] == 'S')
 					gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+				else if (brd->rom[i] == 'G')
+					gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
 				else
 					gsm_mod_type = POLYGATOR_MODULE_TYPE_UNKNOWN;
 			} else
@@ -615,7 +617,6 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 			gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
 
 		if (gsm_mod_type != POLYGATOR_MODULE_TYPE_UNKNOWN) {
-			//
 			if (!(brd->tty_at_channels[i] = kmalloc(sizeof(struct gsm8ch_tty_at_channel), GFP_KERNEL))) {
 				log(KERN_ERR, "can't get memory for struct gsm8ch_tty_at_channel\n");
 				rc = -1;
@@ -664,6 +665,15 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 				brd->tty_at_channels[i]->control.bits.gap1 = 3;			// 3 - 9600, 2 - 115200
 			} else if (gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM900) {
 				brd->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+				brd->tty_at_channels[i]->control.bits.mod_off = 1;		// module inactive
+				brd->tty_at_channels[i]->control.bits.mode = 0;			// GR
+				brd->tty_at_channels[i]->control.bits.rst = 0;			// M10=1 SIM300=0
+				brd->tty_at_channels[i]->control.bits.gap0 = 0;			// don't care
+				brd->tty_at_channels[i]->control.bits.pwr_off = 1;		// power suply disabled
+				brd->tty_at_channels[i]->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+				brd->tty_at_channels[i]->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
+			} else if (gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM5215) {
+				brd->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
 				brd->tty_at_channels[i]->control.bits.mod_off = 1;		// module inactive
 				brd->tty_at_channels[i]->control.bits.mode = 0;			// GR
 				brd->tty_at_channels[i]->control.bits.rst = 0;			// M10=1 SIM300=0
