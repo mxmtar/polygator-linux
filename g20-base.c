@@ -226,6 +226,7 @@ static u_int16_t g20_vinetic_read_eom(uintptr_t cbdata)
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 	return value;
 }
+#if 0
 static size_t g20_vinetic_is_not_ready(uintptr_t cbdata)
 {
 	size_t status;
@@ -239,9 +240,27 @@ static size_t g20_vinetic_is_not_ready(uintptr_t cbdata)
 // 	log(KERN_INFO, "%08lx: %lu\n", addr, (long unsigned int)status);
 	return status;
 }
+#else
+static size_t g20_vinetic_is_not_ready(uintptr_t cbdata)
+{
+	uintptr_t addr;
+	union vin_reg_ir reg_ir;
+
+	addr = (uintptr_t)g20_cs4_base_ptr;
+	addr += cbdata + G20_CS_VINETIC + 0x18;
+	reg_ir.full = ioread16(addr);
+	return reg_ir.bits.rdyq;
+}
+#endif
 static u_int16_t g20_vinetic_read_dia(uintptr_t cbdata)
 {
-	return 0;
+	u_int16_t value;
+	uintptr_t addr;
+
+	addr = (uintptr_t)g20_cs4_base_ptr;
+	addr += cbdata + G20_CS_VINETIC + 0x18;
+	value = ioread16(addr);
+	return value;
 }
 
 static void g20_mod_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
@@ -295,7 +314,7 @@ static void g20_tty_at_poll(unsigned long addr)
 		// put char to receiving buffer
 		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
 	}
-
+#if 0
 	spin_lock(&ch->lock);
 	if (ch->xmit_count) {
 		// read status register
@@ -311,7 +330,24 @@ static void g20_tty_at_poll(unsigned long addr)
 		}
 	}
 	spin_unlock(&ch->lock);
-
+#else
+	spin_lock(&ch->lock);
+	while (ch->xmit_count) {
+		// read status register
+		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+		// check for transmitter is ready
+		if (!ch->status.bits.at_wr_empty)
+			break;
+		// put char to transmitter
+// 		verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
+		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
+		ch->xmit_tail++;
+		if (ch->xmit_tail == SERIAL_XMIT_SIZE)
+			ch->xmit_tail = 0;
+		ch->xmit_count--;
+	}
+	spin_unlock(&ch->lock);
+#endif
 	if (len) {
 		tty = tty_port_tty_get(&ch->port);
 		tty_insert_flip_string(tty, buff, len);
