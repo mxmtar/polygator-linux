@@ -32,7 +32,6 @@ struct vinetic {
 	spinlock_t lock;
 	struct timer_list poll_timer;
 	int poll;
-	int error;
 
 	// status
 	int status_ready;

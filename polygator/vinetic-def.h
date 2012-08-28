@@ -325,12 +325,22 @@ struct vin_read_hwsr {
 
 typedef struct vin_read_hwsr vin_read_hwsr_t;
 
+union vin_status_custom {
+	struct vin_status_custom_bits {
+		u_int16_t timeout:1;
+		u_int16_t rsvd:15;
+	} __attribute__((packed)) bits;
+	u_int16_t full;
+} __attribute__((packed));
+
+typedef union vin_status_custom vin_status_custom_t;
+
 struct vin_status_registers {
+	vin_status_custom_t custom;
 	vin_read_sr_bc_t sr;
 	vin_read_hwsr_t hwsr;
 	vin_read_bxsr_t bxsr;
-};
-
+} __attribute__((packed));
 
 enum {
 	VIN_SH_CMD_CODE_rIR			= 0x000, // 0 0000 0000

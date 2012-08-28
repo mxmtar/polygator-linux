@@ -804,7 +804,7 @@ static int __init g20_init(void)
 			}
 			for (i=0; i<sizeof(g20_boards[k]->rom); i++)
 				g20_boards[k]->rom[i] = ioread8(g20_cs3_base_ptr + G20_CS_ROM + (0x0200 * k));
-			verbose("found board G8: %s\n", &g20_boards[k]->rom[3]);
+			verbose("found board G4: %s\n", &g20_boards[k]->rom[3]);
 			// set autonom
 			iowrite8(1, g20_cs3_base_ptr + G20_MODE_AUTONOM + (0x0200 * k));
 			// set sip only
