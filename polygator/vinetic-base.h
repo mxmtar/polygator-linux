@@ -12,6 +12,7 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
+#include "polygator-types.h"
 #include "vinetic-def.h"
 
 #define VINETIC_DEVICE_MAXCOUNT 256
@@ -61,7 +62,11 @@ struct vinetic {
 	u_int16_t (* read_nwd)(uintptr_t cbdata);
 	u_int16_t (* read_eom)(uintptr_t cbdata);
 	u_int16_t (* read_dia)(uintptr_t cbdata);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	struct device *device;
+#else
+	struct class_device *device;
+#endif
 	struct cdev cdev;
 };
 
@@ -91,7 +96,11 @@ struct vinetic_rtp_channel {
 	size_t write_slot_read;
 	size_t write_slot_write;
 	size_t write_slot_count;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	struct device *device;
+#else
+	struct class_device *device;
+#endif
 	struct cdev cdev;
 };
 

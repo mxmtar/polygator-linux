@@ -23,13 +23,9 @@
 #include "polygator/vinetic-base.h"
 #include "polygator/vinetic-def.h"
 
-MODULE_AUTHOR("Maksym Tarasevych <mxmtar@ukr.net>");
+MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux module for G20 device");
 MODULE_LICENSE("GPL");
-
-static int tty_at_major = 0;
-module_param(tty_at_major, int, 0);
-MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator G20 device");
 
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "g20-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
@@ -49,8 +45,6 @@ MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator
 #define MB_CS_ROM_KROSS			0x4000
 #define MB_RESET_ROM			0x4800
 /*! */
-
-#define G20_TTY_AT_DEVICE_MAXCOUNT 16
 
 union g20_at_ch_status_reg {
 	struct {
@@ -76,17 +70,17 @@ union g20_at_ch_control_reg {
 	u_int8_t full;
 } __attribute__((packed));
 
-struct g20_tty_at_channel {
+struct g20_tty_at_data {
 
 	int gsm_mod_type;
 	size_t pos_on_board;
+
+	uintptr_t cbdata;
 
 	union g20_at_ch_status_reg status;
 	union g20_at_ch_control_reg control;
 
 	struct timer_list poll_timer;
-
-	struct tty_port port;
 
 	spinlock_t lock;
 
@@ -94,15 +88,12 @@ struct g20_tty_at_channel {
 	size_t xmit_head;
 	size_t xmit_tail;
 
-	uintptr_t cbdata;
+	struct tty_port port;
 
 	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* mod_status)(uintptr_t cbdata, size_t pos);
 	void (* mod_at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* mod_at_read)(uintptr_t cbdata, size_t pos);
-
-	int tty_at_minor;
-	struct device *device;
 };
 
 struct g20_board {
@@ -116,7 +107,7 @@ struct g20_board {
 
 	struct vinetic *vinetic;
 
-	struct g20_tty_at_channel *tty_at_channels[4];
+	struct polygator_tty_device *tty_at_channels[4];
 };
 
 struct g20_board_private_data {
@@ -124,11 +115,6 @@ struct g20_board_private_data {
 	char buff[0x0C00];
 	size_t length;
 };
-
-struct g20_tty_at_channel *g20_tty_at_channel_list[G20_TTY_AT_DEVICE_MAXCOUNT];
-static DEFINE_MUTEX(g20_tty_at_channel_list_lock);
-
-static struct tty_driver *g20_tty_at_driver = NULL;
 
 static int g20_tty_at_open(struct tty_struct *tty, struct file *filp);
 static void g20_tty_at_close(struct tty_struct *tty, struct file *filp);
@@ -159,7 +145,7 @@ static int g20_tty_at_port_activate(struct tty_port *tport, struct tty_struct *t
 static void g20_tty_at_port_shutdown(struct tty_port *port);
 
 static const struct tty_port_operations g20_tty_at_port_ops = {
-	.carrier_raised =g20_tty_at_port_carrier_raised,
+	.carrier_raised = g20_tty_at_port_carrier_raised,
 	.dtr_rts = g20_tty_at_port_dtr_rts,
 	.activate = g20_tty_at_port_activate,
 	.shutdown = g20_tty_at_port_shutdown,
@@ -300,7 +286,7 @@ static void g20_tty_at_poll(unsigned long addr)
 	char buff[512];
 	size_t len;
 	struct tty_struct *tty;
-	struct g20_tty_at_channel *ch = (struct g20_tty_at_channel *)addr;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)addr;
 
 	len = 0;
 
@@ -308,54 +294,40 @@ static void g20_tty_at_poll(unsigned long addr)
 	while (len < sizeof(buff))
 	{
 		// read status register
-		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-		if (ch->status.bits.at_rd_empty)
+		at->status.full = at->mod_status(at->cbdata, at->pos_on_board);
+		if (at->status.bits.at_rd_empty)
 			break;
 		// put char to receiving buffer
-		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
+		buff[len++] = at->mod_at_read(at->cbdata, at->pos_on_board);
 	}
-#if 0
-	spin_lock(&ch->lock);
-	if (ch->xmit_count) {
+
+	spin_lock(&at->lock);
+	while (at->xmit_count)
+	{
 		// read status register
-		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+		at->status.full = at->mod_status(at->cbdata, at->pos_on_board);
 		// check for transmitter is ready
-		if (ch->status.bits.at_wr_empty) {
-// 			verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
-			ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
-			ch->xmit_tail++;
-			if (ch->xmit_tail == SERIAL_XMIT_SIZE)
-				ch->xmit_tail = 0;
-			ch->xmit_count--;
-		}
-	}
-	spin_unlock(&ch->lock);
-#else
-	spin_lock(&ch->lock);
-	while (ch->xmit_count) {
-		// read status register
-		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-		// check for transmitter is ready
-		if (!ch->status.bits.at_wr_empty)
+		if (!at->status.bits.at_wr_empty)
 			break;
 		// put char to transmitter
-// 		verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
-		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
-		ch->xmit_tail++;
-		if (ch->xmit_tail == SERIAL_XMIT_SIZE)
-			ch->xmit_tail = 0;
-		ch->xmit_count--;
+// 		verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)at->xmit_count, (unsigned long int)at->xmit_head, (unsigned long int)at->xmit_tail, *(at->port.xmit_buf + at->xmit_tail));
+// 		at->mod_at_write(at->cbdata, at->pos_on_board, *(at->port.xmit_buf + at->xmit_tail));
+		at->mod_at_write(at->cbdata, at->pos_on_board, at->port.xmit_buf[at->xmit_tail]);
+		at->xmit_tail++;
+		if (at->xmit_tail == SERIAL_XMIT_SIZE)
+			at->xmit_tail = 0;
+		at->xmit_count--;
 	}
-	spin_unlock(&ch->lock);
-#endif
+	spin_unlock(&at->lock);
+
 	if (len) {
-		tty = tty_port_tty_get(&ch->port);
+		tty = tty_port_tty_get(&at->port);
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 		tty_kref_put(tty);
 	}
 
-	mod_timer(&ch->poll_timer, jiffies + 1);
+	mod_timer(&at->poll_timer, jiffies + 1);
 }
 
 static int g20_board_open(struct inode *inode, struct file *filp)
@@ -366,6 +338,7 @@ static int g20_board_open(struct inode *inode, struct file *filp)
 
 	struct g20_board *brd;
 	struct g20_board_private_data *private_data;
+	struct g20_tty_at_data *tty_at_data;
 
 	brd = container_of(inode->i_cdev, struct g20_board, cdev);
 
@@ -380,10 +353,11 @@ static int g20_board_open(struct inode *inode, struct file *filp)
 	for (i=0; i<4; i++)
 	{
 		if (brd->tty_at_channels[i]) {
-			brd->tty_at_channels[i]->status.full = brd->tty_at_channels[i]->mod_status(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu g20AT%d %s VIN0ALM%lu VIO=%u\r\n",
-															(unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type),
-															(unsigned long int)i, brd->tty_at_channels[i]->status.bits.status);
+			tty_at_data = (struct g20_tty_at_data *)brd->tty_at_channels[i]->data;
+			tty_at_data->status.full = tty_at_data->mod_status(tty_at_data->cbdata, tty_at_data->pos_on_board);
+			len += sprintf(private_data->buff+len, "GSM%lu tty%d %s VIN0ALM%lu VIO=%u\r\n",
+															(unsigned long int)i, brd->tty_at_channels[i]->tty_minor, polygator_print_gsm_module_type(tty_at_data->gsm_mod_type),
+															(unsigned long int)i, tty_at_data->status.bits.status);
 		}
 	}
 	if (brd->vinetic) {
@@ -446,6 +420,7 @@ static ssize_t g20_board_write(struct file *filp, const char __user *buff, size_
 	u_int32_t pwr_state;
 	u_int32_t key_state;
 	u_int32_t baudrate;
+	struct g20_tty_at_data *tty_at_data;
 	struct g20_board_private_data *private_data = filp->private_data;
 
 	memset(cmd, 0, sizeof(cmd));
@@ -459,25 +434,28 @@ static ssize_t g20_board_write(struct file *filp, const char __user *buff, size_
 
 	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 3) && (private_data->board->tty_at_channels[at_chan])) {
-			private_data->board->tty_at_channels[at_chan]->control.bits.vbat = !pwr_state;
-			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
+			tty_at_data = (struct g20_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
+			tty_at_data->control.bits.vbat = !pwr_state;
+			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
 			res = len;
 		} else
 			res= -ENODEV;
 	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 3) && (private_data->board->tty_at_channels[at_chan])) {
-			private_data->board->tty_at_channels[at_chan]->control.bits.pkey = !key_state;
-			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
+			tty_at_data = (struct g20_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
+			tty_at_data->control.bits.pkey = !key_state;
+			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
 			res = len;
 		} else
 			res= -ENODEV;
 	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 3) && (private_data->board->tty_at_channels[at_chan])) {
+			tty_at_data = (struct g20_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
 			if (baudrate == 9600)
-				private_data->board->tty_at_channels[at_chan]->control.bits.at_baudrate = 0;
+				tty_at_data->control.bits.at_baudrate = 0;
 			else
-				private_data->board->tty_at_channels[at_chan]->control.bits.at_baudrate = 2;
-			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
+				tty_at_data->control.bits.at_baudrate = 2;
+			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
 			res = len;
 		} else
 			res= -ENODEV;
@@ -498,37 +476,18 @@ static struct file_operations g20_board_fops = {
 
 static int g20_tty_at_open(struct tty_struct *tty, struct file *filp)
 {
-	size_t i;
-	struct g20_tty_at_channel *ch = NULL;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
 
-	if (mutex_lock_interruptible(&g20_tty_at_channel_list_lock))
-		return -ERESTARTSYS;
-
-	for (i=0; i<G20_TTY_AT_DEVICE_MAXCOUNT; i++)
-	{
-		if ((g20_tty_at_channel_list[i]) && (g20_tty_at_channel_list[i]->tty_at_minor == tty->index)) {
-			ch = g20_tty_at_channel_list[i];
-			break;
-		}
-	}
-
-	if (!ch) {
-		mutex_unlock(&g20_tty_at_channel_list_lock);
-		return -ENODEV;
-	}
-
-	tty->driver_data = ch;
-
-	mutex_unlock(&g20_tty_at_channel_list_lock);
-
-	return tty_port_open(&ch->port, tty, filp);
+	return tty_port_open(&at->port, tty, filp);
 }
 
 static void g20_tty_at_close(struct tty_struct *tty, struct file *filp)
 {
-	struct g20_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
 
-	tty_port_close(&ch->port, tty, filp);
+	tty_port_close(&at->port, tty, filp);
 	return;
 }
 
@@ -536,39 +495,40 @@ static int g20_tty_at_write(struct tty_struct *tty, const unsigned char *buf, in
 {
 	int res = 0;
 	size_t len;
-	struct g20_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
 
-	spin_lock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
 
-	if (ch->xmit_count < SERIAL_XMIT_SIZE) {
+	if (at->xmit_count < SERIAL_XMIT_SIZE) {
 		while (1)
 		{
-			if (ch->xmit_head == ch->xmit_tail) {
-				if (ch->xmit_count)
+			if (at->xmit_head == at->xmit_tail) {
+				if (at->xmit_count)
 					len = 0;
 				else
-					len = SERIAL_XMIT_SIZE - ch->xmit_head;
-			} else if (ch->xmit_head > ch->xmit_tail)
-				len = SERIAL_XMIT_SIZE - ch->xmit_head;
+					len = SERIAL_XMIT_SIZE - at->xmit_head;
+			} else if (at->xmit_head > at->xmit_tail)
+				len = SERIAL_XMIT_SIZE - at->xmit_head;
 			else
-				len = ch->xmit_tail - ch->xmit_head;
+				len = at->xmit_tail - at->xmit_head;
 
 			len = min(len, (size_t)count);
 			if (!len)
 				break;
 
-			memcpy(ch->port.xmit_buf + ch->xmit_head, buf, len);
-			ch->xmit_head += len;
-			if (ch->xmit_head == SERIAL_XMIT_SIZE)
-				ch->xmit_head = 0;
-			ch->xmit_count += len;
+			memcpy(at->port.xmit_buf + at->xmit_head, buf, len);
+			at->xmit_head += len;
+			if (at->xmit_head == SERIAL_XMIT_SIZE)
+				at->xmit_head = 0;
+			at->xmit_count += len;
 			buf += len;
 			count -= len;
 			res += len;
 		}
 	}
 
-	spin_unlock_bh(&ch->lock);
+	spin_unlock_bh(&at->lock);
 	
 	return res;
 }
@@ -576,13 +536,14 @@ static int g20_tty_at_write(struct tty_struct *tty, const unsigned char *buf, in
 static int g20_tty_at_write_room(struct tty_struct *tty)
 {
 	int res;
-	struct g20_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
 
-	spin_lock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
 
-	res = SERIAL_XMIT_SIZE - ch->xmit_count;
+	res = SERIAL_XMIT_SIZE - at->xmit_count;
 
-	spin_unlock_bh(&ch->lock);
+	spin_unlock_bh(&at->lock);
 	
 	return res;
 }
@@ -594,21 +555,22 @@ static void g20_tty_at_set_termios(struct tty_struct *tty, struct termios *old_t
 #endif
 {
 	speed_t baud;
-	struct g20_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
 
 	baud = tty_get_baud_rate(tty);
 
 	switch (baud)
 	{
 		case 9600:
-			ch->control.bits.at_baudrate = 0;
+			at->control.bits.at_baudrate = 0;
 			break;
 		default:
-			ch->control.bits.at_baudrate = 2;
+			at->control.bits.at_baudrate = 2;
 			break;
 	}
 	
-	ch->mod_control(ch->cbdata, ch->pos_on_board, ch->control.full);
+	at->mod_control(at->cbdata, at->pos_on_board, at->control.full);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 	tty_encode_baud_rate(tty, baud, baud);
@@ -617,18 +579,21 @@ static void g20_tty_at_set_termios(struct tty_struct *tty, struct termios *old_t
 
 static void g20_tty_at_flush_buffer(struct tty_struct *tty)
 {
-	struct g20_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
 
-	spin_lock_bh(&ch->lock);
-	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
-	spin_unlock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
+	at->xmit_count = at->xmit_head = at->xmit_tail = 0;
+	spin_unlock_bh(&at->lock);
 	tty_wakeup(tty);
 }
 
 static void g20_tty_at_hangup(struct tty_struct *tty)
 {
-	struct g20_tty_at_channel *ch = tty->driver_data;
-	tty_port_hangup(&ch->port);
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
+	
+	tty_port_hangup(&at->port);
 }
 
 static int g20_tty_at_port_carrier_raised(struct tty_port *port)
@@ -642,35 +607,36 @@ static void g20_tty_at_port_dtr_rts(struct tty_port *port, int onoff)
 
 static int g20_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty)
 {
-	struct g20_tty_at_channel *ch = container_of(port, struct g20_tty_at_channel, port);
+	struct g20_tty_at_data *at = container_of(port, struct g20_tty_at_data, port);
 
 	if (tty_port_alloc_xmit_buf(port) < 0)
 		return -ENOMEM;
-	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
+	at->xmit_count = at->xmit_head = at->xmit_tail = 0;
 
-	ch->poll_timer.function = g20_tty_at_poll;
-	ch->poll_timer.data = (unsigned long)ch;
-	ch->poll_timer.expires = jiffies + 1;
-	add_timer(&ch->poll_timer);
+	at->poll_timer.function = g20_tty_at_poll;
+	at->poll_timer.data = (unsigned long)at;
+	at->poll_timer.expires = jiffies + 1;
+	add_timer(&at->poll_timer);
 
 	return 0;
 }
 
 static void g20_tty_at_port_shutdown(struct tty_port *port)
 {
-	struct g20_tty_at_channel *ch = container_of(port, struct g20_tty_at_channel, port);
+	struct g20_tty_at_data *at = container_of(port, struct g20_tty_at_data, port);
 
-	del_timer_sync(&ch->poll_timer);
+	del_timer_sync(&at->poll_timer);
 
 	tty_port_free_xmit_buf(port);
 }
 
 static int __init g20_init(void)
 {
-	size_t i, j, k;
+	size_t i, k;
 	u32 data;
 	u8 modtype;
 	char devname[VINETIC_DEVNAME_MAXLEN];
+	struct g20_tty_at_data *tty_at_data;
 	int rc = 0;
 
 	verbose("loading ...\n");
@@ -735,38 +701,6 @@ static int __init g20_init(void)
 		goto g20_init_error;
 	}
 
-	// registering tty device for AT-command channel
-	g20_tty_at_driver = alloc_tty_driver(G20_TTY_AT_DEVICE_MAXCOUNT);
-	if (!g20_tty_at_driver) {
-		log(KERN_ERR, "can't allocated memory for tty driver\n");
-		return -ENOMEM;
-	}
-
-	g20_tty_at_driver->owner = THIS_MODULE;
-	g20_tty_at_driver->driver_name = "g20_tty_at";
-	g20_tty_at_driver->name = "polygator/g20AT";
-	g20_tty_at_driver->major = tty_at_major;
-	g20_tty_at_driver->minor_start = 0;
-	g20_tty_at_driver->type = TTY_DRIVER_TYPE_SERIAL;
-	g20_tty_at_driver->subtype = SERIAL_TYPE_NORMAL;
-	g20_tty_at_driver->init_termios = tty_std_termios;
-	g20_tty_at_driver->init_termios.c_iflag &= ~ICRNL;
-	g20_tty_at_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
-	g20_tty_at_driver->init_termios.c_lflag &= ~ECHO;
-	g20_tty_at_driver->init_termios.c_ispeed = 9600;
-	g20_tty_at_driver->init_termios.c_ospeed = 9600;
-	g20_tty_at_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
-	tty_set_operations(g20_tty_at_driver, &g20_tty_at_ops);
-
-	if ((rc = tty_register_driver(g20_tty_at_driver))) {
-		log(KERN_ERR, "can't register g20_tty_at driver: rc=%d\n", rc);
-		// release allocated tty driver environment
-		put_tty_driver(g20_tty_at_driver);
-		g20_tty_at_driver = NULL;
-		goto g20_init_error;
-	}
-	debug("tty_at_major=%d\n", g20_tty_at_driver->major);
-
 	// Read ROM from mainboard
 	iowrite8(0, g20_cs3_base_ptr + MB_RESET_ROM);
 	mdelay(1);
@@ -775,7 +709,7 @@ static int __init g20_init(void)
 	iowrite8(0, g20_cs3_base_ptr + MB_RESET_ROM);
 	for (i=0; i<sizeof(mainboard_rom); i++)
 		mainboard_rom[i] = ioread8(g20_cs3_base_ptr + MB_CS_ROM_KROSS);
-	verbose("mainboard: %s\n", &mainboard_rom[3]);
+	verbose("mainboard: \"%s\"\n", &mainboard_rom[3]);
 	// Search for g20 boards
 	for (k=0; k<4; k++)
 	{
@@ -804,7 +738,7 @@ static int __init g20_init(void)
 			}
 			for (i=0; i<sizeof(g20_boards[k]->rom); i++)
 				g20_boards[k]->rom[i] = ioread8(g20_cs3_base_ptr + G20_CS_ROM + (0x0200 * k));
-			verbose("found board G4: %s\n", &g20_boards[k]->rom[3]);
+			verbose("found board G4: \"%s\"\n", &g20_boards[k]->rom[3]);
 			// set autonom
 			iowrite8(1, g20_cs3_base_ptr + G20_MODE_AUTONOM + (0x0200 * k));
 			// set sip only
@@ -835,75 +769,59 @@ static int __init g20_init(void)
 			// set AT command channels
 			for (i=0; i<4; i++)
 			{
-				if (!(g20_boards[k]->tty_at_channels[i] = kmalloc(sizeof(struct g20_tty_at_channel), GFP_KERNEL))) {
-					log(KERN_ERR, "can't get memory for struct g20_tty_at_channel\n");
+				if (!(tty_at_data = kmalloc(sizeof(struct g20_tty_at_data), GFP_KERNEL))) {
+					log(KERN_ERR, "can't get memory for struct g20_tty_at_data\n");
 					rc = -1;
 					goto g20_init_error;
 				}
-				memset(g20_boards[k]->tty_at_channels[i], 0, sizeof(struct g20_tty_at_channel));
+				memset(tty_at_data, 0, sizeof(struct g20_tty_at_data));
 				// select GSM module type
 				switch (modtype)
 				{
 					case 4:
 					case 5:
-						g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
+						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
 						break;
 					case 6:
-						g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
+						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
 						break;
 					case 7:
-						g20_boards[k]->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
 						break;
 					default:
 						verbose("unsupported GSM module type=%u\n", modtype);
 						break;
 				}
-				g20_boards[k]->tty_at_channels[i]->control.bits.vbat = 1;
-				g20_boards[k]->tty_at_channels[i]->control.bits.pkey = 1;
-				g20_boards[k]->tty_at_channels[i]->control.bits.cn_speed_a = 0;
-				g20_boards[k]->tty_at_channels[i]->control.bits.cn_speed_b = 0;
-				g20_boards[k]->tty_at_channels[i]->control.bits.at_baudrate = 2;
+				spin_lock_init(&tty_at_data->lock);
+				tty_at_data->control.bits.vbat = 1;
+				tty_at_data->control.bits.pkey = 1;
+				tty_at_data->control.bits.cn_speed_a = 0;
+				tty_at_data->control.bits.cn_speed_b = 0;
+				tty_at_data->control.bits.at_baudrate = 2;
 
-				spin_lock_init(&g20_boards[k]->tty_at_channels[i]->lock);
-				tty_port_init(&g20_boards[k]->tty_at_channels[i]->port);
-				g20_boards[k]->tty_at_channels[i]->port.ops = &g20_tty_at_port_ops;
-				g20_boards[k]->tty_at_channels[i]->port.close_delay = 0;
-				g20_boards[k]->tty_at_channels[i]->port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
+				tty_at_data->pos_on_board = i;
+				tty_at_data->cbdata = (((uintptr_t)g20_cs3_base_ptr) + 0x1000 + (0x0200 * k) + (0x40 * (i%4)));
+				tty_at_data->mod_control = g20_mod_control;
+				tty_at_data->mod_status = g20_mod_status;
+				tty_at_data->mod_at_write = g20_mod_at_write;
+				tty_at_data->mod_at_read = g20_mod_at_read;
 
-				g20_boards[k]->tty_at_channels[i]->pos_on_board = i;
-				g20_boards[k]->tty_at_channels[i]->tty_at_minor = -1;
-				g20_boards[k]->tty_at_channels[i]->cbdata = (((uintptr_t)g20_cs3_base_ptr) + 0x1000 + (0x0200 * k) + (0x40 * (i%4)));
-				g20_boards[k]->tty_at_channels[i]->mod_control = g20_mod_control;
-				g20_boards[k]->tty_at_channels[i]->mod_status = g20_mod_status;
-				g20_boards[k]->tty_at_channels[i]->mod_at_write = g20_mod_at_write;
-				g20_boards[k]->tty_at_channels[i]->mod_at_read = g20_mod_at_read;
-				// get free slot from channel list
-				mutex_lock(&g20_tty_at_channel_list_lock);
-				for (j=0; j<G20_TTY_AT_DEVICE_MAXCOUNT; j++)
-				{
-					if (!g20_tty_at_channel_list[j]) {
-						g20_tty_at_channel_list[j] = g20_boards[k]->tty_at_channels[i];
-						g20_boards[k]->tty_at_channels[i]->tty_at_minor = j;
-						break;
-					}
-				}
-				mutex_unlock(&g20_tty_at_channel_list_lock);
-				if (g20_boards[k]->tty_at_channels[i]->tty_at_minor < 0) {
-					log(KERN_ERR, "can't get free slot in g20_tty_at_channel_list\n");
+				tty_port_init(&tty_at_data->port);
+				tty_at_data->port.ops = &g20_tty_at_port_ops;
+				tty_at_data->port.close_delay = 0;
+				tty_at_data->port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
+
+				// register polygator tty at device
+				if (!(g20_boards[k]->tty_at_channels[i] = polygator_tty_device_register(&g20_tty_at_ops))) {
+					log(KERN_ERR, "can't register polygator tty device\n");
+					kfree(tty_at_data);
 					rc = -1;
 					goto g20_init_error;
 				}
-				// register device on sysfs
-				g20_boards[k]->tty_at_channels[i]->device = tty_register_device(g20_tty_at_driver, g20_boards[k]->tty_at_channels[i]->tty_at_minor, NULL);
-				if (IS_ERR(g20_boards[k]->tty_at_channels[i]->device)) {
-					log(KERN_ERR, "can't register tty device\n");
-					rc = -1;
-					goto g20_init_error;
-				}
+				g20_boards[k]->tty_at_channels[i]->data = tty_at_data;
 
-				g20_boards[k]->tty_at_channels[i]->mod_control(g20_boards[k]->tty_at_channels[i]->cbdata, g20_boards[k]->tty_at_channels[i]->pos_on_board, g20_boards[k]->tty_at_channels[i]->control.full);
-
-				init_timer(&g20_boards[k]->tty_at_channels[i]->poll_timer);
+				tty_at_data->mod_control(tty_at_data->cbdata, tty_at_data->pos_on_board, tty_at_data->control.full);
+				init_timer(&tty_at_data->poll_timer);
 			}
 		}
 	}
@@ -918,13 +836,12 @@ g20_init_error:
 			for (i=0; i<4; i++)
 			{
 				if (g20_boards[k]->tty_at_channels[i]) {
-					del_timer_sync(&g20_boards[k]->tty_at_channels[i]->poll_timer);
-					if (g20_boards[k]->tty_at_channels[i]->device)
-						tty_unregister_device(g20_tty_at_driver, g20_boards[k]->tty_at_channels[i]->tty_at_minor);
-					mutex_lock(&g20_tty_at_channel_list_lock);
-					g20_tty_at_channel_list[g20_boards[k]->tty_at_channels[i]->tty_at_minor] = NULL;
-					mutex_unlock(&g20_tty_at_channel_list_lock);
-					kfree(g20_boards[k]->tty_at_channels[i]);
+					tty_at_data = (struct g20_tty_at_data *)g20_boards[k]->tty_at_channels[i]->data;
+					if (tty_at_data) {
+						del_timer_sync(&tty_at_data->poll_timer);
+						kfree(tty_at_data);
+					}
+					polygator_tty_device_unregister(g20_boards[k]->tty_at_channels[i]);
 				}
 			}
 			if (g20_boards[k]->vinetic) {
@@ -935,14 +852,11 @@ g20_init_error:
 				}
 				vinetic_device_unregister(g20_boards[k]->vinetic);
 			}
-		if (g20_boards[k]->pg_board) polygator_board_unregister(g20_boards[k]->pg_board);
-		kfree(g20_boards[k]);
+			if (g20_boards[k]->pg_board) polygator_board_unregister(g20_boards[k]->pg_board);
+			kfree(g20_boards[k]);
 		}
 	}
-	if (g20_tty_at_driver) {
-		tty_unregister_driver(g20_tty_at_driver);
-		put_tty_driver(g20_tty_at_driver);
-	}
+
 	if (g20_cs3_iomem_reg) release_mem_region(AT91_CHIPSELECT_3, 0x10000);
 	if (g20_cs3_base_ptr) iounmap(g20_cs3_base_ptr);
 	if (g20_cs4_iomem_reg) release_mem_region(AT91_CHIPSELECT_4, 0x10000);
@@ -953,37 +867,25 @@ g20_init_error:
 static void __exit g20_exit(void)
 {
 	size_t i, k;
+	struct g20_tty_at_data *tty_at_data;
 
 	for (k=0; k<4; k++)
 	{
 		if (g20_boards[k]) {
 			for (i=0; i<4; i++)
 			{
-				if (g20_boards[k]->tty_at_channels[i]) {
-					del_timer_sync(&g20_boards[k]->tty_at_channels[i]->poll_timer);
-					if (g20_boards[k]->tty_at_channels[i]->device)
-						tty_unregister_device(g20_tty_at_driver, g20_boards[k]->tty_at_channels[i]->tty_at_minor);
-					mutex_lock(&g20_tty_at_channel_list_lock);
-					g20_tty_at_channel_list[g20_boards[k]->tty_at_channels[i]->tty_at_minor] = NULL;
-					mutex_unlock(&g20_tty_at_channel_list_lock);
-					kfree(g20_boards[k]->tty_at_channels[i]);
-				}
+				tty_at_data = (struct g20_tty_at_data *)g20_boards[k]->tty_at_channels[i]->data;
+				del_timer_sync(&tty_at_data->poll_timer);
+				kfree(tty_at_data);
+				polygator_tty_device_unregister(g20_boards[k]->tty_at_channels[i]);
 			}
-			if (g20_boards[k]->vinetic) {
-				for (i=0; i<4; i++)
-				{
-					if (g20_boards[k]->vinetic->rtp_channels[i])
-						vinetic_rtp_channel_unregister(g20_boards[k]->vinetic->rtp_channels[i]);
-				}
-				vinetic_device_unregister(g20_boards[k]->vinetic);
-			}
-		if (g20_boards[k]->pg_board) polygator_board_unregister(g20_boards[k]->pg_board);
-		kfree(g20_boards[k]);
+			for (i=0; i<4; i++)
+				vinetic_rtp_channel_unregister(g20_boards[k]->vinetic->rtp_channels[i]);
+			vinetic_device_unregister(g20_boards[k]->vinetic);
+			polygator_board_unregister(g20_boards[k]->pg_board);
+			kfree(g20_boards[k]);
 		}
 	}
-
-	tty_unregister_driver(g20_tty_at_driver);
-	put_tty_driver(g20_tty_at_driver);
 
 	iounmap(g20_cs3_base_ptr);
 	release_mem_region(AT91_CHIPSELECT_3, 0x10000);

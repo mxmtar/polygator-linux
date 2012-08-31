@@ -2,6 +2,8 @@
 /* vinetic-base.c                                                             */
 /******************************************************************************/
 
+#include <linux/kobject.h>
+#include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -28,7 +30,7 @@
 #include "polygator/vinetic-def.h"
 #include "polygator/vinetic-ioctl.h"
 
-MODULE_AUTHOR("Maksym Tarasevych <mxmtar@ukr.net>");
+MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux module VINETIC support");
 MODULE_LICENSE("GPL");
 
@@ -1742,8 +1744,12 @@ struct vinetic *vinetic_device_register(struct module *owner,
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_device_register_error;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+ 	snprintf(devname, sizeof(devname), "polygator!%s", name);
+#else
 	snprintf(devname, sizeof(devname), "polygator!%s", name);
-	CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname);
+#endif
+	vin->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname);
 
 	verbose("\"%s\" registered\n", name);
 	return vin;
@@ -1884,8 +1890,12 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_rtp_channel_register_error;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	snprintf(devname, sizeof(devname), "polygator!%s", name);
-	CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname);
+#else
+	snprintf(devname, sizeof(devname), "polygator!%s", name);
+#endif
+	rtp->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname);
 
 	verbose("\"%s\" registered\n", name);
 	return rtp;

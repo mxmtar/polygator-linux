@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# chkconfig: 2345 30 95
+# description: polygator
+
+case "$1" in
+  start)
+    echo -n "Load Polygator K32ISA modules"
+    modprobe k32isa
+    usleep 500000
+    chown -R asterisk:asterisk /dev/polygator
+    chown asterisk:asterisk /dev/ttyPG*
+    ;;
+  stop)
+    echo -n "Unoad Polygator K32ISA modules"
+	rmmod k32isa
+	rmmod vinetic
+	rmmod polygator
+    ;;
+  *)
+    echo "Usage: /etc/init.d/polygator {start|stop}"
+    exit 1
+esac
+
+exit 0

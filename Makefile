@@ -35,18 +35,43 @@ g20-objs := g20-base.o
 KERNEL_SRC_DIR := $(KERNEL_SRC)
 KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
-else
+else ifeq ($(TARGET_DEVICE), pc)
 
-obj-m := polygator.o vinetic.o gsm8ch.o
+obj-m := polygator.o vinetic.o gsm8ch.o k32isa.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 gsm8ch-objs := gsm8ch-base.o
+k32isa-objs := k32isa-base.o
+
+KERNEL_SRC_DIR := $(KERNEL_SRC)
+KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
+
+else
+
+obj-m := polygator.o vinetic.o gsm8ch.o k32isa.o
+polygator-objs := polygator-base.o
+vinetic-objs := vinetic-base.o
+gsm8ch-objs := gsm8ch-base.o
+k32isa-objs := k32isa-base.o
 
 KERNEL_VERSION := `uname -r`
 KERNEL_SRC_DIR := /lib/modules/$(KERNEL_VERSION)/build
 KERNEL_STG_DIR := /
 
 endif
+
+CHKCONFIG	:= $(wildcard /sbin/chkconfig)
+UPDATE_RCD	:= $(wildcard /usr/sbin/update-rc.d)
+ifeq (,$(DESTDIR))
+ifneq (,$(CHKCONFIG))
+    SYSVINIT_ADD := $(CHKCONFIG) --add polygator
+else
+ifneq (,$(UPDATE_RCD))
+    SYSVINIT_ADD := $(UPDATE_RCD) polygator defaults 30 95
+endif
+endif
+endif
+                        
 
 all: modules
 
@@ -64,7 +89,14 @@ headers_install:
 		$(INSTALL) -m 644 $$header "$(DESTDIR)/usr/include/polygator" ; \
 	done
 
-uninstall: modules_uninstall headers_uninstall
+sysvinit_install:
+	$(INSTALL) -m 755 polygator.sysvinit $(DESTDIR)/etc/init.d/polygator
+ifneq (,$(SYSVINIT_ADD))
+	$(SYSVINIT_ADD)
+endif
+    
+
+uninstall: modules_uninstall headers_uninstall sysvinit_uninstall
 
 modules_uninstall:
 	rm -rvf "$(DESTDIR)/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
@@ -73,15 +105,15 @@ modules_uninstall:
 headers_uninstall:
 	rm -rvf "$(DESTDIR)/usr/include/polygator"
 
-insmod_all:
-	insmod vinetic.ko
-	insmod polygator.ko
-	insmod gsm8ch.ko
-
-rmmod_all:
-	rmmod gsm8ch
-	rmmod vinetic
-	rmmod polygator
+sysvinit_uninstall:
+	rm -fv $(DESTDIR)/etc/rc0.d/*polygator
+	rm -fv $(DESTDIR)/etc/rc1.d/*polygator
+	rm -fv $(DESTDIR)/etc/rc2.d/*polygator
+	rm -fv $(DESTDIR)/etc/rc3.d/*polygator
+	rm -fv $(DESTDIR)/etc/rc4.d/*polygator
+	rm -fv $(DESTDIR)/etc/rc5.d/*polygator
+	rm -fv $(DESTDIR)/etc/rc6.d/*polygator
+	rm -fv $(DESTDIR)/etc/init.d/polygator
 
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean

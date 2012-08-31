@@ -2,6 +2,8 @@
 /* gsm8ch-base.c                                                              */
 /******************************************************************************/
 
+#include <linux/kobject.h>
+#include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
@@ -28,7 +30,11 @@
 #include "polygator/vinetic-base.h"
 #include "polygator/vinetic-def.h"
 
-MODULE_AUTHOR("Maksym Tarasevych <mxmtar@ukr.net>");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
+#define TTY_PORT
+#endif
+
+MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux module for gsm8ch boards");
 MODULE_LICENSE("GPL");
 
@@ -52,8 +58,6 @@ MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator
 #define PG_PCI_VIN_DATA_BASE	0x50
 #define PG_PCI_IMEI_BASE		0xA0
 /*! */
-
-#define GSM8CH_TTY_AT_DEVICE_MAXCOUNT 256
 
 union gsm8ch_at_ch_status_reg {
 	struct {
@@ -81,7 +85,7 @@ union gsm8ch_at_ch_control_reg {
 	u_int8_t full;
 } __attribute__((packed));
 
-struct gsm8ch_tty_at_channel {
+struct gsm8ch_tty_at_data {
 
 	int gsm_mod_type;
 	size_t pos_on_board;
@@ -91,7 +95,13 @@ struct gsm8ch_tty_at_channel {
 
 	struct timer_list poll_timer;
 
+#ifdef TTY_PORT
 	struct tty_port port;
+#else
+	size_t count;
+	struct tty_struct *tty;
+	unsigned char *xmit_buf;
+#endif
 
 	spinlock_t lock;
 
@@ -105,9 +115,6 @@ struct gsm8ch_tty_at_channel {
 	u_int8_t (* mod_status)(uintptr_t cbdata, size_t pos);
 	void (* mod_at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* mod_at_read)(uintptr_t cbdata, size_t pos);
-
-	int tty_at_minor;
-	struct device *device;
 };
 
 struct gsm8ch_board {
@@ -122,7 +129,7 @@ struct gsm8ch_board {
 
 	struct vinetic *vinetics[2];
 
-	struct gsm8ch_tty_at_channel *tty_at_channels[8];
+	struct polygator_tty_device *tty_at_channels[8];
 };
 
 struct gsm8ch_board_private_data {
@@ -131,15 +138,11 @@ struct gsm8ch_board_private_data {
 	size_t length;
 };
 
-struct gsm8ch_tty_at_channel *gsm8ch_tty_at_channel_list[GSM8CH_TTY_AT_DEVICE_MAXCOUNT];
-static DEFINE_MUTEX(gsm8ch_tty_at_channel_list_lock);
-
-static struct tty_driver *gsm8ch_tty_at_driver = NULL;
-
 static int gsm8ch_tty_at_open(struct tty_struct *tty, struct file *filp);
 static void gsm8ch_tty_at_close(struct tty_struct *tty, struct file *filp);
 static int gsm8ch_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count);
 static int gsm8ch_tty_at_write_room(struct tty_struct *tty);
+static int gsm8ch_tty_at_chars_in_buffer(struct tty_struct *tty);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios);
 #else
@@ -153,12 +156,12 @@ static struct tty_operations gsm8ch_tty_at_ops = {
 	.close = gsm8ch_tty_at_close,
 	.write = gsm8ch_tty_at_write,
 	.write_room = gsm8ch_tty_at_write_room,
-// 	.chars_in_buffer = gsm8ch_tty_at_chars_in_buffer,
+	.chars_in_buffer = gsm8ch_tty_at_chars_in_buffer,
 	.set_termios = gsm8ch_tty_at_set_termios,
 	.flush_buffer = gsm8ch_tty_at_flush_buffer,
 	.hangup = gsm8ch_tty_at_hangup,
 };
-
+#ifdef TTY_PORT
 static int gsm8ch_tty_at_port_carrier_raised(struct tty_port *port);
 static void gsm8ch_tty_at_port_dtr_rts(struct tty_port *port, int onoff);
 static int gsm8ch_tty_at_port_activate(struct tty_port *tport, struct tty_struct *tty);
@@ -170,7 +173,7 @@ static const struct tty_port_operations gsm8ch_tty_at_port_ops = {
 	.activate = gsm8ch_tty_at_port_activate,
 	.shutdown = gsm8ch_tty_at_port_shutdown,
 };
-
+#endif
 static struct pci_device_id gsm8ch_pci_board_id_table[] = {
 	{ PCI_DEVICE(0xDEAD, 0xBEEF), .driver_data = 1, },
 	{ 0, },
@@ -310,7 +313,7 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 	char buff[512];
 	size_t len;
 	struct tty_struct *tty;
-	struct gsm8ch_tty_at_channel *ch = (struct gsm8ch_tty_at_channel *)addr;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)addr;
 
 	len = 0;
 
@@ -318,40 +321,49 @@ static void gsm8ch_tty_at_poll(unsigned long addr)
 	while (len < sizeof(buff))
 	{
 		// read status register
-		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
-		if (ch->status.bits.com_rdy_rd)
+		at->status.full = at->mod_status(at->cbdata, at->pos_on_board);
+		if (at->status.bits.com_rdy_rd)
 			break;		
 		// put char to receiving buffer
-		buff[len++] = ch->mod_at_read(ch->cbdata, ch->pos_on_board);
+		buff[len++] = at->mod_at_read(at->cbdata, at->pos_on_board);
 	}
 
-	spin_lock(&ch->lock);
+	spin_lock(&at->lock);
 
-	 while (ch->xmit_count) {
+	 while (at->xmit_count) {
 		// read status register
-		ch->status.full = ch->mod_status(ch->cbdata, ch->pos_on_board);
+		at->status.full = at->mod_status(at->cbdata, at->pos_on_board);
 		// check for transmitter is ready
-		if (!ch->status.bits.com_rdy_wr)
+		if (!at->status.bits.com_rdy_wr)
 			break;
 		// put char to transmitter buffer
-// 		verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)ch->xmit_count, (unsigned long int)ch->xmit_head, (unsigned long int)ch->xmit_tail, *(ch->port.xmit_buf + ch->xmit_tail));
-		ch->mod_at_write(ch->cbdata, ch->pos_on_board, *(ch->port.xmit_buf + ch->xmit_tail));
-		ch->xmit_tail++;
-		if (ch->xmit_tail == SERIAL_XMIT_SIZE)
-			ch->xmit_tail = 0;
-		ch->xmit_count--;
+#ifdef TTY_PORT
+		at->mod_at_write(at->cbdata, at->pos_on_board, at->port.xmit_buf[at->xmit_tail]);
+#else
+		at->mod_at_write(at->cbdata, at->pos_on_board, at->xmit_buf[at->xmit_tail]);
+#endif
+		at->xmit_tail++;
+		if (at->xmit_tail == SERIAL_XMIT_SIZE)
+			at->xmit_tail = 0;
+		at->xmit_count--;
 	}
 
-	spin_unlock(&ch->lock);
+	spin_unlock(&at->lock);
 
 	if (len) {
-		tty = tty_port_tty_get(&ch->port);
+#ifdef TTY_PORT
+		tty = tty_port_tty_get(&at->port);
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 		tty_kref_put(tty);
+#else
+		tty = at->tty;
+		tty_insert_flip_string(tty, buff, len);
+		tty_flip_buffer_push(tty);
+#endif
 	}
 
-	mod_timer(&ch->poll_timer, jiffies + 1);
+	mod_timer(&at->poll_timer, jiffies + 1);
 }
 
 static int gsm8ch_board_open(struct inode *inode, struct file *filp)
@@ -362,6 +374,7 @@ static int gsm8ch_board_open(struct inode *inode, struct file *filp)
 
 	struct gsm8ch_board *brd;
 	struct gsm8ch_board_private_data *private_data;
+	struct gsm8ch_tty_at_data *tty_at_data;
 
 	brd = container_of(inode->i_cdev, struct gsm8ch_board, cdev);
 
@@ -375,22 +388,51 @@ static int gsm8ch_board_open(struct inode *inode, struct file *filp)
 	len = 0;
 	for (i=0; i<8; i++)
 	{
-		if (brd->tty_at_channels[i]) {
-			brd->tty_at_channels[i]->status.full = brd->tty_at_channels[i]->mod_status(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu gsm8chAT%d %s VIN%luALM%lu VIO=%u\r\n",
-															(unsigned long int)i, brd->tty_at_channels[i]->tty_at_minor, polygator_print_gsm_module_type(brd->tty_at_channels[i]->gsm_mod_type),
-															(unsigned long int)(i/4), (unsigned long int)(i%4),
-															brd->tty_at_channels[i]->status.bits.vio);
+		if (brd->tty_at_channels[i]->data) {
+			tty_at_data = (struct gsm8ch_tty_at_data *)brd->tty_at_channels[i]->data;
+			tty_at_data->status.full = tty_at_data->mod_status(tty_at_data->cbdata, tty_at_data->pos_on_board);
+			len += sprintf(private_data->buff+len, "GSM%lu %s %s VIN%luALM%lu VIO=%u\r\n",
+							(unsigned long int)i,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+							dev_name(brd->tty_at_channels[i]->device),
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+							dev_name(brd->tty_at_channels[i]->device),
+#else
+							brd->tty_at_channels[i]->device->class_id,
+#endif
+							polygator_print_gsm_module_type(tty_at_data->gsm_mod_type),
+							(unsigned long int)(i/4),
+							(unsigned long int)(i%4),
+							tty_at_data->status.bits.vio);
 		}
 	}
 	for (i=0; i<2; i++)
 	{
 		if (brd->vinetics[i]) {
-			len += sprintf(private_data->buff+len, "VIN%lu board-gsm8ch-pci-%u-vin%lu\r\n", (unsigned long int)i, brd->sn, (unsigned long int)i);
+			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
+						   (unsigned long int)i,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+							dev_name(brd->vinetics[i]->device)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+							dev_name(brd->vinetics[i]->device)
+#else
+							brd->vinetics[i]->device->class_id
+#endif
+							);
 			for (j=0; j<4; j++)
 			{
 				if (brd->vinetics[i]->rtp_channels[j])
-					len += sprintf(private_data->buff+len, "VIN%luRTP%lu board-gsm8ch-pci-%u-vin%lu-rtp%lu\r\n", (unsigned long int)i, (unsigned long int)j, brd->sn, (unsigned long int)i, (unsigned long int)j);
+					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
+								(unsigned long int)i,
+								(unsigned long int)j,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+								dev_name(brd->vinetics[i]->rtp_channels[j]->device)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+								dev_name(brd->vinetics[i]->rtp_channels[j]->device)
+#else
+								brd->vinetics[i]->rtp_channels[j]->device->class_id
+#endif
+								);
 			}
 		}
 	}
@@ -446,6 +488,7 @@ static ssize_t gsm8ch_board_write(struct file *filp, const char __user *buff, si
 	u_int32_t pwr_state;
 	u_int32_t key_state;
 	u_int32_t baudrate;
+	struct gsm8ch_tty_at_data *tty_at_data;
 	struct gsm8ch_board_private_data *private_data = filp->private_data;
 
 	memset(cmd, 0, sizeof(cmd));
@@ -459,25 +502,28 @@ static ssize_t gsm8ch_board_write(struct file *filp, const char __user *buff, si
 
 	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
-			private_data->board->tty_at_channels[at_chan]->control.bits.pwr_off = !pwr_state;
-			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
+			tty_at_data = (struct gsm8ch_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
+			tty_at_data->control.bits.pwr_off = !pwr_state;
+			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
 			res = len;
 		} else
 			res = - ENODEV;
 	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
-			private_data->board->tty_at_channels[at_chan]->control.bits.mod_off = !key_state;
-			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
+			tty_at_data = (struct gsm8ch_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
+			tty_at_data->control.bits.mod_off = !key_state;
+			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
 			res = len;
 		} else
 			res = -ENODEV;
 	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
-			if ((baudrate == 9600) || (private_data->board->tty_at_channels[at_chan]->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300))
-				private_data->board->tty_at_channels[at_chan]->control.bits.gap1 = 3;
+			tty_at_data = (struct gsm8ch_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
+			if ((baudrate == 9600) || (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300))
+				tty_at_data->control.bits.gap1 = 3;
 			else
-				private_data->board->tty_at_channels[at_chan]->control.bits.gap1 = 2;
-			private_data->board->tty_at_channels[at_chan]->mod_control(private_data->board->tty_at_channels[at_chan]->cbdata, at_chan, private_data->board->tty_at_channels[at_chan]->control.full);
+				tty_at_data->control.bits.gap1 = 2;
+			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
 			res = len;
 		} else
 			res = -ENODEV;
@@ -500,10 +546,10 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 {
 	int rc;
 	unsigned long addr;
-	int gsm_mod_type;
 	u_int32_t pow10;
 	size_t i,j;
 	char devname[POLYGATOR_BRDNAME_MAXLEN];
+	struct gsm8ch_tty_at_data *tty_at_data;
 	struct gsm8ch_board *brd = NULL;
 	int get_pci_region = 0;
 
@@ -568,7 +614,11 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		brd->sn += (brd->rom[i] - 0x30) * pow10;
 		pow10 *= 10;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-gsm8ch-pci-%u", brd->sn);
+#else
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bp%u", brd->sn);
+#endif
 	if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, devname, &brd->cdev, &gsm8ch_board_fops))) {
 		rc = -1;
 		goto gsm8ch_pci_probe_error;
@@ -576,7 +626,11 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 
 	for (j=0; j<2; j++)
 	{
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-gsm8ch-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-gsm8ch-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
+#else
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vp%u%lu", brd->sn, (unsigned long int)j);
+#endif
 		if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, addr,
 													(j)?(gsm8ch_pci_reset_1):(gsm8ch_pci_reset_0),
 													(j)?(gsm8ch_pci_is_not_ready_1):(gsm8ch_pci_is_not_ready_0),
@@ -590,7 +644,11 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 		}
 		for (i=0; i<4; i++)
 		{
-			snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-gsm8ch-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-gsm8ch-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+#else
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vp%u%lu%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+#endif
 			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i)) {
 				rc = -1;
 				goto gsm8ch_pci_probe_error;
@@ -601,110 +659,93 @@ static int __devinit gsm8ch_pci_probe(struct pci_dev *pdev, const struct pci_dev
 	// set AT command channels
 	for (i=0; i<8; i++)
 	{
+		if (!(tty_at_data = kmalloc(sizeof(struct gsm8ch_tty_at_data), GFP_KERNEL))) {
+			log(KERN_ERR, "can't get memory for struct gsm8ch_tty_at_data\n");
+			rc = -1;
+			goto gsm8ch_pci_probe_error;
+		}
+		memset(tty_at_data, 0, sizeof(struct gsm8ch_tty_at_data));
+		// select GSM module type
 		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083)) {
 			if (brd->rom[8] == '*') {
 				if (brd->rom[i] == 'M')
-					gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
+					tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
 				else if (brd->rom[i] == '9')
-					gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+					tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
 				else if (brd->rom[i] == 'S')
-					gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+					tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
 				else if (brd->rom[i] == 'G')
-					gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
+					tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
 				else
-					gsm_mod_type = POLYGATOR_MODULE_TYPE_UNKNOWN;
+					tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_UNKNOWN;
 			} else
-				gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+				tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
 		} else
-			gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+			tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
 
-		if (gsm_mod_type != POLYGATOR_MODULE_TYPE_UNKNOWN) {
-			if (!(brd->tty_at_channels[i] = kmalloc(sizeof(struct gsm8ch_tty_at_channel), GFP_KERNEL))) {
-				log(KERN_ERR, "can't get memory for struct gsm8ch_tty_at_channel\n");
-				rc = -1;
-				goto gsm8ch_pci_probe_error;
-			}
-			memset(brd->tty_at_channels[i], 0, sizeof(struct gsm8ch_tty_at_channel));
-			spin_lock_init(&brd->tty_at_channels[i]->lock);
-			tty_port_init(&brd->tty_at_channels[i]->port);
-			brd->tty_at_channels[i]->port.ops = &gsm8ch_tty_at_port_ops;
-			brd->tty_at_channels[i]->port.close_delay = 0;
-			brd->tty_at_channels[i]->port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
-			//
-			brd->tty_at_channels[i]->pos_on_board = i;
-			brd->tty_at_channels[i]->tty_at_minor = -1;
-			brd->tty_at_channels[i]->cbdata = addr;
-			brd->tty_at_channels[i]->mod_control = gsm8ch_pci_mod_control;
-			brd->tty_at_channels[i]->mod_status = gsm8ch_pci_mod_status;
-			brd->tty_at_channels[i]->mod_at_write = gsm8ch_pci_mod_at_write;
-			brd->tty_at_channels[i]->mod_at_read = gsm8ch_pci_mod_at_read;
-			// get free slot from channel list
-			mutex_lock(&gsm8ch_tty_at_channel_list_lock);
-			for (j=0; j<GSM8CH_TTY_AT_DEVICE_MAXCOUNT; j++)
-			{
-				if (!gsm8ch_tty_at_channel_list[j]) {
-					gsm8ch_tty_at_channel_list[j] = brd->tty_at_channels[i];
-					brd->tty_at_channels[i]->tty_at_minor = j;
-					break;
-				}
-			}
-			mutex_unlock(&gsm8ch_tty_at_channel_list_lock);
-
-			if (brd->tty_at_channels[i]->tty_at_minor < 0) {
-				log(KERN_ERR, "can't get free slot in gsm8ch_tty_at_channel_list\n");
-				rc = -1;
-				goto gsm8ch_pci_probe_error;
-			}
-			//
-			if (gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300) {
-				brd->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
-				brd->tty_at_channels[i]->control.bits.mod_off = 1;		// module inactive
-				brd->tty_at_channels[i]->control.bits.mode = 0;			// GR
-				brd->tty_at_channels[i]->control.bits.rst = 0;			// M10=1 SIM300=0
-				brd->tty_at_channels[i]->control.bits.gap0 = 0;			// don't care
-				brd->tty_at_channels[i]->control.bits.pwr_off = 1;		// power suply disabled
-				brd->tty_at_channels[i]->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				brd->tty_at_channels[i]->control.bits.gap1 = 3;			// 3 - 9600, 2 - 115200
-			} else if (gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM900) {
-				brd->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
-				brd->tty_at_channels[i]->control.bits.mod_off = 1;		// module inactive
-				brd->tty_at_channels[i]->control.bits.mode = 0;			// GR
-				brd->tty_at_channels[i]->control.bits.rst = 0;			// M10=1 SIM300=0
-				brd->tty_at_channels[i]->control.bits.gap0 = 0;			// don't care
-				brd->tty_at_channels[i]->control.bits.pwr_off = 1;		// power suply disabled
-				brd->tty_at_channels[i]->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				brd->tty_at_channels[i]->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
-			} else if (gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM5215) {
-				brd->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
-				brd->tty_at_channels[i]->control.bits.mod_off = 1;		// module inactive
-				brd->tty_at_channels[i]->control.bits.mode = 0;			// GR
-				brd->tty_at_channels[i]->control.bits.rst = 0;			// M10=1 SIM300=0
-				brd->tty_at_channels[i]->control.bits.gap0 = 0;			// don't care
-				brd->tty_at_channels[i]->control.bits.pwr_off = 1;		// power suply disabled
-				brd->tty_at_channels[i]->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				brd->tty_at_channels[i]->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
-			} else if (gsm_mod_type == POLYGATOR_MODULE_TYPE_M10) {
-				brd->tty_at_channels[i]->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
-				brd->tty_at_channels[i]->control.bits.mod_off = 1;		// module inactive
-				brd->tty_at_channels[i]->control.bits.mode = 0;			// GR
-				brd->tty_at_channels[i]->control.bits.rst = 1;			// M10=1 SIM300=0
-				brd->tty_at_channels[i]->control.bits.gap0 = 0;		// don't care
-				brd->tty_at_channels[i]->control.bits.pwr_off = 1;		// power suply disabled
-				brd->tty_at_channels[i]->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				brd->tty_at_channels[i]->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
-			}
-			// register device on sysfs
-			brd->tty_at_channels[i]->device = tty_register_device(gsm8ch_tty_at_driver, j, NULL);
-			if (IS_ERR(brd->tty_at_channels[i]->device)) {
-				log(KERN_ERR, "can't register tty device\n");
-				rc = -1;
-				goto gsm8ch_pci_probe_error;
-			}
-
-			brd->tty_at_channels[i]->mod_control(brd->tty_at_channels[i]->cbdata, brd->tty_at_channels[i]->pos_on_board, brd->tty_at_channels[i]->control.full);
-			
-			init_timer(&brd->tty_at_channels[i]->poll_timer);
+		spin_lock_init(&tty_at_data->lock);
+#ifdef TTY_PORT
+		tty_port_init(&tty_at_data->port);
+		tty_at_data->port.ops = &gsm8ch_tty_at_port_ops;
+		tty_at_data->port.close_delay = 0;
+		tty_at_data->port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
+#endif
+		if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300) {
+			tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+			tty_at_data->control.bits.mod_off = 1;		// module inactive
+			tty_at_data->control.bits.mode = 0;			// GR
+			tty_at_data->control.bits.rst = 0;			// M10=1 SIM300=0
+			tty_at_data->control.bits.gap0 = 0;			// don't care
+			tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
+			tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+			tty_at_data->control.bits.gap1 = 3;			// 3 - 9600, 2 - 115200
+		} else if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM900) {
+			tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+			tty_at_data->control.bits.mod_off = 1;		// module inactive
+			tty_at_data->control.bits.mode = 0;			// GR
+			tty_at_data->control.bits.rst = 0;			// M10=1 SIM300=0
+			tty_at_data->control.bits.gap0 = 0;			// don't care
+			tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
+			tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+			tty_at_data->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
+		} else if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM5215) {
+			tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
+			tty_at_data->control.bits.mod_off = 1;		// module inactive
+			tty_at_data->control.bits.mode = 0;			// GR
+			tty_at_data->control.bits.rst = 0;			// M10=1 SIM300=0
+			tty_at_data->control.bits.gap0 = 0;			// don't care
+			tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
+			tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+			tty_at_data->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
+		} else if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_M10) {
+			tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
+			tty_at_data->control.bits.mod_off = 1;		// module inactive
+			tty_at_data->control.bits.mode = 0;			// GR
+			tty_at_data->control.bits.rst = 1;			// M10=1 SIM300=0
+			tty_at_data->control.bits.gap0 = 0;		// don't care
+			tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
+			tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+			tty_at_data->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
 		}
+
+		tty_at_data->pos_on_board = i;
+		tty_at_data->cbdata = addr;
+		tty_at_data->mod_control = gsm8ch_pci_mod_control;
+		tty_at_data->mod_status = gsm8ch_pci_mod_status;
+		tty_at_data->mod_at_write = gsm8ch_pci_mod_at_write;
+		tty_at_data->mod_at_read = gsm8ch_pci_mod_at_read;
+
+		// register polygator tty at device
+		if (!(brd->tty_at_channels[i] = polygator_tty_device_register(&gsm8ch_tty_at_ops))) {
+			log(KERN_ERR, "can't register polygator tty device\n");
+			kfree(tty_at_data);
+			rc = -1;
+			goto gsm8ch_pci_probe_error;
+		}
+		brd->tty_at_channels[i]->data = tty_at_data;
+
+		tty_at_data->mod_control(tty_at_data->cbdata, tty_at_data->pos_on_board, tty_at_data->control.full);
+		init_timer(&tty_at_data->poll_timer);
 	}
 
 	pci_set_drvdata(pdev, brd);
@@ -715,13 +756,12 @@ gsm8ch_pci_probe_error:
 		for (i=0; i<8; i++)
 		{
 			if (brd->tty_at_channels[i]) {
-				del_timer_sync(&brd->tty_at_channels[i]->poll_timer);
-				if (brd->tty_at_channels[i]->device)
-					tty_unregister_device(gsm8ch_tty_at_driver, brd->tty_at_channels[i]->tty_at_minor);
-				mutex_lock(&gsm8ch_tty_at_channel_list_lock);
-				gsm8ch_tty_at_channel_list[brd->tty_at_channels[i]->tty_at_minor] = NULL;
-				mutex_unlock(&gsm8ch_tty_at_channel_list_lock);
-				kfree(brd->tty_at_channels[i]);
+				tty_at_data = (struct gsm8ch_tty_at_data *)brd->tty_at_channels[i]->data;
+				if (tty_at_data) {
+					del_timer_sync(&tty_at_data->poll_timer);
+					kfree(tty_at_data);
+				}
+				polygator_tty_device_unregister(brd->tty_at_channels[i]);
 			}
 		}
 		for (j=0; j<2; j++)
@@ -746,17 +786,17 @@ gsm8ch_pci_probe_error:
 static void __devexit gsm8ch_pci_remove(struct pci_dev *pdev)
 {
 	size_t i,j;
+	
+	struct gsm8ch_tty_at_data *tty_at_data;
 	struct gsm8ch_board *brd = pci_get_drvdata(pdev);
 
 	for (i=0; i<8; i++)
 	{
 		if (brd->tty_at_channels[i]) {
-			del_timer_sync(&brd->tty_at_channels[i]->poll_timer);
-			tty_unregister_device(gsm8ch_tty_at_driver, brd->tty_at_channels[i]->tty_at_minor);
-			mutex_lock(&gsm8ch_tty_at_channel_list_lock);
-			gsm8ch_tty_at_channel_list[brd->tty_at_channels[i]->tty_at_minor] = NULL;
-			mutex_unlock(&gsm8ch_tty_at_channel_list_lock);
-			kfree(brd->tty_at_channels[i]);
+			tty_at_data = (struct gsm8ch_tty_at_data *)brd->tty_at_channels[i]->data;
+			del_timer_sync(&tty_at_data->poll_timer);
+			kfree(tty_at_data);
+			polygator_tty_device_unregister(brd->tty_at_channels[i]);
 		}
 	}
 
@@ -784,38 +824,62 @@ static struct pci_driver gsm8ch_pci_driver = {
 
 static int gsm8ch_tty_at_open(struct tty_struct *tty, struct file *filp)
 {
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
 
-	size_t i;
-	struct gsm8ch_tty_at_channel *ch = NULL;
+#ifdef TTY_PORT
+	return tty_port_open(&at->port, tty, filp);
+#else
+	unsigned char *xbuf;
+	
+	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL)))
+		return -ENOMEM;
 
-	if (mutex_lock_interruptible(&gsm8ch_tty_at_channel_list_lock))
-		return -ERESTARTSYS;
+	spin_lock_bh(&at->lock);
 
-	for (i=0; i<GSM8CH_TTY_AT_DEVICE_MAXCOUNT; i++)
-	{
-		if ((gsm8ch_tty_at_channel_list[i]) && (gsm8ch_tty_at_channel_list[i]->tty_at_minor == tty->index)) {
-			ch = gsm8ch_tty_at_channel_list[i];
-			break;
-		}
-	}
+	if (!at->count++) {
+		at->xmit_buf = xbuf;
+		at->xmit_count = at->xmit_head = at->xmit_tail = 0;
 
-	if (!ch) {
-		mutex_unlock(&gsm8ch_tty_at_channel_list_lock);
-		return -ENODEV;
-	}
+		at->poll_timer.function = gsm8ch_tty_at_poll;
+		at->poll_timer.data = (unsigned long)at;
+		at->poll_timer.expires = jiffies + 1;
+		add_timer(&at->poll_timer);
+	
+		at->tty = tty;
+	} else
+		kfree(xbuf);
 
-	tty->driver_data = ch;
+	spin_unlock_bh(&at->lock);
 
-	mutex_unlock(&gsm8ch_tty_at_channel_list_lock);
-
-	return tty_port_open(&ch->port, tty, filp);
+	return 0;
+#endif
 }
 
 static void gsm8ch_tty_at_close(struct tty_struct *tty, struct file *filp)
 {
-	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
 
-	tty_port_close(&ch->port, tty, filp);
+#ifdef TTY_PORT
+	tty_port_close(&at->port, tty, filp);
+#else
+	unsigned char *xbuf = NULL;
+
+	spin_lock_bh(&at->lock);
+
+	if (!--at->count) {
+		xbuf = at->xmit_buf;
+		at->tty = NULL;
+	}
+
+	spin_unlock_bh(&at->lock);
+	
+	if (xbuf) {
+		del_timer_sync(&at->poll_timer);
+		kfree(at->xmit_buf);
+	}
+#endif
 	return;
 }
 
@@ -823,39 +887,43 @@ static int gsm8ch_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 {
 	int res = 0;
 	size_t len;
-	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
 
-	spin_lock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
 
-	if (ch->xmit_count < SERIAL_XMIT_SIZE) {
+	if (at->xmit_count < SERIAL_XMIT_SIZE) {
 		while (1)
 		{
-			if (ch->xmit_head == ch->xmit_tail) {
-				if (ch->xmit_count)
+			if (at->xmit_head == at->xmit_tail) {
+				if (at->xmit_count)
 					len = 0;
 				else
-					len = SERIAL_XMIT_SIZE - ch->xmit_head;
-			} else if (ch->xmit_head > ch->xmit_tail)
-				len = SERIAL_XMIT_SIZE - ch->xmit_head;
+					len = SERIAL_XMIT_SIZE - at->xmit_head;
+			} else if (at->xmit_head > at->xmit_tail)
+				len = SERIAL_XMIT_SIZE - at->xmit_head;
 			else
-				len = ch->xmit_tail - ch->xmit_head;
+				len = at->xmit_tail - at->xmit_head;
 
 			len = min(len, (size_t)count);
 			if (!len)
 				break;
-
-			memcpy(ch->port.xmit_buf + ch->xmit_head, buf, len);
-			ch->xmit_head += len;
-			if (ch->xmit_head == SERIAL_XMIT_SIZE)
-				ch->xmit_head = 0;
-			ch->xmit_count += len;
+#ifdef TTY_PORT
+			memcpy(at->port.xmit_buf + at->xmit_head, buf, len);
+#else
+			memcpy(at->xmit_buf + at->xmit_head, buf, len);
+#endif
+			at->xmit_head += len;
+			if (at->xmit_head == SERIAL_XMIT_SIZE)
+				at->xmit_head = 0;
+			at->xmit_count += len;
 			buf += len;
 			count -= len;
 			res += len;
 		}
 	}
 
-	spin_unlock_bh(&ch->lock);
+	spin_unlock_bh(&at->lock);
 
 	return res ;
 }
@@ -863,13 +931,29 @@ static int gsm8ch_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 static int gsm8ch_tty_at_write_room(struct tty_struct *tty)
 {
 	int res;
-	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
 
-	spin_lock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
 
-	res = SERIAL_XMIT_SIZE - ch->xmit_count;
+	res = SERIAL_XMIT_SIZE - at->xmit_count;
 
-	spin_unlock_bh(&ch->lock);
+	spin_unlock_bh(&at->lock);
+
+	return res;
+}
+
+static int gsm8ch_tty_at_chars_in_buffer(struct tty_struct *tty)
+{
+	int res;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
+
+	spin_lock_bh(&at->lock);
+
+	res = at->xmit_count;
+
+	spin_unlock_bh(&at->lock);
 
 	return res;
 }
@@ -881,25 +965,29 @@ static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 #endif
 {
 	speed_t baud;
-	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
 
 	baud = tty_get_baud_rate(tty);
 
-	spin_lock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
 
 	switch (baud)
 	{
 		case 9600:
-			ch->control.bits.gap1 = 3;
+			at->control.bits.gap1 = 3;
 			break;
 		default:
-			ch->control.bits.gap1 = 2;
+			if (at->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300)
+				at->control.bits.gap1 = 3;
+			else
+				at->control.bits.gap1 = 2;
 			break;
 	}
 
-	ch->mod_control(ch->cbdata, ch->pos_on_board, ch->control.full);
+	at->mod_control(at->cbdata, at->pos_on_board, at->control.full);
 
-	spin_unlock_bh(&ch->lock);
+	spin_unlock_bh(&at->lock);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 	tty_encode_baud_rate(tty, baud, baud);
@@ -908,20 +996,24 @@ static void gsm8ch_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 
 static void gsm8ch_tty_at_flush_buffer(struct tty_struct *tty)
 {
-	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
 
-	spin_lock_bh(&ch->lock);
-	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
-	spin_unlock_bh(&ch->lock);
+	spin_lock_bh(&at->lock);
+	at->xmit_count = at->xmit_head = at->xmit_tail = 0;
+	spin_unlock_bh(&at->lock);
 	tty_wakeup(tty);
 }
 
 static void gsm8ch_tty_at_hangup(struct tty_struct *tty)
 {
-	struct gsm8ch_tty_at_channel *ch = tty->driver_data;
-	tty_port_hangup(&ch->port);
+#ifdef TTY_PORT
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct gsm8ch_tty_at_data *at = (struct gsm8ch_tty_at_data *)ptd->data;
+	tty_port_hangup(&at->port);
+#endif
 }
-
+#ifdef TTY_PORT
 static int gsm8ch_tty_at_port_carrier_raised(struct tty_port *port)
 {
 	return 1;
@@ -933,70 +1025,34 @@ static void gsm8ch_tty_at_port_dtr_rts(struct tty_port *port, int onoff)
 
 static int gsm8ch_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty)
 {
-	struct gsm8ch_tty_at_channel *ch = container_of(port, struct gsm8ch_tty_at_channel, port);
+	struct gsm8ch_tty_at_data *at = container_of(port, struct gsm8ch_tty_at_data, port);
 
 	if (tty_port_alloc_xmit_buf(port) < 0)
 		return -ENOMEM;
-	ch->xmit_count = ch->xmit_head = ch->xmit_tail = 0;
+	at->xmit_count = at->xmit_head = at->xmit_tail = 0;
 
-	ch->poll_timer.function = gsm8ch_tty_at_poll;
-	ch->poll_timer.data = (unsigned long)ch;
-	ch->poll_timer.expires = jiffies + 1;
-	add_timer(&ch->poll_timer);
+	at->poll_timer.function = gsm8ch_tty_at_poll;
+	at->poll_timer.data = (unsigned long)at;
+	at->poll_timer.expires = jiffies + 1;
+	add_timer(&at->poll_timer);
 
 	return 0;
 }
 
 static void gsm8ch_tty_at_port_shutdown(struct tty_port *port)
 {
-	struct gsm8ch_tty_at_channel *ch = container_of(port, struct gsm8ch_tty_at_channel, port);
+	struct gsm8ch_tty_at_data *at = container_of(port, struct gsm8ch_tty_at_data, port);
 
-	del_timer_sync(&ch->poll_timer);
+	del_timer_sync(&at->poll_timer);
 
 	tty_port_free_xmit_buf(port);
 }
-
+#endif
 static int __init gsm8ch_init(void)
 {
 	int rc;
-	size_t i;
 
 	verbose("loading ...\n");
-
-	for (i=0; i<GSM8CH_TTY_AT_DEVICE_MAXCOUNT; i++)
-		gsm8ch_tty_at_channel_list[i] = NULL;
-
-	// registering tty device for AT-command channel
-	gsm8ch_tty_at_driver = alloc_tty_driver(GSM8CH_TTY_AT_DEVICE_MAXCOUNT);
-	if (!gsm8ch_tty_at_driver) {
-		log(KERN_ERR, "can't allocated memory for tty driver\n");
-		return -ENOMEM;
-	}
-
-	gsm8ch_tty_at_driver->owner = THIS_MODULE;
-	gsm8ch_tty_at_driver->driver_name = "gsm8ch_tty_at";
-	gsm8ch_tty_at_driver->name = "polygator/gsm8chAT";
-	gsm8ch_tty_at_driver->major = tty_at_major;
-	gsm8ch_tty_at_driver->minor_start = 0;
-	gsm8ch_tty_at_driver->type = TTY_DRIVER_TYPE_SERIAL;
-	gsm8ch_tty_at_driver->subtype = SERIAL_TYPE_NORMAL;
-	gsm8ch_tty_at_driver->init_termios = tty_std_termios;
-	gsm8ch_tty_at_driver->init_termios.c_iflag &= ~ICRNL;
-	gsm8ch_tty_at_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
-	gsm8ch_tty_at_driver->init_termios.c_lflag &= ~ECHO;
-	gsm8ch_tty_at_driver->init_termios.c_ispeed = 9600;
-	gsm8ch_tty_at_driver->init_termios.c_ospeed = 9600;
-	gsm8ch_tty_at_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
-	tty_set_operations(gsm8ch_tty_at_driver, &gsm8ch_tty_at_ops);
-
-	if ((rc = tty_register_driver(gsm8ch_tty_at_driver))) {
-		log(KERN_ERR, "can't register gsm8ch_tty_at driver: rc=%d\n", rc);
-		// release allocated tty driver environment
-		put_tty_driver(gsm8ch_tty_at_driver);
-		gsm8ch_tty_at_driver = NULL;
-		goto gsm8ch_init_error;
-	}
-	debug("tty_at_major=%d\n", gsm8ch_tty_at_driver->major);
 
 	// Register PCI driver
 	if ((rc = pci_register_driver(&gsm8ch_pci_driver)) < 0) {
@@ -1008,10 +1064,6 @@ static int __init gsm8ch_init(void)
 	return 0;
 
 gsm8ch_init_error:
-	if (gsm8ch_tty_at_driver) {
-		tty_unregister_driver(gsm8ch_tty_at_driver);
-		put_tty_driver(gsm8ch_tty_at_driver);
-	}
 	return rc;
 }
 
@@ -1019,10 +1071,6 @@ static void __exit gsm8ch_exit(void)
 {
 	// Unregister PCI driver
 	pci_unregister_driver(&gsm8ch_pci_driver);
-
-	// unregistering tty device for AT-command channel
-	tty_unregister_driver(gsm8ch_tty_at_driver);
-	put_tty_driver(gsm8ch_tty_at_driver);
 
 	verbose("stopped\n");
 }

@@ -1,5 +1,5 @@
 /******************************************************************************/
-/* polygator-base.c                                                           */
+/* polygator-base.h                                                           */
 /******************************************************************************/
 
 #ifndef __POLYGATOR_BASE_H__
@@ -10,6 +10,8 @@
 #define POLYGATOR_BOARD_MAXCOUNT 32
 
 #define POLYGATOR_BRDNAME_MAXLEN 256
+
+#define POLYGATOR_TTY_DEVICE_MAXCOUNT 256
 
 enum {
 	POLYGATOR_MODULE_TYPE_UNKNOWN = 0,
@@ -23,9 +25,12 @@ enum {
 
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/device.h>
 // #include <linux/poll.h>
 // #include <linux/spinlock.h>
 // #include <linux/timer.h>
+#include <linux/tty.h>
+#include <linux/tty_flip.h>
 #include <linux/types.h>
 // #include <linux/types.h>
 // #include <linux/wait.h>
@@ -33,17 +38,37 @@ enum {
 struct polygator_board {
 	int devno;
 	char name[POLYGATOR_BRDNAME_MAXLEN];
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	struct device *device;
+#else
+	struct class_device *device;
+#endif
 	struct cdev *cdev;
 };
 
+struct polygator_tty_device {
+	int tty_minor;
+	struct tty_operations *tty_ops;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	struct device *device;
+#else
+	struct class_device *device;
+#endif
+	void *data;
+};
+
 struct polygator_board *polygator_board_register(struct module *owner, char *name, struct cdev *cdef, struct file_operations *fops);
-void polygator_board_unregister(struct polygator_board  *brd);
+void polygator_board_unregister(struct polygator_board *brd);
+
 char *polygator_print_gsm_module_type(int type);
+
+struct polygator_tty_device *polygator_tty_device_register(struct tty_operations *tty_ops);
+void polygator_tty_device_unregister(struct polygator_tty_device *ptd);
 
 #endif //__KERNEL__
 
 #endif //__POLYGATOR_BASE_H__
 
 /******************************************************************************/
-/* end of polygator-base.c                                                    */
+/* end of polygator-base.h                                                    */
 /******************************************************************************/
