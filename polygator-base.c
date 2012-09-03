@@ -84,7 +84,7 @@ struct subsystem_private_data {
 	size_t length;
 };
 
-static struct cdev polygator_subsytem_cdev;
+static struct cdev polygator_subsystem_cdev;
 
 static struct polygator_board *polygator_board_list[POLYGATOR_BOARD_MAXCOUNT];
 static DEFINE_SPINLOCK(polygator_board_list_lock);
@@ -266,11 +266,11 @@ polygator_subsystem_read_end:
 	return res;
 }
 
-static struct file_operations polygator_subsytem_fops = {
-	.owner   = THIS_MODULE,
-	.open    = polygator_subsystem_open,
-	.release = polygator_subsystem_release,
-	.read    = polygator_subsystem_read,
+static struct file_operations polygator_subsystem_fops = {
+	.owner			= THIS_MODULE,
+	.open			= polygator_subsystem_open,
+	.release		= polygator_subsystem_release,
+	.read		= polygator_subsystem_read,
 };
 
 char *polygator_print_gsm_module_type(int type)
@@ -335,12 +335,11 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto polygator_board_register_error;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "polygator!%s", name);
-#else
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "polygator!%s", name);
-#endif
-	brd->device = CLASS_DEV_CREATE(polygator_class, devno, NULL, devname);
+	if (!(brd->device = CLASS_DEV_CREATE(polygator_class, devno, NULL, devname))) {
+		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
+		goto polygator_board_register_error;
+	}
 
 	verbose("\"%s\" registered\n", name);
 	return brd;
@@ -449,6 +448,11 @@ static int __init polygator_init(void)
 	size_t i;
 	int rc;
 	dev_t devno;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+	struct device *device = NULL;
+#else
+	struct class_device *device = NULL;
+#endif
 	int polygator_subsystem_major_reg = 0;
 
 	verbose("loading ...\n");
@@ -474,15 +478,18 @@ static int __init polygator_init(void)
 	polygator_subsystem_major_reg = 1;
 
 	// Add subsystem device
-	cdev_init(&polygator_subsytem_cdev, &polygator_subsytem_fops);
-	polygator_subsytem_cdev.owner = THIS_MODULE;
-	polygator_subsytem_cdev.ops = &polygator_subsytem_fops;
-	devno = MKDEV(polygator_subsystem_major, 255);
-	if ((rc = cdev_add(&polygator_subsytem_cdev, devno, 1)) < 0) {
+	cdev_init(&polygator_subsystem_cdev, &polygator_subsystem_fops);
+	polygator_subsystem_cdev.owner = THIS_MODULE;
+	polygator_subsystem_cdev.ops = &polygator_subsystem_fops;
+	devno = MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1);
+	if ((rc = cdev_add(&polygator_subsystem_cdev, devno, 1)) < 0) {
 		log(KERN_ERR, "\"subsystem\" - cdev_add() error=%d\n", rc);
 		goto polygator_init_error;
 	}
-	CLASS_DEV_CREATE(polygator_class, devno, NULL, "polygator!subsystem");
+	if (!(device = CLASS_DEV_CREATE(polygator_class, devno, NULL, "polygator!subsystem"))) {
+		log(KERN_ERR, "\"subsystem\" - class_dev_create() error\n");
+		goto polygator_init_error;
+	}
 
 	// Register polygator tty driver
 	polygator_tty_device_driver = alloc_tty_driver(POLYGATOR_TTY_DEVICE_MAXCOUNT);
@@ -523,7 +530,6 @@ static int __init polygator_init(void)
 	}
 	debug("polygator tty major=%d\n", polygator_tty_device_driver->major);
 
-
 	verbose("loaded successfull\n");
 	return 0;
 
@@ -532,6 +538,7 @@ polygator_init_error:
 		tty_unregister_driver(polygator_tty_device_driver);
 		put_tty_driver(polygator_tty_device_driver);
 	}
+	if (device) CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
 	if (polygator_subsystem_major_reg) unregister_chrdev_region(MKDEV(polygator_subsystem_major, 0), POLYGATOR_DEVICE_MAXCOUNT);
 	if (polygator_class) class_destroy(polygator_class);
 	return rc;
@@ -543,7 +550,8 @@ static void __exit polygator_exit(void)
 	tty_unregister_driver(polygator_tty_device_driver);
 	put_tty_driver(polygator_tty_device_driver);
 	// Destroy subsystem device
-	CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, 255));
+	CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
+	cdev_del(&polygator_subsystem_cdev);
 	// Unregister char device region
 	unregister_chrdev_region(MKDEV(polygator_subsystem_major, 0), POLYGATOR_DEVICE_MAXCOUNT);
 	// Destroy polygator device class

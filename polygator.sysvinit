@@ -3,23 +3,46 @@
 # chkconfig: 2345 30 95
 # description: polygator
 
-case "$1" in
-  start)
-    echo -n "Load Polygator K32ISA modules"
+RETVAL=0
+
+start() {
+    echo -n $"Loading Polygator K32ISA modules: "
     modprobe k32isa
-    usleep 500000
+    sleep 2
     chown -R asterisk:asterisk /dev/polygator
     chown asterisk:asterisk /dev/ttyPG*
-    ;;
-  stop)
-    echo -n "Unoad Polygator K32ISA modules"
-	rmmod k32isa
-	rmmod vinetic
-	rmmod polygator
-    ;;
-  *)
-    echo "Usage: /etc/init.d/polygator {start|stop}"
-    exit 1
+    echo
+    return $RETVAL
+}
+
+stop() {
+    echo -n $"Unoading Polygator K32ISA modules: "
+    rmmod k32isa
+    rmmod vinetic
+    rmmod polygator
+    RETVAL=$?
+    echo
+    return $RETVAL
+}
+
+restart() {
+    start
+    stop
+}
+
+case "$1" in
+    start)
+	start
+	;;
+    stop)
+	stop
+	;;
+    restart)
+	restart
+	;;
+    *)
+	echo "Usage: /etc/init.d/polygator {start|stop|restart}"
+	exit 1
 esac
 
-exit 0
+exit $RETVAL
