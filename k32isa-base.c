@@ -523,7 +523,7 @@ static ssize_t k32isa_board_write(struct file *filp, const char __user *buff, si
 	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
 			tty_at_data = (struct k32isa_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
-			if ((baudrate == 9600) || (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300))
+			if (baudrate == 9600)
 				tty_at_data->control.bits.gap1 = 3;
 			else
 				tty_at_data->control.bits.gap1 = 2;
@@ -702,10 +702,7 @@ static void k32isa_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 			at->control.bits.gap1 = 3;
 			break;
 		default:
-			if (at->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300)
-				at->control.bits.gap1 = 3;
-			else
-				at->control.bits.gap1 = 2;
+			at->control.bits.gap1 = 2;
 			break;
 	}
 
