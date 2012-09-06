@@ -7,9 +7,10 @@ KERNEL_MOD_DIR := polygator
 
 ifeq ($(TARGET_DEVICE), k5)
 
-obj-m := polygator.o vinetic.o k5.o
+obj-m := polygator.o vinetic.o simcard.o k5.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
+simcard-objs := simcard-base.o
 k5-objs := k5-base.o
 
 KERNEL_SRC_DIR := $(KERNEL_SRC)
@@ -17,9 +18,10 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else ifeq ($(TARGET_DEVICE), g8)
 
-obj-m := polygator.o vinetic.o g8.o
+obj-m := polygator.o vinetic.o simcard.o g8.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
+simcard-objs := simcard-base.o
 g8-objs := g8-base.o
 
 KERNEL_SRC_DIR := $(KERNEL_SRC)
@@ -27,9 +29,10 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else ifeq ($(TARGET_DEVICE), g20)
 
-obj-m := polygator.o vinetic.o g20.o
+obj-m := polygator.o vinetic.o simcard.o g20.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
+simcard-objs := simcard-base.o
 g20-objs := g20-base.o
 
 KERNEL_SRC_DIR := $(KERNEL_SRC)
@@ -37,10 +40,11 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else ifeq ($(TARGET_DEVICE), pc)
 
-obj-m := polygator.o vinetic.o gsm8ch.o k32isa.o
+obj-m := polygator.o vinetic.o simcard.o k32pci.o k32isa.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
-gsm8ch-objs := gsm8ch-base.o
+simcard-objs := simcard-base.o
+k32pci-objs := k32pci-base.o
 k32isa-objs := k32isa-base.o
 
 KERNEL_SRC_DIR := $(KERNEL_SRC)
@@ -48,10 +52,11 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else
 
-obj-m := polygator.o vinetic.o gsm8ch.o k32isa.o
+obj-m := polygator.o vinetic.o simcard.o k32pci.o k32isa.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
-gsm8ch-objs := gsm8ch-base.o
+simcard-objs := simcard-base.o
+k32pci-objs := k32pci-base.o
 k32isa-objs := k32isa-base.o
 
 KERNEL_VERSION := `uname -r`

@@ -88,7 +88,7 @@ struct vinetic_device {
 };
 
 static struct vinetic_device vinetic_device_list[VINETIC_DEVICE_MAXCOUNT];
-static DEFINE_SPINLOCK(vinetic_device_list_lock);
+static DEFINE_MUTEX(vinetic_device_list_lock);
 
 static void vinetic_poll_proc(unsigned long addr)
 {
@@ -635,9 +635,7 @@ static int vinetic_open(struct inode *inode, struct file *filp)
 
 static int vinetic_release(struct inode *inode, struct file *filp)
 {
-	struct vinetic *vin;
-
-	vin = container_of(inode->i_cdev, struct vinetic, cdev);
+	struct vinetic *vin = filp->private_data;
 
 	spin_lock_bh(&vin->lock);
 	vin->poll = 0;
@@ -1650,12 +1648,12 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	}
 	memset(vin, 0, sizeof(struct vinetic));
 
-	spin_lock(&vinetic_device_list_lock);
+	mutex_lock(&vinetic_device_list_lock);
 	// check for name is not used
 	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 	{
 		if (!strcmp(vinetic_device_list[i].name, name)) {
-			spin_unlock(&vinetic_device_list_lock);
+			mutex_unlock(&vinetic_device_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
 			goto vinetic_device_register_error;
 		}
@@ -1674,7 +1672,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 			break;
 		}
 	}
-	spin_unlock(&vinetic_device_list_lock);
+	mutex_unlock(&vinetic_device_list_lock);
 	
 	if (!devno) {
 		log(KERN_ERR, "\"%s\" - can't get free slot\n", name);
@@ -1744,19 +1742,17 @@ struct vinetic *vinetic_device_register(struct module *owner,
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_device_register_error;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
- 	snprintf(devname, sizeof(devname), "polygator!%s", name);
-#else
 	snprintf(devname, sizeof(devname), "polygator!%s", name);
-#endif
-	vin->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname);
+	if (!(vin->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname))) {
+		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
+		goto vinetic_device_register_error;
+	}
 
-	verbose("\"%s\" registered\n", name);
 	return vin;
 
 vinetic_device_register_error:
 	if (slot_alloc) {
-		spin_lock(&vinetic_device_list_lock);
+		mutex_lock(&vinetic_device_list_lock);
 		for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 		{
 			if (!strcmp(vinetic_device_list[i].name, name)) {
@@ -1767,7 +1763,7 @@ vinetic_device_register_error:
 				break;
 			}
 		}
-		spin_unlock(&vinetic_device_list_lock);
+		mutex_unlock(&vinetic_device_list_lock);
 	}
 	if(vin) kfree(vin);
 	return NULL;
@@ -1780,9 +1776,7 @@ void vinetic_device_unregister(struct vinetic *vin)
 	CLASS_DEV_DESTROY(vinetic_class, vin->devno);
 	cdev_del(&vin->cdev);
 
-	verbose("\"%s\" unregistered\n", vin->name);
-
-	spin_lock(&vinetic_device_list_lock);
+	mutex_lock(&vinetic_device_list_lock);
 
 	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 	{
@@ -1795,7 +1789,7 @@ void vinetic_device_unregister(struct vinetic *vin)
 			break;
 		}
 	}
-	spin_unlock(&vinetic_device_list_lock);
+	mutex_unlock(&vinetic_device_list_lock);
 
 	// deleting vinetic polling timer
 	del_timer_sync(&vin->poll_timer);
@@ -1818,12 +1812,12 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 	}
 	memset(rtp, 0, sizeof(struct vinetic_rtp_channel));
 
-	spin_lock(&vinetic_device_list_lock);
+	mutex_lock(&vinetic_device_list_lock);
 	// check for name is not used
 	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 	{
 		if (!strcmp(vinetic_device_list[i].name, name)) {
-			spin_unlock(&vinetic_device_list_lock);
+			mutex_unlock(&vinetic_device_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
 			goto vinetic_rtp_channel_register_error;
 		}
@@ -1842,7 +1836,7 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 			break;
 		}
 	}
-	spin_unlock(&vinetic_device_list_lock);
+	mutex_unlock(&vinetic_device_list_lock);
 	
 	if (!devno) {
 		log(KERN_ERR, "\"%s\" - can't get free slot\n", name);
@@ -1890,19 +1884,17 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_rtp_channel_register_error;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	snprintf(devname, sizeof(devname), "polygator!%s", name);
-#else
-	snprintf(devname, sizeof(devname), "polygator!%s", name);
-#endif
-	rtp->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname);
+	if (!(rtp->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname))) {
+		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
+		goto vinetic_rtp_channel_register_error;
+	}
 
-	verbose("\"%s\" registered\n", name);
 	return rtp;
 
 vinetic_rtp_channel_register_error:
 	if (slot_alloc) {
-		spin_lock(&vinetic_device_list_lock);
+		mutex_lock(&vinetic_device_list_lock);
 		for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 		{
 			if (!strcmp(vinetic_device_list[i].name, name)) {
@@ -1913,7 +1905,7 @@ vinetic_rtp_channel_register_error:
 				break;
 			}
 		}
-		spin_unlock(&vinetic_device_list_lock);
+		mutex_unlock(&vinetic_device_list_lock);
 	}
 	if(rtp) kfree(rtp);
 	return NULL;
@@ -1928,9 +1920,7 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 	CLASS_DEV_DESTROY(vinetic_class, rtp->devno);
 	cdev_del(&rtp->cdev);
 
-	verbose("\"%s\" unregistered\n", rtp->name);
-
-	spin_lock(&vinetic_device_list_lock);
+	mutex_lock(&vinetic_device_list_lock);
 
 	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 	{
@@ -1943,7 +1933,7 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 			break;
 		}
 	}
-	spin_unlock(&vinetic_device_list_lock);
+	mutex_unlock(&vinetic_device_list_lock);
 
 	spin_lock_bh(&rtp->vinetic->lock);
 	rtp->vinetic->rtp_channels[rtp->index] = NULL;
@@ -1954,15 +1944,14 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 
 static int __init vinetic_init(void)
 {
-	int rc;
 	size_t i;
 	dev_t devno;
 	int vinetic_major_reg = 0;
+	int rc = -1;
 
 	verbose("loading ...\n");
 
 	// Init vinetic device list
-	spin_lock_init(&vinetic_device_list_lock);
 	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
 	{
 		vinetic_device_list[i].name[0] = '\0';
@@ -1972,7 +1961,10 @@ static int __init vinetic_init(void)
 	}
 
 	// Registering vinetic device class
-	vinetic_class = class_create(THIS_MODULE, "vinetic");
+	if (!(vinetic_class = class_create(THIS_MODULE, "vinetic"))) {
+		log(KERN_ERR, "class_create() error\n");
+		goto vinetic_init_error;
+	}
 	// Register char device region
 	if (vinetic_major) {
 		devno = MKDEV(vinetic_major, 0);

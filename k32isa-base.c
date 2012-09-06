@@ -26,9 +26,12 @@
 #endif
 
 #include "polygator/polygator-base.h"
+#include "polygator/polygator-k32.h"
 
 #include "polygator/vinetic-base.h"
 #include "polygator/vinetic-def.h"
+
+#include "polygator/simcard-base.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
 #define TTY_PORT
@@ -59,6 +62,9 @@ MODULE_LICENSE("GPL");
 #define PG_ISA_CTRL_BASE		0x620
 #define PG_ISA_CTRL_LENGTH		0x20
 
+#define PG_ISA_SIM_BASE			0x700
+#define PG_ISA_SIM_LENGTH		0x20
+
 #define PG_ISA_IMEI_BASE		0x720
 #define PG_ISA_IMEI_LENGTH		0x20
 
@@ -66,94 +72,15 @@ MODULE_LICENSE("GPL");
 #define PG_ISA_VD_LENGTH		0x20
 /*! */
 
-union k32isa_at_ch_status_reg {
-	struct {
-		u_int8_t com_rdy_rd:1;
-		u_int8_t com_rdy_wr:1;
-		u_int8_t vio:1;
-		u_int8_t gap0:2;
-		u_int8_t gsm_reset_req:1;
-		u_int8_t imei_rdy_rd:1;
-		u_int8_t imei_rdy_wr:1;
-	} __attribute__((packed)) bits;
-	u_int8_t full;
-} __attribute__((packed));
-
-union k32isa_at_ch_control_reg {
-	struct {
-		u_int8_t mod_off:1;
-		u_int8_t mode:1;	//	GR = 0, PiML = 1
-		u_int8_t rst:1;
-		u_int8_t gap0:1;
-		u_int8_t pwr_off:1;
-		u_int8_t sync_mode:1;
-		u_int8_t gap1:2;
-	} __attribute__((packed)) bits;
-	u_int8_t full;
-} __attribute__((packed));
-
-struct k32isa_tty_at_data {
-
-	int gsm_mod_type;
-	size_t pos_on_board;
-
-	union k32isa_at_ch_status_reg status;
-	union k32isa_at_ch_control_reg control;
-
-	struct timer_list poll_timer;
-
-#ifdef TTY_PORT
-	struct tty_port port;
-#else
-	size_t count;
-	struct tty_struct *tty;
-	unsigned char *xmit_buf;
-#endif
-
-	spinlock_t lock;
-
-	size_t xmit_count;
-	size_t xmit_head;
-	size_t xmit_tail;
-
-	uintptr_t cbdata;
-
-	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* mod_status)(uintptr_t cbdata, size_t pos);
-	void (* mod_at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* mod_at_read)(uintptr_t cbdata, size_t pos);
-};
-
-struct k32isa_board {
-
-	struct polygator_board *pg_board;
-	struct cdev cdev;
-
-	u_int8_t rom[256];
-	size_t romsize;
-	u_int32_t sn;
-	u_int16_t type;
-
-	struct vinetic *vinetics[2];
-
-	struct polygator_tty_device *tty_at_channels[8];
-};
-
-struct k32isa_board_private_data {
-	struct k32isa_board *board;
-	char buff[0x0C00];
-	size_t length;
-};
-
-static struct k32isa_board *k32isa_boards[4];
+static struct k32_board *k32isa_boards[4];
 
 static struct resource * k32isa_id_ioport_reg = NULL;
 static struct resource * k32isa_at_ioport_reg = NULL;
 static struct resource * k32isa_ctrl_ioport_reg = NULL;
 static struct resource * k32isa_vs_ioport_reg = NULL;
+static struct resource * k32isa_sim_ioport_reg = NULL;
 static struct resource * k32isa_imei_ioport_reg = NULL;
 static struct resource * k32isa_vd_ioport_reg[4][2];
-
 
 static int k32isa_tty_at_open(struct tty_struct *tty, struct file *filp);
 static void k32isa_tty_at_close(struct tty_struct *tty, struct file *filp);
@@ -218,52 +145,44 @@ static void k32isa_vin_reset_1(uintptr_t cbdata)
 static void k32isa_vin_write_nwd_0(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 0 + 4);
-// 	debug("%04x\n", value);
 }
 
 static void k32isa_vin_write_nwd_1(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 32 + 4);
-// 	debug("%04x\n", value);
 }
 
 static void k32isa_vin_write_eom_0(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 0 + 6);
-// 	debug("%04x\n", value);
 }
 
 static void k32isa_vin_write_eom_1(uintptr_t cbdata, u_int16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 32 + 6);
-// 	debug("%04x\n", value);
 }
 
 static u_int16_t k32isa_vin_read_nwd_0(uintptr_t cbdata)
 {
 	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 0 + 4);
-// 	debug("%04x\n", value);
 	return value;
 }
 
 static u_int16_t k32isa_vin_read_nwd_1(uintptr_t cbdata)
 {
 	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 32 + 4);
-// 	debug("%04x\n", value);
 	return value;
 }
 
 static u_int16_t k32isa_vin_read_eom_0(uintptr_t cbdata)
 {
 	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 0 + 6);
-// 	debug("%04x\n", value);
 	return value;
 }
 
 static u_int16_t k32isa_vin_read_eom_1(uintptr_t cbdata)
 {
 	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 32 + 6);
-// 	debug("%04x\n", value);
 	return value;
 }
 
@@ -289,24 +208,115 @@ static u_int16_t k32isa_vin_read_dia_1(uintptr_t cbdata)
 	return 0;
 }
 
-static void k32isa_mod_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void k32isa_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	outb(reg, PG_ISA_CTRL_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_mod_status(uintptr_t cbdata, size_t pos)
+static u_int8_t k32isa_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
 	return inb(PG_ISA_CTRL_BASE + cbdata * 8 + pos);
 }
 
-static void k32isa_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void k32isa_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	outb(reg, PG_ISA_AT_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_mod_at_read(uintptr_t cbdata, size_t pos)
+static u_int8_t k32isa_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
 	return inb(PG_ISA_AT_BASE + cbdata * 8 + pos);
+}
+
+static void k32isa_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+{
+	outb(reg, PG_ISA_SIM_BASE + cbdata * 8 + pos);
+}
+
+static u_int8_t k32isa_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
+{
+	return inb(PG_ISA_SIM_BASE + cbdata * 8 + pos);
+}
+
+static void k32isa_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+{
+	outb(reg, PG_ISA_IMEI_BASE + cbdata * 8 + pos);
+}
+
+static u_int8_t k32isa_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
+{
+	return inb(PG_ISA_IMEI_BASE + cbdata * 8 + pos);
+}
+
+static u_int8_t k32isa_sim_read(void *data)
+{
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	return mod->sim_read(mod->cbdata, mod->pos_on_board);
+}
+
+static void k32isa_sim_write(void *data, u_int8_t value)
+{
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	mod->sim_write(mod->cbdata, mod->pos_on_board, value);
+}
+
+static int k32isa_sim_is_read_ready(void *data)
+{
+	union k32_gsm_mod_status_reg status;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
+
+	return status.bits.sim_rdy_rd;
+}
+
+static int k32isa_sim_is_write_ready(void *data)
+{
+	union k32_gsm_mod_status_reg status;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
+
+	return status.bits.sim_rdy_wr;
+}
+
+static int k32isa_sim_is_reset_request(void *data)
+{
+	union k32_gsm_mod_status_reg status;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
+
+	return status.bits.sim_rst_req;
+}
+
+static void k32isa_sim_set_speed(void *data, int speed)
+{
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	switch (speed)
+	{
+		case 57600:
+			mod->control.bits.sim_spd_0 = 1;
+			mod->control.bits.sim_spd_1 = 0;
+			break;
+		case 115200:
+			mod->control.bits.sim_spd_0 = 0;
+			mod->control.bits.sim_spd_1 = 1;
+			break;
+		case 230400:
+			mod->control.bits.sim_spd_0 = 1;
+			mod->control.bits.sim_spd_1 = 1;
+			break;
+		default: // 9600 
+			mod->control.bits.sim_spd_0 = 0;
+			mod->control.bits.sim_spd_1 = 0;
+			break;
+	}
+
+	mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 }
 
 static void k32isa_tty_at_poll(unsigned long addr)
@@ -314,9 +324,10 @@ static void k32isa_tty_at_poll(unsigned long addr)
 	char buff[512];
 	size_t len;
 	struct tty_struct *tty;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)addr;
+	union k32_gsm_mod_status_reg status;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)addr;
 
-	if (!at) return;
+	if (!mod) return;
 
 	len = 0;
 
@@ -324,50 +335,49 @@ static void k32isa_tty_at_poll(unsigned long addr)
 	while (len < sizeof(buff))
 	{
 		// read status register
-		at->status.full = at->mod_status(at->cbdata, at->pos_on_board);
-		if (at->status.bits.com_rdy_rd)
+		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
+		if (status.bits.at_rdy_rd)
 			break;		
 		// put char to receiving buffer
-		buff[len++] = at->mod_at_read(at->cbdata, at->pos_on_board);
+		buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
 	}
 
-	spin_lock(&at->lock);
+	spin_lock(&mod->at_lock);
 
-	 while (at->xmit_count) {
+	 while (mod->at_xmit_count) {
 		// read status register
-		at->status.full = at->mod_status(at->cbdata, at->pos_on_board);
+		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 		// check for transmitter is ready
-		if (!at->status.bits.com_rdy_wr)
+		if (!status.bits.at_rdy_wr)
 			break;
 		// put char to transmitter buffer
-// 		verbose("test=%lu head=%lu tail=%lu %c\n", (unsigned long int)at->xmit_count, (unsigned long int)at->xmit_head, (unsigned long int)at->xmit_tail, *(at->port.xmit_buf + at->xmit_tail));
 #ifdef TTY_PORT
-		at->mod_at_write(at->cbdata, at->pos_on_board, at->port.xmit_buf[at->xmit_tail]);
+		mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
 #else
-		at->mod_at_write(at->cbdata, at->pos_on_board, at->xmit_buf[at->xmit_tail]);
+		mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
-		at->xmit_tail++;
-		if (at->xmit_tail == SERIAL_XMIT_SIZE)
-			at->xmit_tail = 0;
-		at->xmit_count--;
+		mod->at_xmit_tail++;
+		if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+			mod->at_xmit_tail = 0;
+		mod->at_xmit_count--;
 	}
 
-	spin_unlock(&at->lock);
+	spin_unlock(&mod->at_lock);
 
 	if (len) {
 #ifdef TTY_PORT
-		tty = tty_port_tty_get(&at->port);
+		tty = tty_port_tty_get(&mod->at_port);
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 		tty_kref_put(tty);
 #else
-		tty = at->tty;
+		tty = mod->at_tty;
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 #endif
 	}
 
-	mod_timer(&at->poll_timer, jiffies + 1);
+	mod_timer(&mod->at_poll_timer, jiffies + 1);
 }
 
 static int k32isa_board_open(struct inode *inode, struct file *filp)
@@ -376,14 +386,15 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 	size_t i,j;
 	size_t len;
 
-	struct k32isa_board *brd;
-	struct k32isa_board_private_data *private_data;
-	struct k32isa_tty_at_data *tty_at_data;
+	struct k32_board *brd;
+	struct k32_board_private_data *private_data;
+	struct k32_gsm_module_data *mod;
+	union k32_gsm_mod_status_reg status;
 
-	brd = container_of(inode->i_cdev, struct k32isa_board, cdev);
+	brd = container_of(inode->i_cdev, struct k32_board, cdev);
 
-	if (!(private_data = kmalloc(sizeof(struct k32isa_board_private_data), GFP_KERNEL))) {
-		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct k32isa_board_private_data));
+	if (!(private_data = kmalloc(sizeof(struct k32_board_private_data), GFP_KERNEL))) {
+		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct k32_board_private_data));
 		res = -ENOMEM;
 		goto k32isa_open_error;
 	}
@@ -392,22 +403,22 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 	len = 0;
 	for (i=0; i<8; i++)
 	{
-		if (brd->tty_at_channels[i]) {
-			tty_at_data = (struct k32isa_tty_at_data *)brd->tty_at_channels[i]->data;
-			tty_at_data->status.full = tty_at_data->mod_status(tty_at_data->cbdata, tty_at_data->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu %s %s VIN%luALM%lu VIO=%u\r\n",
+		if (brd->gsm_modules[i]) {
+			mod = brd->gsm_modules[i];
+			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
+			len += sprintf(private_data->buff+len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
 							(unsigned long int)i,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-							dev_name(brd->tty_at_channels[i]->device),
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							dev_name(brd->tty_at_channels[i]->device),
+							polygator_print_gsm_module_type(mod->type),
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+							brd->tty_at_channels[i]?dev_name(brd->tty_at_channels[i]->device):"unknown",
+							brd->simcard_channels[i]?dev_name(brd->simcard_channels[i]->device):"unknown",
 #else
-							brd->tty_at_channels[i]->device->class_id,
+							brd->tty_at_channels[i]?brd->tty_at_channels[i]->device->class_id:"unknown",
+							brd->simcard_channels[i]?brd->simcard_channels[i]->device->class_id:"unknown",
 #endif
-							polygator_print_gsm_module_type(tty_at_data->gsm_mod_type),
 							(unsigned long int)(i/4),
 							(unsigned long int)(i%4),
-							tty_at_data->status.bits.vio);
+							status.bits.vio);
 		}
 	}
 	for (i=0; i<2; i++)
@@ -454,7 +465,7 @@ k32isa_open_error:
 
 static int k32isa_board_release(struct inode *inode, struct file *filp)
 {
-	struct k32isa_board_private_data *private_data = filp->private_data;
+	struct k32_board_private_data *private_data = filp->private_data;
 
 	kfree(private_data);
 	return 0;
@@ -464,7 +475,7 @@ static ssize_t k32isa_board_read(struct file *filp, char __user *buff, size_t co
 {
 	size_t len;
 	ssize_t res;
-	struct k32isa_board_private_data *private_data = filp->private_data;
+	struct k32_board_private_data *private_data = filp->private_data;
 
 	res = (private_data->length > filp->f_pos)?(private_data->length - filp->f_pos):(0);
 
@@ -492,8 +503,8 @@ static ssize_t k32isa_board_write(struct file *filp, const char __user *buff, si
 	u_int32_t pwr_state;
 	u_int32_t key_state;
 	u_int32_t baudrate;
-	struct k32isa_tty_at_data *tty_at_data;
-	struct k32isa_board_private_data *private_data = filp->private_data;
+	struct k32_gsm_module_data *mod;
+	struct k32_board_private_data *private_data = filp->private_data;
 
 	memset(cmd, 0, sizeof(cmd));
 	len = sizeof(cmd) - 1;
@@ -505,29 +516,29 @@ static ssize_t k32isa_board_write(struct file *filp, const char __user *buff, si
 	}
 
 	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
-			tty_at_data = (struct k32isa_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
-			tty_at_data->control.bits.pwr_off = !pwr_state;
-			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
+		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
+			mod = private_data->board->gsm_modules[at_chan];
+			mod->control.bits.pwr_off = !pwr_state;
+			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
 		} else
 			res = - ENODEV;
 	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
-			tty_at_data = (struct k32isa_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
-			tty_at_data->control.bits.mod_off = !key_state;
-			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
+		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
+			mod = private_data->board->gsm_modules[at_chan];
+			mod->control.bits.mod_off = !key_state;
+			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
 		} else
 			res = -ENODEV;
 	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->tty_at_channels[at_chan])) {
-			tty_at_data = (struct k32isa_tty_at_data *)private_data->board->tty_at_channels[at_chan]->data;
+		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
+			mod = private_data->board->gsm_modules[at_chan];
 			if (baudrate == 9600)
-				tty_at_data->control.bits.gap1 = 3;
+				mod->control.bits.com_spd = 3;
 			else
-				tty_at_data->control.bits.gap1 = 2;
-			tty_at_data->mod_control(tty_at_data->cbdata, at_chan, tty_at_data->control.full);
+				mod->control.bits.com_spd = 2;
+			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
 		} else
 			res = -ENODEV;
@@ -549,32 +560,32 @@ static struct file_operations k32isa_board_fops = {
 static int k32isa_tty_at_open(struct tty_struct *tty, struct file *filp)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
 #ifdef TTY_PORT
-	return tty_port_open(&at->port, tty, filp);
+	return tty_port_open(&mod->at_port, tty, filp);
 #else
 	unsigned char *xbuf;
 	
 	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL)))
 		return -ENOMEM;
 
-	spin_lock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
 
-	if (!at->count++) {
-		at->xmit_buf = xbuf;
-		at->xmit_count = at->xmit_head = at->xmit_tail = 0;
+	if (!mod->at_count++) {
+		mod->at_xmit_buf = xbuf;
+		mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
-		at->poll_timer.function = k32isa_tty_at_poll;
-		at->poll_timer.data = (unsigned long)at;
-		at->poll_timer.expires = jiffies + 1;
-		add_timer(&at->poll_timer);
+		mod->at_poll_timer.function = k32isa_tty_at_poll;
+		mod->at_poll_timer.data = (unsigned long)mod;
+		mod->at_poll_timer.expires = jiffies + 1;
+		add_timer(&mod->at_poll_timer);
 	
-		at->tty = tty;
+		mod->at_tty = tty;
 	} else
 		kfree(xbuf);
 
-	spin_unlock_bh(&at->lock);
+	spin_unlock_bh(&mod->at_lock);
 
 	return 0;
 #endif
@@ -583,25 +594,25 @@ static int k32isa_tty_at_open(struct tty_struct *tty, struct file *filp)
 static void k32isa_tty_at_close(struct tty_struct *tty, struct file *filp)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
 #ifdef TTY_PORT
-	tty_port_close(&at->port, tty, filp);
+	tty_port_close(&mod->at_port, tty, filp);
 #else
 	unsigned char *xbuf = NULL;
 
-	spin_lock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
 
-	if (!--at->count) {
-		xbuf = at->xmit_buf;
-		at->tty = NULL;
+	if (!--mod->at_count) {
+		xbuf = mod->at_xmit_buf;
+		mod->at_tty = NULL;
 	}
 
-	spin_unlock_bh(&at->lock);
+	spin_unlock_bh(&mod->at_lock);
 	
 	if (xbuf) {
-		del_timer_sync(&at->poll_timer);
-		kfree(at->xmit_buf);
+		del_timer_sync(&mod->at_poll_timer);
+		kfree(mod->at_xmit_buf);
 	}
 #endif
 	return;
@@ -612,42 +623,42 @@ static int k32isa_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	int res = 0;
 	size_t len;
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
-	spin_lock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
 
-	if (at->xmit_count < SERIAL_XMIT_SIZE) {
+	if (mod->at_xmit_count < SERIAL_XMIT_SIZE) {
 		while (1)
 		{
-			if (at->xmit_head == at->xmit_tail) {
-				if (at->xmit_count)
+			if (mod->at_xmit_head == mod->at_xmit_tail) {
+				if (mod->at_xmit_count)
 					len = 0;
 				else
-					len = SERIAL_XMIT_SIZE - at->xmit_head;
-			} else if (at->xmit_head > at->xmit_tail)
-				len = SERIAL_XMIT_SIZE - at->xmit_head;
+					len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
+			} else if (mod->at_xmit_head > mod->at_xmit_tail)
+				len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
 			else
-				len = at->xmit_tail - at->xmit_head;
+				len = mod->at_xmit_tail - mod->at_xmit_head;
 
 			len = min(len, (size_t)count);
 			if (!len)
 				break;
 #ifdef TTY_PORT
-			memcpy(at->port.xmit_buf + at->xmit_head, buf, len);
+			memcpy(mod->at_port.xmit_buf + mod->at_xmit_head, buf, len);
 #else
-			memcpy(at->xmit_buf + at->xmit_head, buf, len);
+			memcpy(mod->at_xmit_buf + mod->at_xmit_head, buf, len);
 #endif
-			at->xmit_head += len;
-			if (at->xmit_head == SERIAL_XMIT_SIZE)
-				at->xmit_head = 0;
-			at->xmit_count += len;
+			mod->at_xmit_head += len;
+			if (mod->at_xmit_head == SERIAL_XMIT_SIZE)
+				mod->at_xmit_head = 0;
+			mod->at_xmit_count += len;
 			buf += len;
 			count -= len;
 			res += len;
 		}
 	}
 
-	spin_unlock_bh(&at->lock);
+	spin_unlock_bh(&mod->at_lock);
 
 	return res ;
 }
@@ -656,13 +667,13 @@ static int k32isa_tty_at_write_room(struct tty_struct *tty)
 {
 	int res;
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
-	spin_lock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
 
-	res = SERIAL_XMIT_SIZE - at->xmit_count;
+	res = SERIAL_XMIT_SIZE - mod->at_xmit_count;
 
-	spin_unlock_bh(&at->lock);
+	spin_unlock_bh(&mod->at_lock);
 
 	return res;
 }
@@ -671,13 +682,13 @@ static int k32isa_tty_at_chars_in_buffer(struct tty_struct *tty)
 {
 	int res;
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
-	spin_lock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
 
-	res = at->xmit_count;
+	res = mod->at_xmit_count;
 
-	spin_unlock_bh(&at->lock);
+	spin_unlock_bh(&mod->at_lock);
 
 	return res;
 }
@@ -690,25 +701,25 @@ static void k32isa_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 {
 	speed_t baud;
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
 	baud = tty_get_baud_rate(tty);
 
-	spin_lock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
 
 	switch (baud)
 	{
 		case 9600:
-			at->control.bits.gap1 = 3;
+			mod->control.bits.com_spd = 3;
 			break;
 		default:
-			at->control.bits.gap1 = 2;
+			mod->control.bits.com_spd = 2;
 			break;
 	}
 
-	at->mod_control(at->cbdata, at->pos_on_board, at->control.full);
+	mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 
-	spin_unlock_bh(&at->lock);
+	spin_unlock_bh(&mod->at_lock);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
 	tty_encode_baud_rate(tty, baud, baud);
@@ -718,11 +729,11 @@ static void k32isa_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 static void k32isa_tty_at_flush_buffer(struct tty_struct *tty)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
-	spin_lock_bh(&at->lock);
-	at->xmit_count = at->xmit_head = at->xmit_tail = 0;
-	spin_unlock_bh(&at->lock);
+	spin_lock_bh(&mod->at_lock);
+	mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
+	spin_unlock_bh(&mod->at_lock);
 	tty_wakeup(tty);
 }
 
@@ -730,9 +741,9 @@ static void k32isa_tty_at_hangup(struct tty_struct *tty)
 {
 #ifdef TTY_PORT
 	struct polygator_tty_device *ptd = tty->driver_data;
-	struct k32isa_tty_at_data *at = (struct k32isa_tty_at_data *)ptd->data;
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
 
-	tty_port_hangup(&at->port);
+	tty_port_hangup(&mod->at_port);
 #endif
 }
 #ifdef TTY_PORT
@@ -747,25 +758,25 @@ static void k32isa_tty_at_port_dtr_rts(struct tty_port *port, int onoff)
 
 static int k32isa_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty)
 {
-	struct k32isa_tty_at_data *at = container_of(port, struct k32isa_tty_at_data, port);
+	struct k32_gsm_module_data *mod = container_of(port, struct k32_gsm_module_data, at_port);
 
 	if (tty_port_alloc_xmit_buf(port) < 0)
 		return -ENOMEM;
-	at->xmit_count = at->xmit_head = at->xmit_tail = 0;
+	mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
-	at->poll_timer.function = k32isa_tty_at_poll;
-	at->poll_timer.data = (unsigned long)at;
-	at->poll_timer.expires = jiffies + 1;
-	add_timer(&at->poll_timer);
+	mod->at_poll_timer.function = k32isa_tty_at_poll;
+	mod->at_poll_timer.data = (unsigned long)mod;
+	mod->at_poll_timer.expires = jiffies + 1;
+	add_timer(&mod->at_poll_timer);
 
 	return 0;
 }
 
 static void k32isa_tty_at_port_shutdown(struct tty_port *port)
 {
-	struct k32isa_tty_at_data *at = container_of(port, struct k32isa_tty_at_data, port);
+	struct k32_gsm_module_data *mod = container_of(port, struct k32_gsm_module_data, at_port);
 
-	del_timer_sync(&at->poll_timer);
+	del_timer_sync(&mod->at_poll_timer);
 
 	tty_port_free_xmit_buf(port);
 }
@@ -774,7 +785,7 @@ static int __init k32isa_init(void)
 {
 	int rc;
 	size_t i, j, k;
-	struct k32isa_tty_at_data *tty_at_data;
+	struct k32_gsm_module_data *mod;
 	resource_size_t start;
 	resource_size_t end;
 	resource_size_t length;
@@ -825,6 +836,15 @@ static int __init k32isa_init(void)
 		rc = -ENOMEM;
 		goto k32isa_init_error;
 	}
+	// request region for Polygator K32 ISA board SIM
+	start = PG_ISA_SIM_BASE;
+	length = PG_ISA_SIM_LENGTH;
+	end = start + length - 1;
+	if (!(k32isa_sim_ioport_reg = request_region(start, length, "polygator_k32isa"))) {
+		log(KERN_ERR, "can't request i/o port region for SIM %04lx-%04lx\n", (unsigned long int)start, (unsigned long int)end);
+		rc = -ENOMEM;
+		goto k32isa_init_error;
+	}
 	// request region for Polygator K32 ISA board IMEI
 	start = PG_ISA_IMEI_BASE;
 	length = PG_ISA_IMEI_LENGTH;
@@ -862,12 +882,12 @@ static int __init k32isa_init(void)
 	for (k=0; k<4; k++)
 	{
 		// alloc memory for board data
-		if (!(k32isa_boards[k] = kmalloc(sizeof(struct k32isa_board), GFP_KERNEL))) {
-			log(KERN_ERR, "can't get memory for struct k32isa_board\n");
+		if (!(k32isa_boards[k] = kmalloc(sizeof(struct k32_board), GFP_KERNEL))) {
+			log(KERN_ERR, "can't get memory for struct k32_board\n");
 			rc = -1;
 			goto k32isa_init_error;
 		}
-		memset(k32isa_boards[k], 0, sizeof(struct k32isa_board));
+		memset(k32isa_boards[k], 0, sizeof(struct k32_board));
 		// get board type
 		for (i=0; i<16; i++)
 		{
@@ -933,96 +953,117 @@ static int __init k32isa_init(void)
 				}
 			}
 		}
-#if 1
-		// set AT command channels
+		// set GSM module data
 		for (i=0; i<8; i++)
 		{
-			if (!(tty_at_data = kmalloc(sizeof(struct k32isa_tty_at_data), GFP_KERNEL))) {
-				log(KERN_ERR, "can't get memory for struct k32isa_tty_at_data\n");
+			if (!(mod = kmalloc(sizeof(struct k32_gsm_module_data), GFP_KERNEL))) {
+				log(KERN_ERR, "can't get memory for struct k32_gsm_module_data\n");
 				rc = -1;
 				goto k32isa_init_error;
 			}
-			memset(tty_at_data, 0, sizeof(struct k32isa_tty_at_data));
+			memset(mod, 0, sizeof(struct k32_gsm_module_data));
 			// select GSM module type
 			if ((k32isa_boards[k]->type & 0x00ff) == 0x0009) {
 				if (k32isa_boards[k]->rom[8] == '*') {
 					if (k32isa_boards[k]->rom[i] == 'M')
-						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_M10;
+						mod->type = POLYGATOR_MODULE_TYPE_M10;
 					else if (k32isa_boards[k]->rom[i] == '9')
-						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM900;
+						mod->type = POLYGATOR_MODULE_TYPE_SIM900;
 					else if (k32isa_boards[k]->rom[i] == 'S')
-						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+						mod->type = POLYGATOR_MODULE_TYPE_SIM300;
 					else if (k32isa_boards[k]->rom[i] == 'G')
-						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM5215;
+						mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
 					else
-						tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_UNKNOWN;
+						mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
 				} else
-					tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+					mod->type = POLYGATOR_MODULE_TYPE_SIM300;
 			} else
-				tty_at_data->gsm_mod_type = POLYGATOR_MODULE_TYPE_SIM300;
+				mod->type = POLYGATOR_MODULE_TYPE_SIM300;
 
-			spin_lock_init(&tty_at_data->lock);
-#ifdef TTY_PORT
-			tty_port_init(&tty_at_data->port);
-			tty_at_data->port.ops = &k32isa_tty_at_port_ops;
-			tty_at_data->port.close_delay = 0;
-			tty_at_data->port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
-#endif
-			
-			if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM300) {
-				tty_at_data->control.bits.mod_off = 1;		// module inactive
-				tty_at_data->control.bits.mode = 0;			// GR
-				tty_at_data->control.bits.rst = 0;			// M10=1 SIM300=0
-				tty_at_data->control.bits.gap0 = 0;			// don't care
-				tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
-				tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				tty_at_data->control.bits.gap1 = 3;			// 3 - 9600, 2 - 115200
-			} else if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM900) {
-				tty_at_data->control.bits.mod_off = 1;		// module inactive
-				tty_at_data->control.bits.mode = 0;			// GR
-				tty_at_data->control.bits.rst = 0;			// M10=1 SIM300=0
-				tty_at_data->control.bits.gap0 = 0;			// don't care
-				tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
-				tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				tty_at_data->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
-			} else if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_SIM5215) {
-				tty_at_data->control.bits.mod_off = 1;		// module inactive
-				tty_at_data->control.bits.mode = 0;			// GR
-				tty_at_data->control.bits.rst = 0;			// M10=1 SIM300=0
-				tty_at_data->control.bits.gap0 = 0;			// don't care
-				tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
-				tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				tty_at_data->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
-			} else if (tty_at_data->gsm_mod_type == POLYGATOR_MODULE_TYPE_M10) {
-				tty_at_data->control.bits.mod_off = 1;		// module inactive
-				tty_at_data->control.bits.mode = 0;			// GR
-				tty_at_data->control.bits.rst = 1;			// M10=1 SIM300=0
-				tty_at_data->control.bits.gap0 = 0;		// don't care
-				tty_at_data->control.bits.pwr_off = 1;		// power suply disabled
-				tty_at_data->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				tty_at_data->control.bits.gap1 = 2;			// 3 - 9600, 2 - 115200
+			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300) {
+				mod->control.bits.mod_off = 1;		// module inactive
+				mod->control.bits.sim_spd_0 = 0;
+				mod->control.bits.sim_spd_1 = 0;
+				mod->control.bits.rst = 0;			// M10=1 SIM300=0
+				mod->control.bits.pwr_off = 1;		// power suply disabled
+				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+				mod->control.bits.com_spd = 3;			// 3 - 9600, 2 - 115200
+			} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM900) {
+				mod->control.bits.mod_off = 1;		// module inactive
+				mod->control.bits.sim_spd_0 = 0;
+				mod->control.bits.sim_spd_1 = 0;
+				mod->control.bits.rst = 0;			// M10=1 SIM300=0
+				mod->control.bits.pwr_off = 1;		// power suply disabled
+				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+				mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+			} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM5215) {
+				mod->control.bits.mod_off = 1;		// module inactive
+				mod->control.bits.sim_spd_0 = 0;
+				mod->control.bits.sim_spd_1 = 0;
+				mod->control.bits.rst = 0;			// M10=1 SIM300=0
+				mod->control.bits.pwr_off = 1;		// power suply disabled
+				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+				mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+			} else if (mod->type == POLYGATOR_MODULE_TYPE_M10) {
+				mod->control.bits.mod_off = 1;		// module inactive
+				mod->control.bits.sim_spd_0 = 0;
+				mod->control.bits.sim_spd_1 = 0;
+				mod->control.bits.rst = 1;			// M10=1 SIM300=0
+				mod->control.bits.pwr_off = 1;		// power suply disabled
+				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
+				mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
 			}
 
-			tty_at_data->pos_on_board = i;
-			tty_at_data->cbdata = k;
-			tty_at_data->mod_control = k32isa_mod_control;
-			tty_at_data->mod_status = k32isa_mod_status;
-			tty_at_data->mod_at_write = k32isa_mod_at_write;
-			tty_at_data->mod_at_read = k32isa_mod_at_read;
+			mod->pos_on_board = i;
+			mod->cbdata = k;
+			mod->set_control = k32isa_gsm_mod_set_control;
+			mod->get_status = k32isa_gsm_mod_get_status;
+			mod->at_write = k32isa_gsm_mod_at_write;
+			mod->at_read = k32isa_gsm_mod_at_read;
+			mod->sim_write = k32isa_gsm_mod_sim_write;
+			mod->sim_read = k32isa_gsm_mod_sim_read;
+			mod->imei_write = k32isa_gsm_mod_imei_write;
+			mod->imei_read = k32isa_gsm_mod_imei_read;
 
-			// register polygator tty at device
-			if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(&k32isa_tty_at_ops))) {
+			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+			init_timer(&mod->at_poll_timer);
+
+			spin_lock_init(&mod->at_lock);
+#ifdef TTY_PORT
+			tty_port_init(&mod->at_port);
+			mod->at_port.ops = &k32isa_tty_at_port_ops;
+			mod->at_port.close_delay = 0;
+			mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
+#endif
+			k32isa_boards[k]->gsm_modules[i] = mod;
+		}
+
+		// register polygator tty at device
+		for (i=0; i<8; i++)
+		{
+			if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, k32isa_boards[k]->gsm_modules[i], &k32isa_tty_at_ops))) {
 				log(KERN_ERR, "can't register polygator tty device\n");
-				kfree(tty_at_data);
 				rc = -1;
 				goto k32isa_init_error;
 			}
-			k32isa_boards[k]->tty_at_channels[i]->data = tty_at_data;
-
-			tty_at_data->mod_control(tty_at_data->cbdata, tty_at_data->pos_on_board, tty_at_data->control.full);
-			init_timer(&tty_at_data->poll_timer);
 		}
-#endif
+
+		// register polygator simcard device
+		for (i=0; i<8; i++)
+		{
+			if (!(k32isa_boards[k]->simcard_channels[i] = simcard_device_register(THIS_MODULE,
+																					k32isa_boards[k]->gsm_modules[i],
+																					k32isa_sim_read,
+																					k32isa_sim_write,
+																					k32isa_sim_is_read_ready,
+																					k32isa_sim_is_write_ready,
+																					k32isa_sim_is_reset_request,
+																					k32isa_sim_set_speed))) {
+				log(KERN_ERR, "can't register polygator simcard device\n");
+				rc = -1;
+				goto k32isa_init_error;
+			}
+		}
 	}
 
 	verbose("loaded successfull\n");
@@ -1034,13 +1075,11 @@ k32isa_init_error:
 		if (k32isa_boards[k]) {
 			for (i=0; i<8; i++)
 			{
-				if (k32isa_boards[k]->tty_at_channels[i]) {
-					tty_at_data = (struct k32isa_tty_at_data *)k32isa_boards[k]->tty_at_channels[i]->data;
-					if (tty_at_data) {
-						del_timer_sync(&tty_at_data->poll_timer);
-						kfree(tty_at_data);
-					}
-					polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				if (k32isa_boards[k]->simcard_channels[i]) simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
+				if (k32isa_boards[k]->tty_at_channels[i]) polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				if (k32isa_boards[k]->gsm_modules[i]) {
+					del_timer_sync(&k32isa_boards[k]->gsm_modules[i]->at_poll_timer);
+					kfree(k32isa_boards[k]->gsm_modules[i]);
 				}
 			}
 			for (j=0; j<2; j++)
@@ -1063,6 +1102,7 @@ k32isa_init_error:
 	if (k32isa_at_ioport_reg) release_region(PG_ISA_AT_BASE, PG_ISA_AT_LENGTH);
 	if (k32isa_ctrl_ioport_reg) release_region(PG_ISA_CTRL_BASE, PG_ISA_CTRL_LENGTH);
 	if (k32isa_vs_ioport_reg) release_region(PG_ISA_VS_BASE, PG_ISA_VS_LENGTH);
+	if (k32isa_sim_ioport_reg) release_region(PG_ISA_SIM_BASE, PG_ISA_SIM_LENGTH);
 	if (k32isa_imei_ioport_reg) release_region(PG_ISA_IMEI_BASE, PG_ISA_IMEI_LENGTH);
 	for (k=0; k<4; k++)
 	{
@@ -1080,17 +1120,16 @@ static void __exit k32isa_exit(void)
 {
 
 	size_t i, j, k;
-	struct k32isa_tty_at_data *tty_at_data;
 
 	for (k=0; k<4; k++)
 	{
 		if (k32isa_boards[k]) {
 			for (i=0; i<8; i++)
 			{
-				tty_at_data = (struct k32isa_tty_at_data *)k32isa_boards[k]->tty_at_channels[i]->data;
-				del_timer_sync(&tty_at_data->poll_timer);
-				kfree(tty_at_data);
+				simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
 				polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				del_timer_sync(&k32isa_boards[k]->gsm_modules[i]->at_poll_timer);
+				kfree(k32isa_boards[k]->gsm_modules[i]);
 			}
 			for (j=0; j<2; j++)
 			{
@@ -1108,6 +1147,7 @@ static void __exit k32isa_exit(void)
 	release_region(PG_ISA_AT_BASE, PG_ISA_AT_LENGTH);
 	release_region(PG_ISA_CTRL_BASE, PG_ISA_CTRL_LENGTH);
 	release_region(PG_ISA_VS_BASE, PG_ISA_VS_LENGTH);
+	release_region(PG_ISA_SIM_BASE, PG_ISA_SIM_LENGTH);
 	release_region(PG_ISA_IMEI_BASE, PG_ISA_IMEI_LENGTH);
 	for (k=0; k<4; k++)
 	{

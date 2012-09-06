@@ -35,7 +35,7 @@ MODULE_PARM_DESC(polygator_subsystem_major, "Major number for Polygator subsyste
 
 static int polygator_tty_major = 0;
 module_param(polygator_tty_major, int, 0);
-MODULE_PARM_DESC(polygator_tty_major, "Major number for Polygator tty device");
+MODULE_PARM_DESC(polygator_tty_major, "Major number for Polygator TTY device");
 
 EXPORT_SYMBOL(polygator_print_gsm_module_type);
 
@@ -87,7 +87,7 @@ struct subsystem_private_data {
 static struct cdev polygator_subsystem_cdev;
 
 static struct polygator_board *polygator_board_list[POLYGATOR_BOARD_MAXCOUNT];
-static DEFINE_SPINLOCK(polygator_board_list_lock);
+static DEFINE_MUTEX(polygator_board_list_lock);
 
 static struct tty_driver *polygator_tty_device_driver = NULL;
 
@@ -207,7 +207,7 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 	}
 // 	memset(private_data, 0, sizeof(struct subsystem_private_data));
 
-	spin_lock(&polygator_board_list_lock);
+	mutex_lock(&polygator_board_list_lock);
 	len = 0;
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
@@ -223,7 +223,7 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 						  );
 		}
 	}
-	spin_unlock(&polygator_board_list_lock);
+	mutex_unlock(&polygator_board_list_lock);
 
 	private_data->length = len;
 
@@ -288,7 +288,7 @@ char *polygator_print_gsm_module_type(int type)
 struct polygator_board *polygator_board_register(struct module *owner, char *name, struct cdev *cdev, struct file_operations *fops)
 {
 	size_t i;
-	char devname[POLYGATOR_BRDNAME_MAXLEN];
+	char brdname[POLYGATOR_BRDNAME_MAXLEN];
 	int rc;
 	int devno = -1;
 	struct polygator_board *brd;
@@ -298,12 +298,12 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 		goto polygator_board_register_error;
 	}
 
-	spin_lock(&polygator_board_list_lock);
+	mutex_lock(&polygator_board_list_lock);
 	// check for name is not used
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
 		if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
-			spin_unlock(&polygator_board_list_lock);
+			mutex_unlock(&polygator_board_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
 			goto polygator_board_register_error;
 		}
@@ -319,7 +319,7 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 			break;
 		}
 	}
-	spin_unlock(&polygator_board_list_lock);
+	mutex_unlock(&polygator_board_list_lock);
 
 	if (devno < 0) {
 		log(KERN_ERR, "\"%s\" - can't get free slot\n", name);
@@ -335,8 +335,8 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto polygator_board_register_error;
 	}
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "polygator!%s", name);
-	if (!(brd->device = CLASS_DEV_CREATE(polygator_class, devno, NULL, devname))) {
+	snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "polygator!%s", name);
+	if (!(brd->device = CLASS_DEV_CREATE(polygator_class, devno, NULL, brdname))) {
 		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
 		goto polygator_board_register_error;
 	}
@@ -346,7 +346,7 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 
 polygator_board_register_error:
 	if (devno >= 0) {
-		spin_lock(&polygator_board_list_lock);
+		mutex_lock(&polygator_board_list_lock);
 		for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 		{
 			if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
@@ -354,7 +354,7 @@ polygator_board_register_error:
 				break;
 			}
 		}
-		spin_unlock(&polygator_board_list_lock);
+		mutex_unlock(&polygator_board_list_lock);
 	}
 	if (brd) kfree(brd);
 	return NULL;
@@ -369,7 +369,7 @@ void polygator_board_unregister(struct polygator_board *brd)
 
 	verbose("\"%s\" unregistered\n", brd->name);
 
-	spin_lock(&polygator_board_list_lock);
+	mutex_lock(&polygator_board_list_lock);
 
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 	{
@@ -379,10 +379,10 @@ void polygator_board_unregister(struct polygator_board *brd)
 			break;
 		}
 	}
-	spin_unlock(&polygator_board_list_lock);
+	mutex_unlock(&polygator_board_list_lock);
 }
 
-struct polygator_tty_device *polygator_tty_device_register(struct tty_operations *tty_ops)
+struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_operations *tty_ops)
 {
 	size_t i;
 	struct polygator_tty_device *ptd;
@@ -417,6 +417,8 @@ struct polygator_tty_device *polygator_tty_device_register(struct tty_operations
 		log(KERN_ERR, "can't register tty device\n");
 		goto polygator_tty_device_register_error;
 	}
+	// set data
+	ptd->data = data;
 
 	return ptd;
 
@@ -446,7 +448,6 @@ void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
 static int __init polygator_init(void)
 {
 	size_t i;
-	int rc;
 	dev_t devno;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	struct device *device = NULL;
@@ -454,6 +455,7 @@ static int __init polygator_init(void)
 	struct class_device *device = NULL;
 #endif
 	int polygator_subsystem_major_reg = 0;
+	int rc = -1;
 
 	verbose("loading ...\n");
 
@@ -461,7 +463,10 @@ static int __init polygator_init(void)
 		polygator_board_list[i] = NULL;
 
 	// Registering polygator device class
-	polygator_class = class_create(THIS_MODULE, "polygator");
+	if (!(polygator_class = class_create(THIS_MODULE, "polygator"))) {
+		log(KERN_ERR, "class_create() error\n");
+		goto polygator_init_error;
+	}
 	// Register char device region
 	if (polygator_subsystem_major) {
 		devno = MKDEV(polygator_subsystem_major, 0);

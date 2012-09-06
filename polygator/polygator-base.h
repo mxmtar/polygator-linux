@@ -6,9 +6,9 @@
 #define __POLYGATOR_BASE_H__
 
 #define POLYGATOR_DEVICE_MAXCOUNT 256
+#define POLYGATOR_DEVNAME_MAXLEN 256
 
 #define POLYGATOR_BOARD_MAXCOUNT 32
-
 #define POLYGATOR_BRDNAME_MAXLEN 256
 
 #define POLYGATOR_TTY_DEVICE_MAXCOUNT 256
@@ -26,18 +26,17 @@ enum {
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/device.h>
-// #include <linux/poll.h>
-// #include <linux/spinlock.h>
-// #include <linux/timer.h>
+#include <linux/poll.h>
+#include <linux/spinlock.h>
+#include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/types.h>
-// #include <linux/types.h>
-// #include <linux/wait.h>
+#include <linux/wait.h>
 
 struct polygator_board {
-	int devno;
 	char name[POLYGATOR_BRDNAME_MAXLEN];
+	int devno;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	struct device *device;
 #else
@@ -62,7 +61,7 @@ void polygator_board_unregister(struct polygator_board *brd);
 
 char *polygator_print_gsm_module_type(int type);
 
-struct polygator_tty_device *polygator_tty_device_register(struct tty_operations *tty_ops);
+struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_operations *tty_ops);
 void polygator_tty_device_unregister(struct polygator_tty_device *ptd);
 
 #endif //__KERNEL__

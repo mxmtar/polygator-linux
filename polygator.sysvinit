@@ -19,6 +19,7 @@ stop() {
     echo -n $"Unoading Polygator K32ISA modules: "
     rmmod k32isa
     rmmod vinetic
+	rmmod simcard
     rmmod polygator
     RETVAL=$?
     echo
