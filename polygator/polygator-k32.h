@@ -59,6 +59,7 @@ struct k32_gsm_module_data {
 	u_int8_t (* imei_read)(uintptr_t cbdata, size_t pos);
 
 	// at section
+	int at_port_select;
 	spinlock_t at_lock;
 #ifdef TTY_PORT
 	struct tty_port at_port;

@@ -51,7 +51,7 @@ MODULE_LICENSE("GPL");
 #define PG_PCI_ID_BASE			0x28
 #define PG_PCI_AT_BASE			0x30
 #define PG_PCI_ST_BASE			0x04
-#define PG_PCI_CTRL_BASE			0x04
+#define PG_PCI_CTRL_BASE		0x04
 #define PG_PCI_ROM_BASE			0x24
 #define PG_PCI_VIN_ST_BASE		0x2C
 #define PG_PCI_VIN_DATA_BASE	0x50
@@ -304,7 +304,7 @@ static void k32pci_sim_set_speed(void *data, int speed)
 
 static void k32pci_tty_at_poll(unsigned long addr)
 {
-	char buff[512];
+	unsigned char buff[512];
 	size_t len;
 	struct tty_struct *tty;
 	union k32_gsm_mod_status_reg status;
@@ -319,10 +319,20 @@ static void k32pci_tty_at_poll(unsigned long addr)
 	{
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
-		if (status.bits.at_rdy_rd)
-			break;		
-		// put char to receiving buffer
-		buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
+		// select port
+		if (mod->at_port_select) {
+			// auxilary
+			if (status.bits.imei_rdy_rd)
+				break;
+			// put char to receiving buffer
+			buff[len++] = mod->imei_read(mod->cbdata, mod->pos_on_board);
+		} else {
+			// main
+			if (status.bits.at_rdy_rd)
+				break;
+			// put char to receiving buffer
+			buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
+		}
 	}
 
 	spin_lock(&mod->at_lock);
@@ -330,15 +340,30 @@ static void k32pci_tty_at_poll(unsigned long addr)
 	 while (mod->at_xmit_count) {
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
-		// check for transmitter is ready
-		if (!status.bits.at_rdy_wr)
-			break;
-		// put char to transmitter buffer
+		// select port
+		if (mod->at_port_select) {
+			// auxilary
+			// check for transmitter is ready
+			if (!status.bits.imei_rdy_wr)
+				break;
+			// put char to transmitter buffer
 #ifdef TTY_PORT
-		mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+			mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
 #else
-		mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+			mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
+		} else {
+			// main
+			// check for transmitter is ready
+			if (!status.bits.at_rdy_wr)
+				break;
+			// put char to transmitter buffer
+#ifdef TTY_PORT
+			mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+#else
+			mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+#endif
+		}
 		mod->at_xmit_tail++;
 		if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
 			mod->at_xmit_tail = 0;
@@ -486,6 +511,7 @@ static ssize_t k32pci_board_write(struct file *filp, const char __user *buff, si
 	u_int32_t pwr_state;
 	u_int32_t key_state;
 	u_int32_t baudrate;
+	u_int32_t serial;
 	struct k32_gsm_module_data *mod;
 	struct k32_board_private_data *private_data = filp->private_data;
 
@@ -522,6 +548,14 @@ static ssize_t k32pci_board_write(struct file *filp, const char __user *buff, si
 			else
 				mod->control.bits.com_spd = 2;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+			res = len;
+		} else
+			res = -ENODEV;
+	} else if (sscanf(cmd, "GSM%u SERIAL=%u", &at_chan, &serial) == 2) {
+		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
+			mod = private_data->board->gsm_modules[at_chan];
+			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300)
+				mod->at_port_select = serial;
 			res = len;
 		} else
 			res = -ENODEV;
@@ -729,7 +763,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		mod->sim_read = k32pci_gsm_mod_sim_read;
 		mod->imei_write = k32pci_gsm_mod_imei_write;
 		mod->imei_read = k32pci_gsm_mod_imei_read;
-		
+
 		mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 		init_timer(&mod->at_poll_timer);
 

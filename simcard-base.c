@@ -265,7 +265,6 @@ struct simcard_device *simcard_device_register(struct module *owner,
 		goto simcard_device_register_error;
 	}
 
-	verbose("\"sim%d\" registered\n", MINOR(sim->devno));
 	return sim;
 
 simcard_device_register_error:
@@ -282,8 +281,6 @@ void simcard_device_unregister(struct simcard_device *sim)
 {
 	CLASS_DEV_DESTROY(simcard_class, sim->devno);
 	cdev_del(&sim->cdev);
-
-	verbose("\"sim%d\" unregistered\n", MINOR(sim->devno));
 
 	mutex_lock(&simcard_device_list_lock);
 	simcard_device_list[MINOR(sim->devno)] = NULL;
