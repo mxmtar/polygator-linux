@@ -27,6 +27,7 @@
 #endif
 
 #include "polygator/simcard-base.h"
+#include "polygator/simcard-def.h"
 
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux module for virtual SIM card support");
@@ -78,38 +79,86 @@ static DEFINE_MUTEX(simcard_device_list_lock);
 
 static void simcard_poll_proc(unsigned long addr)
 {
+	int reset;
 	struct simcard_device *sim = (struct simcard_device *)addr;
+
+	spin_lock(&sim->lock);
+
+	// reset
+	reset = sim->is_reset_request(sim->data);
+	if (reset != sim->reset_state) {
+		// fill simcard reset container
+		sim->reset.header.type = SIMCARD_CONTAINER_TYPE_RESET;
+		sim->reset.header.length = sizeof(sim->reset.container.reset);
+		// store data
+		sim->reset.container.reset = reset;
+		// set reset status bit
+		sim->read_status.bits.reset = 1;
+	}
+	sim->reset_state = reset;
+
+	// read
+	if ((reset) && (!sim->is_read_ready(sim->data))) {
+		// reset simcard data container
+		sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
+		sim->command.header.length = 0;
+		// store data
+		while ((reset) && (sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (!sim->is_read_ready(sim->data)))
+			sim->command.container.data[sim->command.header.length++] = sim->read(sim->data);
+		// set data status bit
+		sim->read_status.bits.data = 1;
+	}
+
+	if (sim->read_status.full) {
+		wake_up_interruptible(&sim->read_waitq);
+		wake_up_interruptible(&sim->poll_waitq);
+	}
+
+	spin_unlock(&sim->lock);
 
 	if (sim->poll)
 		mod_timer(&sim->poll_timer, jiffies + 1);
-
-	return;
 }
 
 static int simcard_open(struct inode *inode, struct file *filp)
 {
+	size_t usage;
 	struct simcard_device *sim;
 
 	sim = container_of(inode->i_cdev, struct simcard_device, cdev);
 	filp->private_data = sim;
 
-	sim->poll_timer.function = simcard_poll_proc;
-	sim->poll_timer.data = (unsigned long)sim;
-	sim->poll_timer.expires = jiffies + 1;
-	add_timer(&sim->poll_timer);
+	spin_lock_bh(&sim->lock);
+	usage = sim->usage++;
+	if (!usage) {
+		sim->read_status.full = 0;
+		sim->write_status.bits.speed = 1;
+		sim->poll = 1;
+	}
+	spin_unlock_bh(&sim->lock);
+
+	if (!usage) {
+		sim->poll_timer.function = simcard_poll_proc;
+		sim->poll_timer.data = (unsigned long)sim;
+		sim->poll_timer.expires = jiffies + 1;
+		add_timer(&sim->poll_timer);
+	}
 	
 	return 0;
 }
 
 static int simcard_release(struct inode *inode, struct file *filp)
 {
+	size_t usage;
 	struct simcard_device *sim = filp->private_data;
 
 	spin_lock_bh(&sim->lock);
-	sim->poll = 0;
+	usage = --sim->usage;
+	if (!usage) sim->poll = 0;
 	spin_unlock_bh(&sim->lock);
 
-	del_timer_sync(&sim->poll_timer);
+	if (!usage)
+		del_timer_sync(&sim->poll_timer);
 
 	return 0;
 }
@@ -117,23 +166,123 @@ static int simcard_release(struct inode *inode, struct file *filp)
 static ssize_t simcard_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
 {
 	ssize_t res;
-// 	struct simcard_device *sim = filp->private_data;
+	size_t length;
+	struct simcard_data data;
+	struct simcard_device *sim = filp->private_data;
 
 	res = 0;
+	length = 0;
 
-// simcard_read_end:
+	spin_lock_bh(&sim->lock);
+
+	for (;;)
+	{
+		if (sim->read_status.full) break;
+
+		if (filp->f_flags & O_NONBLOCK) {
+			spin_unlock_bh(&sim->lock);
+			res = -EAGAIN;
+			goto simcard_read_end;
+		}
+		// sleeping
+		spin_unlock_bh(&sim->lock);
+		if ((res = wait_event_interruptible(sim->read_waitq, sim->read_status.full)))
+			goto simcard_read_end;
+		spin_lock_bh(&sim->lock);
+	}
+
+	// select container
+	if (sim->read_status.bits.reset) {
+		length = sizeof(sim->reset.header) + sim->reset.header.length;
+		memcpy(&data, &sim->reset, length);
+		sim->read_status.bits.reset = 0;
+	} else if (sim->read_status.bits.data) {
+		length = sizeof(sim->command.header) + sim->command.header.length;
+		memcpy(&data, &sim->command, length);
+		sim->read_status.bits.data = 0;
+	} else {
+		sim->read_status.full = 0;
+		spin_unlock_bh(&sim->lock);
+		res = -EAGAIN;
+		goto simcard_read_end;
+	}
+
+	spin_unlock_bh(&sim->lock);
+
+	length = min(length, count);
+	if (copy_to_user(buff, &data, length)) {
+		res = -EFAULT;
+		goto simcard_read_end;
+	}
+
+	res = length;
+
+simcard_read_end:
 	return res;
 }
 
 static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
 {
 	ssize_t res;
+	size_t length;
+	size_t i;
+	struct simcard_data data;
 
-// 	struct simcard_device *sim = filp->private_data;
+	struct simcard_device *sim = filp->private_data;
 
 	res = 0;
 
-// simcard_write_end:
+	length = sizeof(struct simcard_data);
+	length = min(length, count);
+	if (copy_from_user(&data, buff, length)) {
+		res = -EFAULT;
+		goto simcard_write_end;
+	}
+
+	spin_lock_bh(&sim->lock);
+
+	for (;;)
+	{
+		if (sim->write_status.full) break;
+
+		if (filp->f_flags & O_NONBLOCK) {
+			spin_unlock_bh(&sim->lock);
+			res = -EAGAIN;
+			goto simcard_write_end;
+		}
+		// sleeping
+		spin_unlock_bh(&sim->lock);
+		if ((res = wait_event_interruptible(sim->write_waitq, sim->write_status.full)))
+			goto simcard_write_end;
+		spin_lock_bh(&sim->lock);
+	}
+
+	switch (data.header.type)
+	{
+		case SIMCARD_CONTAINER_TYPE_DATA:
+			i = 0;
+			while (data.header.length)
+			{
+				if (sim->is_write_ready(sim->data)) {
+					sim->write(sim->data, data.container.data[i++]);
+					data.header.length--;
+				}
+			}
+			break;
+		case SIMCARD_CONTAINER_TYPE_SPEED:
+			sim->set_speed(sim->data, data.container.speed);
+			break;
+		default:
+			spin_unlock_bh(&sim->lock);
+			res = -EINVAL;
+			goto simcard_write_end;
+	}
+
+	spin_unlock_bh(&sim->lock);
+
+	res = length;
+
+simcard_write_end:
 	return res;
 }
 
@@ -148,9 +297,11 @@ static unsigned int simcard_poll(struct file *filp, struct poll_table_struct *wa
 
 	spin_lock_bh(&sim->lock);
 
-// 		res |= POLLIN | POLLRDNORM;
+	if (sim->read_status.full)
+		res |= POLLIN | POLLRDNORM;
 
-// 		res |= POLLOUT | POLLWRNORM;
+	if (sim->write_status.full)
+		res |= POLLOUT | POLLWRNORM;
 
 	spin_unlock_bh(&sim->lock);
 
@@ -209,6 +360,8 @@ struct simcard_device *simcard_device_register(struct module *owner,
 	// init simcard data
 	spin_lock_init(&sim->lock);
 	init_waitqueue_head(&sim->poll_waitq);
+	init_waitqueue_head(&sim->read_waitq);
+	init_waitqueue_head(&sim->write_waitq);
 	init_timer(&sim->poll_timer);
 	sim->poll = 0;
 

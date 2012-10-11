@@ -120,6 +120,7 @@ static int g20_tty_at_open(struct tty_struct *tty, struct file *filp);
 static void g20_tty_at_close(struct tty_struct *tty, struct file *filp);
 static int g20_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count);
 static int g20_tty_at_write_room(struct tty_struct *tty);
+static int g20_tty_at_chars_in_buffer(struct tty_struct *tty);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 static void g20_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios);
 #else
@@ -133,7 +134,7 @@ static struct tty_operations g20_tty_at_ops = {
 	.close = g20_tty_at_close,
 	.write = g20_tty_at_write,
 	.write_room = g20_tty_at_write_room,
-// 	.chars_in_buffer = g20_tty_at_chars_in_buffer,
+	.chars_in_buffer = g20_tty_at_chars_in_buffer,
 	.set_termios = g20_tty_at_set_termios,
 	.flush_buffer = g20_tty_at_flush_buffer,
 	.hangup = g20_tty_at_hangup,
@@ -459,6 +460,14 @@ static ssize_t g20_board_write(struct file *filp, const char __user *buff, size_
 			res = len;
 		} else
 			res= -ENODEV;
+	} else if (sscanf(cmd, "0x1160 %u", &key_state) == 1) {
+		iowrite8(key_state, g20_cs3_base_ptr + 0x1160);
+		verbose("0x1160 %u\n", key_state);
+		res = len;
+	} else if (sscanf(cmd, "0x1170 %u", &key_state) == 1) {
+		iowrite8(key_state, g20_cs3_base_ptr + 0x1170);
+		verbose("0x1170 %u\n", key_state);
+		res = len;
 	} else
 		res = -ENOMSG;
 
@@ -542,6 +551,21 @@ static int g20_tty_at_write_room(struct tty_struct *tty)
 	spin_lock_bh(&at->lock);
 
 	res = SERIAL_XMIT_SIZE - at->xmit_count;
+
+	spin_unlock_bh(&at->lock);
+	
+	return res;
+}
+
+static int g20_tty_at_chars_in_buffer(struct tty_struct *tty)
+{
+	int res;
+	struct polygator_tty_device *ptd = tty->driver_data;
+	struct g20_tty_at_data *at = (struct g20_tty_at_data *)ptd->data;
+
+	spin_lock_bh(&at->lock);
+
+	res = at->xmit_count;
 
 	spin_unlock_bh(&at->lock);
 	
@@ -755,7 +779,7 @@ static int __init g20_init(void)
 																g20_vinetic_read_dia))) {
 				rc = -1;
 				goto g20_init_error;
-				}
+			}
 			for (i=0; i<4; i++)
 			{
 				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-g20-%lu-vin0-rtp%lu", (unsigned long int)k, (unsigned long int)i);
@@ -812,7 +836,7 @@ static int __init g20_init(void)
 				tty_at_data->port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
 
 				// register polygator tty at device
-				if (!(g20_boards[k]->tty_at_channels[i] = polygator_tty_device_register(&g20_tty_at_ops))) {
+				if (!(g20_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, tty_at_data, &g20_tty_at_ops))) {
 					log(KERN_ERR, "can't register polygator tty device\n");
 					kfree(tty_at_data);
 					rc = -1;

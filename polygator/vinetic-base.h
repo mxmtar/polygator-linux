@@ -31,6 +31,7 @@ struct vinetic {
 	char *name;
 	int devno;
 	spinlock_t lock;
+	size_t usage;
 	struct timer_list poll_timer;
 	int poll;
 
@@ -79,6 +80,7 @@ struct vinetic_rtp_channel {
 	char *name;
 	int devno;
 	spinlock_t lock;
+	size_t usage;
 
 	wait_queue_head_t poll_waitq;
 	wait_queue_head_t read_slot_count_waitq;

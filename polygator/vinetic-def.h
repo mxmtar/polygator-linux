@@ -5,7 +5,11 @@
 #ifndef __VINETIC_DEF_H__
 #define __VINETIC_DEF_H__
 
+#ifdef __KERNEL__
 #include <linux/types.h>
+#else
+#include <sys/types.h>
+#endif
 
 /*!
  * \brief VINETIC data packet type

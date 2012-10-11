@@ -24,6 +24,7 @@
 #endif
 
 #include "polygator/polygator-base.h"
+#include "polygator/version.h"
 
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux base module");
@@ -457,7 +458,7 @@ static int __init polygator_init(void)
 	int polygator_subsystem_major_reg = 0;
 	int rc = -1;
 
-	verbose("loading ...\n");
+	verbose("loading version \"%s\"...\n", POLYGATOR_LINUX_VERSION);
 
 	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
 		polygator_board_list[i] = NULL;

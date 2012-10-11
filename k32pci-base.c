@@ -33,7 +33,7 @@
 
 #include "polygator/simcard-base.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36) // 2,6,30 - orig
 #define TTY_PORT
 #endif
 
@@ -622,7 +622,8 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	}
 	verbose("found PCI board type=%04x\n", brd->type & 0x00ff);
 
-	if (((brd->type & 0x00ff) != 0x0081) && ((brd->type & 0x00ff) != 0x0082) && ((brd->type & 0x00ff) != 0x0083)) {
+	if (((brd->type & 0x00ff) != 0x0081) && ((brd->type & 0x00ff) != 0x0082) &&
+			((brd->type & 0x00ff) != 0x0083) && ((brd->type & 0x00ff) != 0x0084)) {
 		log(KERN_ERR, "PCI board type=%04x unsupported\n", brd->type & 0x00ff);
 		rc = -1;
 		goto k32pci_board_probe_error;
@@ -698,7 +699,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		}
 		memset(mod, 0, sizeof(struct k32_gsm_module_data));
 		// select GSM module type
-		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083)) {
+		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083) || ((brd->type & 0x00ff) == 0x0084)) {
 			if (brd->rom[8] == '*') {
 				if (brd->rom[i] == 'M')
 					mod->type = POLYGATOR_MODULE_TYPE_M10;

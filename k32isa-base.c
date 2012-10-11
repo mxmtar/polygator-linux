@@ -33,7 +33,7 @@
 
 #include "polygator/simcard-base.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36) // 2,6,30 - orig
 #define TTY_PORT
 #endif
 

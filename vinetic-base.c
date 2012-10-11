@@ -630,18 +630,26 @@ static int vinetic_open(struct inode *inode, struct file *filp)
 
 	vin = container_of(inode->i_cdev, struct vinetic, cdev);
 	filp->private_data = vin;
+
+	spin_lock_bh(&vin->lock);
+	vin->usage++;
+	spin_unlock_bh(&vin->lock);
 	return 0;
 }
 
 static int vinetic_release(struct inode *inode, struct file *filp)
 {
+	size_t usage;
 	struct vinetic *vin = filp->private_data;
 
 	spin_lock_bh(&vin->lock);
-	vin->poll = 0;
+	usage = --vin->usage;
+	if (!usage)
+		vin->poll = 0;
 	spin_unlock_bh(&vin->lock);
 
-	del_timer_sync(&vin->poll_timer);
+	if (!usage)
+		del_timer_sync(&vin->poll_timer);
 
 	return 0;
 }
@@ -1469,15 +1477,17 @@ static int vinetic_rtp_channel_open(struct inode *inode, struct file *filp)
 
 	spin_lock_bh(&rtp->lock);
 
-	// reset read packet slot counters
-	rtp->read_slot_read = 0;
-	rtp->read_slot_write = 0;
-	rtp->read_slot_count = 0;
+	if (rtp->usage++) {
+		// reset read packet slot counters
+		rtp->read_slot_read = 0;
+		rtp->read_slot_write = 0;
+		rtp->read_slot_count = 0;
 
-	// reset write packet slot counters
-	rtp->write_slot_read = 0;
-	rtp->write_slot_write = 0;
-	rtp->write_slot_count = 0;
+		// reset write packet slot counters
+		rtp->write_slot_read = 0;
+		rtp->write_slot_write = 0;
+		rtp->write_slot_count = 0;
+	}
 
 	spin_unlock_bh(&rtp->lock);
 
@@ -1486,6 +1496,11 @@ static int vinetic_rtp_channel_open(struct inode *inode, struct file *filp)
 
 static int vinetic_rtp_channel_release(struct inode *inode, struct file *filp)
 {
+	struct vinetic_rtp_channel *rtp = filp->private_data;
+
+	spin_lock_bh(&rtp->lock);
+	rtp->usage--;
+	spin_unlock_bh(&rtp->lock);
 	return 0;
 }
 
