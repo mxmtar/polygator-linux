@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# mkdist
+# usage: mkdist [tag]
+
+if [ "${1}" ]; then
+	TAG=${1}
+	VERSION=${1}
+else
+	TAG=HEAD
+	HASH=`git log -1 --pretty=%h`
+	if [ -f .version ]; then
+		VERSION=`cat .version`-${HASH}
+	else
+		VERSION=unknown-${HASH}
+	fi
+fi
+
+./mkverhdr POLYGATOR_LINUX polygator/version.h
+
+rm -f polygator-linux-${VERSION}.tar.gz
+rm -rf polygator-linux-${VERSION}
+
+git archive --format=tar.gz --prefix=polygator-linux-${VERSION}/ ${TAG} > polygator-linux-${VERSION}.tar.gz
+
+tar -xzf polygator-linux-${VERSION}.tar.gz
+cp polygator/version.h polygator-linux-${VERSION}/polygator/version.h
+tar -czf polygator-linux-${VERSION}.tar.gz polygator-linux-${VERSION}
+
+rm -rf polygator-linux-${VERSION}
+
+# end of mkdist

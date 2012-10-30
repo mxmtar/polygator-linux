@@ -1477,7 +1477,7 @@ static int vinetic_rtp_channel_open(struct inode *inode, struct file *filp)
 
 	spin_lock_bh(&rtp->lock);
 
-	if (rtp->usage++) {
+	if (!rtp->usage++) {
 		// reset read packet slot counters
 		rtp->read_slot_read = 0;
 		rtp->read_slot_write = 0;

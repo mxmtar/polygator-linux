@@ -1,0 +1,45 @@
+#!/bin/sh
+
+# mkverhdr
+# usage: mkverhdr prefix [out]
+
+
+if [ -n "${1}" ]; then
+
+	if [ "${2}" ]; then
+		if [ -f "${2}" ]; then
+			rm -f ${2}
+		fi
+		OUTSTREAM=${2}
+	else
+		OUTSTREAM="/dev/stdout"
+	fi
+
+	if [ -f .version ]; then
+		VERSION=`cat .version`
+	else
+		VERSION=unknown
+	fi
+
+	printf "/******************************************************************************/\n" >> ${OUTSTREAM}
+	printf "/* version.h                                                                  */\n" >> ${OUTSTREAM}
+	printf "/******************************************************************************/\n" >> ${OUTSTREAM}
+	printf "/* this file is automaticaly generated                                        */\n" >> ${OUTSTREAM}
+	printf "/******************************************************************************/\n" >> ${OUTSTREAM}
+	printf "\n" >> ${OUTSTREAM}
+	printf "#ifndef __VERSION_H__\n" >> ${OUTSTREAM}
+	printf "#define __VERSION_H__\n" >> ${OUTSTREAM}
+	printf "\n" >> ${OUTSTREAM}
+	printf "#define ${1}_VERSION \"%s\"\n" ${VERSION} >> ${OUTSTREAM}
+	printf "\n" >> ${OUTSTREAM}
+	printf "#endif //__VERSION_H__\n" >> ${OUTSTREAM}
+	printf "\n" >> ${OUTSTREAM}
+	printf "/******************************************************************************/\n" >> ${OUTSTREAM}
+	printf "/* end of version.h                                                           */\n" >> ${OUTSTREAM}
+	printf "/******************************************************************************/\n" >> ${OUTSTREAM}
+
+else
+	echo "usage: mkverhdr prefix [out]"
+fi
+
+# end of mkverhdr
