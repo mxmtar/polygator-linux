@@ -372,7 +372,7 @@ static void k32isa_tty_at_poll(unsigned long addr)
 		} else {
 			// main
 			// check for transmitter is ready
-			if (!status.bits.at_rdy_wr)
+			if (!status.bits.at_rdy_wr || !status.bits.at_rdy_rd)
 				break;
 			// put char to transmitter buffer
 #ifdef TTY_PORT
