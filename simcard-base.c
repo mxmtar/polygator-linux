@@ -98,12 +98,12 @@ static void simcard_poll_proc(unsigned long addr)
 	sim->reset_state = reset;
 
 	// read
-	if ((reset) && (!sim->is_read_ready(sim->data))) {
+	if (!sim->is_read_ready(sim->data)) {
 		// reset simcard data container
 		sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
 		sim->command.header.length = 0;
 		// store data
-		while ((reset) && (sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (!sim->is_read_ready(sim->data)))
+		while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (!sim->is_read_ready(sim->data)))
 			sim->command.container.data[sim->command.header.length++] = sim->read(sim->data);
 		// set data status bit
 		sim->read_status.bits.data = 1;

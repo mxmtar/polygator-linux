@@ -372,19 +372,19 @@ static void k32isa_tty_at_poll(unsigned long addr)
 		} else {
 			// main
 			// check for transmitter is ready
-			if (!status.bits.at_rdy_wr || !status.bits.at_rdy_rd)
-				break;
-			// put char to transmitter buffer
+			if (status.bits.at_rdy_wr) {
+				// put char to transmitter buffer
 #ifdef TTY_PORT
-			mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
 #else
-			mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
+				mod->at_xmit_tail++;
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+					mod->at_xmit_tail = 0;
+				mod->at_xmit_count--;
+			}
 		}
-		mod->at_xmit_tail++;
-		if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
-			mod->at_xmit_tail = 0;
-		mod->at_xmit_count--;
 	}
 
 	spin_unlock(&mod->at_lock);
