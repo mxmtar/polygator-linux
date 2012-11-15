@@ -1021,7 +1021,7 @@ static int __init k32isa_init(void)
 				mod->control.bits.rst = 0;			// M10=1 SIM300=0
 				mod->control.bits.pwr_off = 1;		// power suply disabled
 				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				mod->control.bits.com_spd = 3;			// 3 - 9600, 2 - 115200
+				mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 			} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM900) {
 				mod->control.bits.mod_off = 1;		// module inactive
 				mod->control.bits.sim_spd_0 = 0;
@@ -1029,7 +1029,7 @@ static int __init k32isa_init(void)
 				mod->control.bits.rst = 0;			// M10=1 SIM300=0
 				mod->control.bits.pwr_off = 1;		// power suply disabled
 				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+				mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 			} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM5215) {
 				mod->control.bits.mod_off = 1;		// module inactive
 				mod->control.bits.sim_spd_0 = 0;
@@ -1037,7 +1037,7 @@ static int __init k32isa_init(void)
 				mod->control.bits.rst = 0;			// M10=1 SIM300=0
 				mod->control.bits.pwr_off = 1;		// power suply disabled
 				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+				mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 			} else if (mod->type == POLYGATOR_MODULE_TYPE_M10) {
 				mod->control.bits.mod_off = 1;		// module inactive
 				mod->control.bits.sim_spd_0 = 0;
@@ -1045,7 +1045,10 @@ static int __init k32isa_init(void)
 				mod->control.bits.rst = 1;			// M10=1 SIM300=0
 				mod->control.bits.pwr_off = 1;		// power suply disabled
 				mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-				mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+				mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
+			} else {
+				kfree(mod);
+				continue;
 			}
 
 			mod->pos_on_board = i;
@@ -1160,10 +1163,12 @@ static void __exit k32isa_exit(void)
 		if (k32isa_boards[k]) {
 			for (i=0; i<8; i++)
 			{
-				simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
-				polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
-				del_timer_sync(&k32isa_boards[k]->gsm_modules[i]->at_poll_timer);
-				kfree(k32isa_boards[k]->gsm_modules[i]);
+				if (k32isa_boards[k]->simcard_channels[i]) simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
+				if (k32isa_boards[k]->tty_at_channels[i]) polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				if (k32isa_boards[k]->gsm_modules[i]) {
+					del_timer_sync(&k32isa_boards[k]->gsm_modules[i]->at_poll_timer);
+					kfree(k32isa_boards[k]->gsm_modules[i]);
+				}
 			}
 			for (j=0; j<2; j++)
 			{

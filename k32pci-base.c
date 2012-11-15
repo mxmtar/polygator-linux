@@ -45,6 +45,12 @@ MODULE_LICENSE("GPL");
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
+#if 0
+static int test_flag = 0;
+static u_int8_t test_buff[8];
+static int test_crlf = 0;
+#endif
+
 /*! */
 #define PG_PCI_NUM_BASE			0x00
 #define PG_PCI_OFFSET_RESET		0x00
@@ -332,6 +338,32 @@ static void k32pci_tty_at_poll(unsigned long addr)
 				break;
 			// put char to receiving buffer
 			buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
+#if 0
+			test_buff[0] = test_buff[1];
+			test_buff[1] = test_buff[2];
+			test_buff[2] = test_buff[3];
+			test_buff[3] = test_buff[4];
+			test_buff[4] = buff[len-1];
+
+			if (test_flag) {
+				verbose("%02X\n", buff[len-1]);
+				if (!strncasecmp(&test_buff[3], "\r\n", 2))
+					test_crlf++;
+				if (test_crlf >= 2)
+					test_flag = 0;
+			} else {
+				if (!strncasecmp(test_buff, "+CMT:", 5) || !strncasecmp(test_buff, "+CDS:", 5)) {
+					test_crlf = 0;
+					test_flag = 1;
+					verbose("%02X\n", test_buff[0]);
+					verbose("%02X\n", test_buff[1]);
+					verbose("%02X\n", test_buff[2]);
+					verbose("%02X\n", test_buff[3]);
+					verbose("%02X\n", test_buff[4]);
+				}
+			}
+			
+#endif
 		}
 	}
 
@@ -724,7 +756,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			mod->control.bits.rst = 0;			// M10=1 SIM300=0
 			mod->control.bits.pwr_off = 1;		// power suply disabled
 			mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-			mod->control.bits.com_spd = 3;			// 3 - 9600, 2 - 115200
+			mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 		} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM900) {
 			mod->control.bits.mod_off = 1;		// module inactive
 			mod->control.bits.sim_spd_0 = 0;
@@ -732,7 +764,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			mod->control.bits.rst = 0;			// M10=1 SIM300=0
 			mod->control.bits.pwr_off = 1;		// power suply disabled
 			mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-			mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+			mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 		} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM5215) {
 			mod->control.bits.mod_off = 1;		// module inactive
 			mod->control.bits.sim_spd_0 = 0;
@@ -740,7 +772,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			mod->control.bits.rst = 0;			// M10=1 SIM300=0
 			mod->control.bits.pwr_off = 1;		// power suply disabled
 			mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-			mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+			mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 		} else if (mod->type == POLYGATOR_MODULE_TYPE_M10) {
 			mod->control.bits.mod_off = 1;		// module inactive
 			mod->control.bits.sim_spd_0 = 0;
@@ -748,15 +780,10 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			mod->control.bits.rst = 1;			// M10=1 SIM300=0
 			mod->control.bits.pwr_off = 1;		// power suply disabled
 			mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-			mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+			mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
 		} else {
-			mod->control.bits.mod_off = 1;		// module inactive
-			mod->control.bits.sim_spd_0 = 0;
-			mod->control.bits.sim_spd_1 = 0;
-			mod->control.bits.rst = 0;			// M10=1 SIM300=0
-			mod->control.bits.pwr_off = 1;		// power suply disabled
-			mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
-			mod->control.bits.com_spd = 2;			// 3 - 9600, 2 - 115200
+			kfree(mod);
+			continue;
 		}
 
 		mod->pos_on_board = i;
@@ -851,10 +878,12 @@ static void __devexit k32pci_board_remove(struct pci_dev *pdev)
 
 	for (i=0; i<8; i++)
 	{
-		simcard_device_unregister(brd->simcard_channels[i]);
-		polygator_tty_device_unregister(brd->tty_at_channels[i]);
-		del_timer_sync(&brd->gsm_modules[i]->at_poll_timer);
-		kfree(brd->gsm_modules[i]);
+		if (brd->simcard_channels[i]) simcard_device_unregister(brd->simcard_channels[i]);
+		if (brd->tty_at_channels[i]) polygator_tty_device_unregister(brd->tty_at_channels[i]);
+		if (brd->gsm_modules[i]) {
+			del_timer_sync(&brd->gsm_modules[i]->at_poll_timer);
+			kfree(brd->gsm_modules[i]);
+		}
 	}
 
 	for (j=0; j<2; j++)
