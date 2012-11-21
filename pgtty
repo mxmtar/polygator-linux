@@ -1,0 +1,32 @@
+#!/bin/sh
+
+PG_SUBSYSTEM="/dev/polygator/subsystem"
+
+if [ -c  ${PG_SUBSYSTEM} ]; then
+
+	FS=[[:space:]]
+	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ${FS} '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+	for BOARD in ${PG_BOARD_LIST}; do
+		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
+		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+		if [ -c ${BOARD_PATH} ]; then
+
+			FS=[[:space:]]
+			BOARD_TTY_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $3}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+			for TTY in ${BOARD_TTY_LIST}; do
+				printf "/dev/%s\n" ${TTY}
+			done
+
+		fi
+
+	done
+
+	exit 0
+
+else
+	echo "Polygator subsytem kernel module not loaded"
+	exit 1
+fi

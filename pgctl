@@ -1,0 +1,141 @@
+#!/bin/sh
+
+PG_SUBSYSTEM="/dev/polygator/subsystem"
+
+ORDER=0
+
+function pg_channel_pwr {
+cat >> $1 << EOF
+$2 PWR=$3
+EOF
+}
+
+function pg_channel_key {
+cat >> $1 << EOF
+$2 KEY=$3
+EOF
+}
+
+function pg_enable_channel {
+
+if [ -c $1 ]; then
+
+	sleep $3
+
+	echo "enable channel" $2
+
+	pg_channel_pwr $1 $2 1
+
+	sleep 3
+
+	pg_channel_key $1 $2 1
+
+	sleep 2
+
+	pg_channel_key $1 $2 0
+
+else
+	echo "board" $1 "not found"
+fi
+
+}
+
+function pg_disable_channel {
+
+if [ -c $1 ]; then
+
+	echo "disable channel" $2
+
+	pg_channel_key $1 $2 1
+
+	sleep 2
+
+	pg_channel_key $1 $2 0
+
+	sleep 8
+
+	pg_channel_pwr $1 $2 0
+
+else
+	echo "board" $1 "not found"
+fi
+
+}
+
+
+function pg_enable_all {
+
+	for BOARD in ${PG_BOARD_LIST}; do
+
+		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
+		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+		if [ -c ${BOARD_PATH} ]; then
+
+			echo "enable all channel on" ${BOARD_NAME}
+			FS=[[:space:]]
+			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+			for CHANNEL in ${BOARD_CHANNEL_LIST}; do
+				pg_enable_channel ${BOARD_PATH} ${CHANNEL} ${ORDER} &
+				ORDER=`expr ${ORDER} + 1`
+			done
+
+			wait
+
+		else
+			echo "board" ${BOARD_PATH} "not found"
+		fi
+
+	done
+
+}
+
+function pg_disable_all {
+
+	for BOARD in ${PG_BOARD_LIST}; do
+		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
+		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+		if [ -c ${BOARD_PATH} ]; then
+
+			echo "disable all channel on" ${BOARD_NAME}
+			FS=[[:space:]]
+			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+			for CHANNEL in ${BOARD_CHANNEL_LIST}; do
+				pg_disable_channel ${BOARD_PATH} ${CHANNEL} &
+			done
+
+			wait
+
+		else
+			echo "board" ${BOARD_PATH} "not found"
+		fi
+
+	done
+
+}
+
+if [ -c  ${PG_SUBSYSTEM} ]; then
+	echo "Polygator subsytem kernel module loaded"
+	FS=[[:space:]]
+	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ${FS} '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+else
+	echo "Polygator subsytem kernel module not loaded"
+	exit 1
+fi
+
+case "$1" in
+    enable)
+	pg_enable_all
+	exit $?
+	;;
+    disable)
+	pg_disable_all
+	exit $?
+	;;
+    *)
+	echo "Usage: pgctl {enable|disable}"
+	exit 1
+esac

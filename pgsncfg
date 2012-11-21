@@ -1,0 +1,49 @@
+#!/bin/sh
+
+PG_SUBSYSTEM="/dev/polygator/subsystem"
+
+SER2NET_CONF="/etc/ser2net.conf"
+SER2NET_CONF_BAK="/etc/ser2net.conf.bak"
+
+PORT=30000
+
+if [ -c  ${PG_SUBSYSTEM} ]; then
+
+	echo "Polygator subsytem kernel module loaded"
+
+	if [ -f  ${SER2NET_CONF} ]; then
+		mv ${SER2NET_CONF} ${SER2NET_CONF_BAK}
+	fi
+
+	printf "# This is configuration file for ser2net with Polygator boards.\n" >> ${SER2NET_CONF}
+
+	FS=[[:space:]]
+	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ${FS} '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+	for BOARD in ${PG_BOARD_LIST}; do
+		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
+		printf "# %s\n" ${BOARD_NAME} >> ${SER2NET_CONF}
+		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+		if [ -c ${BOARD_PATH} ]; then
+
+			FS=[[:space:]]
+			BOARD_TTY_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $3}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+			for TTY in ${BOARD_TTY_LIST}; do
+				printf "%d:raw:0:/dev/%s:115200\n" ${PORT} ${TTY} >> ${SER2NET_CONF}
+				PORT=`expr ${PORT} + 1`
+			done
+
+		fi
+
+	done
+
+	echo ${SER2NET_CONF} "created successfull"
+
+	exit 0
+
+else
+	echo "Polygator subsytem kernel module not loaded"
+	exit 1
+fi
