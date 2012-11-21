@@ -99,9 +99,13 @@ sysvinit_install:
 ifneq (,$(SYSVINIT_ADD))
 	$(SYSVINIT_ADD)
 endif
-    
 
-uninstall: modules_uninstall headers_uninstall sysvinit_uninstall
+pgctl_install:
+	$(INSTALL) -m 755 pgctl $(DESTDIR)/usr/bin/pgctl
+	$(INSTALL) -m 755 pgsncfg $(DESTDIR)/usr/bin/pgsncfg
+	$(INSTALL) -m 755 pgtty $(DESTDIR)/usr/bin/pgtty
+    
+uninstall: modules_uninstall headers_uninstall sysvinit_uninstall pgctl_uninstall
 
 modules_uninstall:
 	rm -rvf "$(DESTDIR)/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
@@ -119,6 +123,11 @@ sysvinit_uninstall:
 	rm -fv $(DESTDIR)/etc/rc5.d/*polygator
 	rm -fv $(DESTDIR)/etc/rc6.d/*polygator
 	rm -fv $(DESTDIR)/etc/init.d/polygator
+
+pgctl_uninstall:
+	rm -fv $(DESTDIR)/usr/bin/pgctl
+	rm -fv $(DESTDIR)/usr/bin/pgsncfg
+	rm -fv $(DESTDIR)/usr/bin/pgtty
 
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean
