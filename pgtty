@@ -4,8 +4,7 @@ PG_SUBSYSTEM="/dev/polygator/subsystem"
 
 if [ -c  ${PG_SUBSYSTEM} ]; then
 
-	FS=[[:space:]]
-	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ${FS} '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ' ' '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
 
 	for BOARD in ${PG_BOARD_LIST}; do
 		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
@@ -13,8 +12,7 @@ if [ -c  ${PG_SUBSYSTEM} ]; then
 
 		if [ -c ${BOARD_PATH} ]; then
 
-			FS=[[:space:]]
-			BOARD_TTY_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $3}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+			BOARD_TTY_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $3}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
 
 			for TTY in ${BOARD_TTY_LIST}; do
 				printf "/dev/%s\n" ${TTY}

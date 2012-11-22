@@ -2,37 +2,79 @@
 
 PG_SUBSYSTEM="/dev/polygator/subsystem"
 
-ORDER=0
+START_ORDER=0
 
-function pg_channel_pwr {
+SERIAL_PORT_MAIN=0
+SERIAL_PORT_AUX=1
+
+BAUDRATE=115200
+
+pg_channel_pwr ()
+{
 cat >> $1 << EOF
 $2 PWR=$3
 EOF
 }
 
-function pg_channel_key {
+pg_channel_key ()
+{
 cat >> $1 << EOF
 $2 KEY=$3
 EOF
 }
 
-function pg_enable_channel {
+pg_channel_baudrate ()
+{
+cat >> $1 << EOF
+$2 BAUDRATE=$3
+EOF
+}
+
+pg_channel_serial_port ()
+{
+cat >> $1 << EOF
+$2 SERIAL=$3
+EOF
+}
+
+pg_enable_channel ()
+{
 
 if [ -c $1 ]; then
 
-	sleep $3
+	sleep ${START_ORDER}
 
 	echo "enable channel" $2
 
+	pg_channel_baudrate $1 $2 ${BAUDRATE}
+	pg_channel_serial_port $1 $2 ${SERIAL_PORT_MAIN}
 	pg_channel_pwr $1 $2 1
-
 	sleep 3
 
-	pg_channel_key $1 $2 1
+	while [ 1 ]; do
 
-	sleep 2
+		pg_channel_key $1 $2 1
+		sleep 2
+		pg_channel_key $1 $2 0
 
-	pg_channel_key $1 $2 0
+		WAIT_COUNT=8
+		while (( WAIT_COUNT > 0 )); do
+
+			VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+			if [ ${VIO} = "1" ]; then
+				break
+			fi
+			sleep 1
+			WAIT_COUNT=`expr ${WAIT_COUNT} - 1`
+
+		done
+
+		VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+		if [ ${VIO} = "1" ]; then
+			break
+		fi
+
+	done
 
 else
 	echo "board" $1 "not found"
@@ -40,21 +82,44 @@ fi
 
 }
 
-function pg_disable_channel {
+pg_disable_channel ()
+{
 
 if [ -c $1 ]; then
 
 	echo "disable channel" $2
 
-	pg_channel_key $1 $2 1
+	VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+	if [ ${VIO} = "1" ]; then
 
-	sleep 2
+		while [ 1 ]; do
 
-	pg_channel_key $1 $2 0
+			pg_channel_key $1 $2 1
+			sleep 2
+			pg_channel_key $1 $2 0
 
-	sleep 8
+			WAIT_COUNT=8
+			while (( WAIT_COUNT > 0 )); do
 
-	pg_channel_pwr $1 $2 0
+				VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+				if [ ${VIO} = "0" ]; then
+					break
+				fi
+				sleep 1
+				WAIT_COUNT=`expr ${WAIT_COUNT} - 1`
+
+			done
+
+			VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+			if [ ${VIO} = "0" ]; then
+				break
+			fi
+
+		done
+
+		pg_channel_pwr $1 $2 0
+
+	fi
 
 else
 	echo "board" $1 "not found"
@@ -63,7 +128,8 @@ fi
 }
 
 
-function pg_enable_all {
+pg_enable_all ()
+{
 
 	for BOARD in ${PG_BOARD_LIST}; do
 
@@ -73,12 +139,12 @@ function pg_enable_all {
 		if [ -c ${BOARD_PATH} ]; then
 
 			echo "enable all channel on" ${BOARD_NAME}
-			FS=[[:space:]]
-			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
 
 			for CHANNEL in ${BOARD_CHANNEL_LIST}; do
-				pg_enable_channel ${BOARD_PATH} ${CHANNEL} ${ORDER} &
-				ORDER=`expr ${ORDER} + 1`
+				pg_enable_channel ${BOARD_PATH} ${CHANNEL} ${START_ORDER} &
+				START_ORDER=`expr ${START_ORDER} + 1`
 			done
 
 			wait
@@ -91,17 +157,19 @@ function pg_enable_all {
 
 }
 
-function pg_disable_all {
+pg_disable_all ()
+{
 
 	for BOARD in ${PG_BOARD_LIST}; do
+
 		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
 		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
 
 		if [ -c ${BOARD_PATH} ]; then
 
 			echo "disable all channel on" ${BOARD_NAME}
-			FS=[[:space:]]
-			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ${FS} '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
 
 			for CHANNEL in ${BOARD_CHANNEL_LIST}; do
 				pg_disable_channel ${BOARD_PATH} ${CHANNEL} &
@@ -118,12 +186,17 @@ function pg_disable_all {
 }
 
 if [ -c  ${PG_SUBSYSTEM} ]; then
+
 	echo "Polygator subsytem kernel module loaded"
-	FS=[[:space:]]
-	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ${FS} '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+	PG_BOARD_LIST=`cat ${PG_SUBSYSTEM} | grep board | awk -F ' ' '{print $2}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
 else
+
 	echo "Polygator subsytem kernel module not loaded"
+
 	exit 1
+
 fi
 
 case "$1" in
