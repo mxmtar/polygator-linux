@@ -327,8 +327,6 @@ static void k32isa_tty_at_poll(unsigned long addr)
 	union k32_gsm_mod_status_reg status;
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)addr;
 
-	if (!mod) return;
-
 	len = 0;
 
 	// read received data
@@ -361,14 +359,18 @@ static void k32isa_tty_at_poll(unsigned long addr)
 		if (mod->at_port_select) {
 			// auxilary
 			// check for transmitter is ready
-			if (!status.bits.imei_rdy_wr)
-				break;
-			// put char to transmitter buffer
+			if (status.bits.imei_rdy_wr) {
+				// put char to transmitter buffer
 #ifdef TTY_PORT
-			mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
 #else
-			mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
+				mod->at_xmit_tail++;
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+					mod->at_xmit_tail = 0;
+				mod->at_xmit_count--;
+			}
 		} else {
 			// main
 			// check for transmitter is ready
@@ -1078,27 +1080,31 @@ static int __init k32isa_init(void)
 		// register polygator tty at device
 		for (i=0; i<8; i++)
 		{
-			if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, k32isa_boards[k]->gsm_modules[i], &k32isa_tty_at_ops))) {
-				log(KERN_ERR, "can't register polygator tty device\n");
-				rc = -1;
-				goto k32isa_init_error;
+			if (k32isa_boards[k]->gsm_modules[i]) {
+				if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, k32isa_boards[k]->gsm_modules[i], &k32isa_tty_at_ops))) {
+					log(KERN_ERR, "can't register polygator tty device\n");
+					rc = -1;
+					goto k32isa_init_error;
+				}
 			}
 		}
 
 		// register polygator simcard device
 		for (i=0; i<8; i++)
 		{
-			if (!(k32isa_boards[k]->simcard_channels[i] = simcard_device_register(THIS_MODULE,
-																					k32isa_boards[k]->gsm_modules[i],
-																					k32isa_sim_read,
-																					k32isa_sim_write,
-																					k32isa_sim_is_read_ready,
-																					k32isa_sim_is_write_ready,
-																					k32isa_sim_is_reset_request,
-																					k32isa_sim_set_speed))) {
-				log(KERN_ERR, "can't register polygator simcard device\n");
-				rc = -1;
-				goto k32isa_init_error;
+			if (k32isa_boards[k]->gsm_modules[i]) {
+				if (!(k32isa_boards[k]->simcard_channels[i] = simcard_device_register(THIS_MODULE,
+																						k32isa_boards[k]->gsm_modules[i],
+																						k32isa_sim_read,
+																						k32isa_sim_write,
+																						k32isa_sim_is_read_ready,
+																						k32isa_sim_is_write_ready,
+																						k32isa_sim_is_reset_request,
+																						k32isa_sim_set_speed))) {
+					log(KERN_ERR, "can't register polygator simcard device\n");
+					rc = -1;
+					goto k32isa_init_error;
+				}
 			}
 		}
 	}

@@ -45,12 +45,6 @@ MODULE_LICENSE("GPL");
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
-#if 0
-static int test_flag = 0;
-static u_int8_t test_buff[8];
-static int test_crlf = 0;
-#endif
-
 /*! */
 #define PG_PCI_NUM_BASE			0x00
 #define PG_PCI_OFFSET_RESET		0x00
@@ -316,8 +310,6 @@ static void k32pci_tty_at_poll(unsigned long addr)
 	union k32_gsm_mod_status_reg status;
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)addr;
 
-	if (!mod) return;
-
 	len = 0;
 
 	// read received data
@@ -338,32 +330,6 @@ static void k32pci_tty_at_poll(unsigned long addr)
 				break;
 			// put char to receiving buffer
 			buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
-#if 0
-			test_buff[0] = test_buff[1];
-			test_buff[1] = test_buff[2];
-			test_buff[2] = test_buff[3];
-			test_buff[3] = test_buff[4];
-			test_buff[4] = buff[len-1];
-
-			if (test_flag) {
-				verbose("%02X\n", buff[len-1]);
-				if (!strncasecmp(&test_buff[3], "\r\n", 2))
-					test_crlf++;
-				if (test_crlf >= 2)
-					test_flag = 0;
-			} else {
-				if (!strncasecmp(test_buff, "+CMT:", 5) || !strncasecmp(test_buff, "+CDS:", 5)) {
-					test_crlf = 0;
-					test_flag = 1;
-					verbose("%02X\n", test_buff[0]);
-					verbose("%02X\n", test_buff[1]);
-					verbose("%02X\n", test_buff[2]);
-					verbose("%02X\n", test_buff[3]);
-					verbose("%02X\n", test_buff[4]);
-				}
-			}
-			
-#endif
 		}
 	}
 
@@ -377,14 +343,18 @@ static void k32pci_tty_at_poll(unsigned long addr)
 		if (mod->at_port_select) {
 			// auxilary
 			// check for transmitter is ready
-			if (!status.bits.imei_rdy_wr)
-				break;
-			// put char to transmitter buffer
+			if (status.bits.imei_rdy_wr) {
+				// put char to transmitter buffer
 #ifdef TTY_PORT
-			mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
 #else
-			mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
+				mod->at_xmit_tail++;
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+					mod->at_xmit_tail = 0;
+				mod->at_xmit_count--;
+			}
 		} else {
 			// main
 			// check for transmitter is ready
@@ -395,10 +365,10 @@ static void k32pci_tty_at_poll(unsigned long addr)
 #else
 				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
-			mod->at_xmit_tail++;
-			if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
-				mod->at_xmit_tail = 0;
-			mod->at_xmit_count--;
+				mod->at_xmit_tail++;
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+					mod->at_xmit_tail = 0;
+				mod->at_xmit_count--;
 			}
 		}
 	}
@@ -813,27 +783,31 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	// register polygator tty at device
 	for (i=0; i<8; i++)
 	{
-		if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &k32pci_tty_at_ops))) {
-			log(KERN_ERR, "can't register polygator tty device\n");
-			rc = -1;
-			goto k32pci_board_probe_error;
+		if (brd->gsm_modules[i]) {
+			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &k32pci_tty_at_ops))) {
+				log(KERN_ERR, "can't register polygator tty device\n");
+				rc = -1;
+				goto k32pci_board_probe_error;
+			}
 		}
 	}
 
 	// register polygator simcard device
 	for (i=0; i<8; i++)
 	{
-		if (!(brd->simcard_channels[i] = simcard_device_register(THIS_MODULE,
-																	brd->gsm_modules[i],
-																	k32pci_sim_read,
-																	k32pci_sim_write,
-																	k32pci_sim_is_read_ready,
-																	k32pci_sim_is_write_ready,
-																	k32pci_sim_is_reset_request,
-																	k32pci_sim_set_speed))) {
-			log(KERN_ERR, "can't register polygator simcard device\n");
-			rc = -1;
-			goto k32pci_board_probe_error;
+		if (brd->gsm_modules[i]) {
+			if (!(brd->simcard_channels[i] = simcard_device_register(THIS_MODULE,
+																		brd->gsm_modules[i],
+																		k32pci_sim_read,
+																		k32pci_sim_write,
+																		k32pci_sim_is_read_ready,
+																		k32pci_sim_is_write_ready,
+																		k32pci_sim_is_reset_request,
+																		k32pci_sim_set_speed))) {
+				log(KERN_ERR, "can't register polygator simcard device\n");
+				rc = -1;
+				goto k32pci_board_probe_error;
+			}
 		}
 	}
 
