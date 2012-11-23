@@ -48,6 +48,7 @@ MODULE_LICENSE("GPL");
 #define G20_CS_ROM				0x11D0
 #define G20_CS_PRESENCE			0x11E0
 #define G20_RESET_BOARD			0x11F0
+#define MB_MODE_AUTONOM			0x2300	// 0 - bank, 1 -standalone
 #define MB_CS_ROM_KROSS			0x4000
 #define MB_RESET_ROM			0x4800
 /*! */
@@ -512,7 +513,7 @@ static void g20_tty_at_poll(unsigned long addr)
 static int g20_board_open(struct inode *inode, struct file *filp)
 {
 	ssize_t res;
-	size_t i;
+	size_t i, j;
 	size_t len;
 
 	struct g20_board *brd;
@@ -551,11 +552,28 @@ static int g20_board_open(struct inode *inode, struct file *filp)
 		}
 	}
 	if (brd->vinetic) {
-		len += sprintf(private_data->buff+len, "VIN0 board-g20-%lu-vin0\r\n", (unsigned long int)brd->index);
-		for (i=0; i<4; i++)
+		len += sprintf(private_data->buff+len, "VIN0 %s\r\n",
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+						dev_name(brd->vinetic->device)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+						dev_name(brd->vinetic->device)
+#else
+						brd->vinetic->device->class_id
+#endif
+						);
+		for (j=0; j<4; j++)
 		{
-			if (brd->vinetic->rtp_channels[i])
-				len += sprintf(private_data->buff+len, "VIN0RTP%lu board-g20-%lu-vin0-rtp%lu\r\n", (unsigned long int)i, (unsigned long int)brd->index, (unsigned long int)i);
+			if (brd->vinetic->rtp_channels[j])
+				len += sprintf(private_data->buff+len, "VIN0RTP%lu %s\r\n",
+								(unsigned long int)j,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+								dev_name(brd->vinetic->rtp_channels[j]->device)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+								dev_name(brd->vinetic->rtp_channels[j]->device)
+#else
+								brd->vinetic->rtp_channels[j]->device->class_id
+#endif
+							);
 		}
 	}
 
@@ -976,6 +994,8 @@ static int __init g20_init(void)
 	for (i=0; i<sizeof(mainboard_rom); i++)
 		mainboard_rom[i] = ioread8(g20_cs3_base_ptr + MB_CS_ROM_KROSS);
 	verbose("mainboard: \"%s\"\n", &mainboard_rom[3]);
+	// set MainBoard SIM standalone mode
+	iowrite8(1, g20_cs3_base_ptr + MB_MODE_AUTONOM);
 	// Search for g20 boards
 	for (k=0; k<4; k++)
 	{
@@ -1064,6 +1084,12 @@ static int __init g20_init(void)
 					kfree(mod);
 					continue;
 				}
+
+				mod->control.bits.vbat = 1;
+				mod->control.bits.pkey = 1;
+				mod->control.bits.cn_speed_a = 0;
+				mod->control.bits.cn_speed_b = 0;
+				mod->control.bits.at_baudrate = 2;
 
 				mod->pos_on_board = i;
 				mod->cbdata = (((uintptr_t)g20_cs3_base_ptr) + 0x1000 + (0x0200 * k) + (0x40 * (i%4)));
