@@ -335,8 +335,8 @@ static void k32pci_tty_at_poll(unsigned long addr)
 
 	spin_lock(&mod->at_lock);
 
-	 while (mod->at_xmit_count)
-	 {
+	while (mod->at_xmit_count)
+	{
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 		// select port
@@ -949,6 +949,7 @@ static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	size_t len;
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)ptd->data;
+	unsigned char *bp = (unsigned char *)buf;
 
 	spin_lock_bh(&mod->at_lock);
 
@@ -969,15 +970,15 @@ static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 			if (!len)
 				break;
 #ifdef TTY_PORT
-			memcpy(mod->at_port.xmit_buf + mod->at_xmit_head, buf, len);
+			memcpy(mod->at_port.xmit_buf + mod->at_xmit_head, bp, len);
 #else
-			memcpy(mod->at_xmit_buf + mod->at_xmit_head, buf, len);
+			memcpy(mod->at_xmit_buf + mod->at_xmit_head, bp, len);
 #endif
 			mod->at_xmit_head += len;
 			if (mod->at_xmit_head == SERIAL_XMIT_SIZE)
 				mod->at_xmit_head = 0;
 			mod->at_xmit_count += len;
-			buf += len;
+			bp += len;
 			count -= len;
 			res += len;
 		}
