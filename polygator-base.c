@@ -383,7 +383,11 @@ void polygator_board_unregister(struct polygator_board *brd)
 	mutex_unlock(&polygator_board_list_lock);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_port *port, struct tty_operations *tty_ops)
+#else
 struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_operations *tty_ops)
+#endif
 {
 	size_t i;
 	struct polygator_tty_device *ptd;
@@ -413,7 +417,11 @@ struct polygator_tty_device *polygator_tty_device_register(struct module *owner,
 	ptd->tty_ops = tty_ops;
 
 	// register device on sysfs
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+	ptd->device = tty_port_register_device(port, polygator_tty_device_driver, ptd->tty_minor, NULL);
+#else
 	ptd->device = tty_register_device(polygator_tty_device_driver, ptd->tty_minor, NULL);
+#endif
 	if (IS_ERR(ptd->device)) {
 		log(KERN_ERR, "can't register tty device\n");
 		goto polygator_tty_device_register_error;

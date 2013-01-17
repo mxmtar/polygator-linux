@@ -61,6 +61,7 @@ struct k32_gsm_module_data {
 	// at section
 	int at_port_select;
 	spinlock_t at_lock;
+	int at_no_buf;
 #ifdef TTY_PORT
 	struct tty_port at_port;
 #else

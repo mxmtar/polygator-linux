@@ -306,6 +306,7 @@ static void k32pci_tty_at_poll(unsigned long addr)
 {
 	unsigned char buff[512];
 	size_t len;
+	size_t xmit_write_room;
 	struct tty_struct *tty;
 	union k32_gsm_mod_status_reg status;
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)addr;
@@ -359,16 +360,36 @@ static void k32pci_tty_at_poll(unsigned long addr)
 			// main
 			// check for transmitter is ready
 			if (status.bits.at_rdy_wr) {
-				// put char to transmitter buffer
+				// check AT transmitter work style
+				if (mod->at_no_buf) {
+					// put char to transmitter buffer
 #ifdef TTY_PORT
-				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+					mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
 #else
-				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+					mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
-				mod->at_xmit_tail++;
-				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
-					mod->at_xmit_tail = 0;
-				mod->at_xmit_count--;
+					mod->at_xmit_tail++;
+					if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+						mod->at_xmit_tail = 0;
+					mod->at_xmit_count--;
+				} else {
+					xmit_write_room = 1024;
+					while ((mod->at_xmit_count) && (xmit_write_room))
+					{
+						// put char to transmitter buffer
+#ifdef TTY_PORT
+						mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+#else
+						mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+#endif
+						mod->at_xmit_tail++;
+						if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+							mod->at_xmit_tail = 0;
+						mod->at_xmit_count--;
+						xmit_write_room--;
+					}
+					break;
+				}
 			}
 		}
 	}
@@ -626,7 +647,8 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	verbose("found PCI board type=%04x\n", brd->type & 0x00ff);
 
 	if (((brd->type & 0x00ff) != 0x0081) && ((brd->type & 0x00ff) != 0x0082) &&
-			((brd->type & 0x00ff) != 0x0083) && ((brd->type & 0x00ff) != 0x0084)) {
+			((brd->type & 0x00ff) != 0x0083) && ((brd->type & 0x00ff) != 0x0084) &&
+			((brd->type & 0x00ff) != 0x0085)) {
 		log(KERN_ERR, "PCI board type=%04x unsupported\n", brd->type & 0x00ff);
 		rc = -1;
 		goto k32pci_board_probe_error;
@@ -719,6 +741,11 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		} else
 			mod->type = POLYGATOR_MODULE_TYPE_SIM300;
 
+		if ((brd->type & 0x00ff) == 0x0085)
+			mod->at_no_buf = 0;
+		else
+			mod->at_no_buf = 1;
+
 		if (mod->type == POLYGATOR_MODULE_TYPE_SIM300) {
 			mod->control.bits.mod_off = 1;		// module inactive
 			mod->control.bits.sim_spd_0 = 0;
@@ -784,7 +811,11 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	for (i=0; i<8; i++)
 	{
 		if (brd->gsm_modules[i]) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &mod->at_port, &k32pci_tty_at_ops))) {
+#else
 			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &k32pci_tty_at_ops))) {
+#endif
 				log(KERN_ERR, "can't register polygator tty device\n");
 				rc = -1;
 				goto k32pci_board_probe_error;
