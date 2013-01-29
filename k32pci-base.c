@@ -810,11 +810,11 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	// register polygator tty at device
 	for (i=0; i<8; i++)
 	{
-		if (brd->gsm_modules[i]) {
+		if ((mod = brd->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &mod->at_port, &k32pci_tty_at_ops))) {
+			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k32pci_tty_at_ops))) {
 #else
-			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &k32pci_tty_at_ops))) {
+			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &k32pci_tty_at_ops))) {
 #endif
 				log(KERN_ERR, "can't register polygator tty device\n");
 				rc = -1;
