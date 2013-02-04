@@ -38,6 +38,7 @@ struct vinetic {
 	// status
 	int status_ready;
 	struct vin_status_registers status;
+	struct vin_status_registers status_old;
 	struct vin_status_registers status_mask;
 	wait_queue_head_t status_waitq;
 

@@ -568,19 +568,39 @@ static void vinetic_poll_proc(unsigned long addr)
 	vin->status.bxsr.bxsr1.full &= vin->status_mask.bxsr.bxsr1.full;
 	vin->status.bxsr.bxsr2.full &= vin->status_mask.bxsr.bxsr2.full;
 	// check status
-	if ((vin->status.sr.sre1_0.full) || (vin->status.sr.sre2_0.full) || (vin->status.sr.srs1_0.full) || (vin->status.sr.srs2_0.full) ||
-		(vin->status.sr.sre1_1.full) || (vin->status.sr.sre2_1.full) || (vin->status.sr.srs1_1.full) || (vin->status.sr.srs2_1.full) ||
-		(vin->status.sr.sre1_2.full) || (vin->status.sr.sre2_2.full) || (vin->status.sr.srs1_2.full) || (vin->status.sr.srs2_2.full) ||
-		(vin->status.sr.sre1_3.full) || (vin->status.sr.sre2_3.full) || (vin->status.sr.srs1_3.full) || (vin->status.sr.srs2_3.full) ||
-		(vin->status.sr.sre1_4.full) || (vin->status.sr.sre2_4.full) ||
-		(vin->status.sr.sre1_5.full) || (vin->status.sr.sre2_5.full) ||
-		(vin->status.sr.sre1_6.full) || (vin->status.sr.sre2_6.full) ||
-		(vin->status.sr.sre1_7.full) || (vin->status.sr.sre2_7.full) ||
-		(vin->status.hwsr.hwsr1.full) || (vin->status.hwsr.hwsr2.full) ||
-		(vin->status.bxsr.bxsr1.full) || (vin->status.bxsr.bxsr2.full)) {
+	if ((vin->status.sr.sre1_0.full != vin->status_old.sr.sre1_0.full) ||
+		(vin->status.sr.sre2_0.full != vin->status_old.sr.sre2_0.full) ||
+		(vin->status.sr.srs1_0.full != vin->status_old.sr.srs1_0.full) ||
+		(vin->status.sr.srs2_0.full != vin->status_old.sr.srs2_0.full) ||
+		(vin->status.sr.sre1_1.full != vin->status_old.sr.sre1_1.full) ||
+		(vin->status.sr.sre2_1.full != vin->status_old.sr.sre2_1.full) ||
+		(vin->status.sr.srs1_1.full != vin->status_old.sr.srs1_1.full) ||
+		(vin->status.sr.srs2_1.full != vin->status_old.sr.srs2_1.full) ||
+		(vin->status.sr.sre1_2.full != vin->status_old.sr.sre1_2.full) ||
+		(vin->status.sr.sre2_2.full != vin->status_old.sr.sre2_2.full) ||
+		(vin->status.sr.srs1_2.full != vin->status_old.sr.srs1_2.full) ||
+		(vin->status.sr.srs2_2.full != vin->status_old.sr.srs2_2.full) ||
+		(vin->status.sr.sre1_3.full != vin->status_old.sr.sre1_3.full) ||
+		(vin->status.sr.sre2_3.full != vin->status_old.sr.sre2_3.full) ||
+		(vin->status.sr.srs1_3.full != vin->status_old.sr.srs1_3.full) ||
+		(vin->status.sr.srs2_3.full != vin->status_old.sr.srs2_3.full) ||
+		(vin->status.sr.sre1_4.full != vin->status_old.sr.sre1_4.full) ||
+		(vin->status.sr.sre2_4.full != vin->status_old.sr.sre2_4.full) ||
+		(vin->status.sr.sre1_5.full != vin->status_old.sr.sre1_5.full) ||
+		(vin->status.sr.sre2_5.full != vin->status_old.sr.sre2_5.full) ||
+		(vin->status.sr.sre1_6.full != vin->status_old.sr.sre1_6.full) ||
+		(vin->status.sr.sre2_6.full != vin->status_old.sr.sre2_6.full) ||
+		(vin->status.sr.sre1_7.full != vin->status_old.sr.sre1_7.full) ||
+		(vin->status.sr.sre2_7.full != vin->status_old.sr.sre2_7.full) ||
+		(vin->status.hwsr.hwsr1.full != vin->status_old.hwsr.hwsr1.full) ||
+		(vin->status.hwsr.hwsr2.full != vin->status_old.hwsr.hwsr2.full) ||
+		(vin->status.bxsr.bxsr1.full != vin->status_old.bxsr.bxsr1.full) ||
+		(vin->status.bxsr.bxsr2.full != vin->status_old.bxsr.bxsr2.full)) {
 		vin->status_ready = 1;
 		wake_up_interruptible(&vin->status_waitq);
 	}
+	// store currebt flags
+	memcpy(&vin->status_old, &vin->status, sizeof(struct vin_status_registers));
 	// check free mailbox space
 	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
 	{
@@ -674,11 +694,6 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 
 	// read vinetic status
 	if (cmd.full == 0xffffffff) {
-/*
-		spin_lock_bh(&vin->lock);
-		vin->status_ready = 0;
-		spin_unlock_bh(&vin->lock);
-*/
 		// sleeping
 		wait_event_interruptible(vin->status_waitq, vin->status_ready != 0);
 		// copy status
