@@ -84,6 +84,7 @@ struct k32_board {
 	size_t romsize;
 	u_int32_t sn;
 	u_int16_t type;
+	u_int16_t position;
 
 	struct vinetic *vinetics[2];
 

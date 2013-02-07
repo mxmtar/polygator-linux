@@ -428,6 +428,8 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 	len = 0;
 	// type
 	len += sprintf(private_data->buff+len, "TYPE=%u\r\n", brd->type & 0x00ff);
+	// position
+	len += sprintf(private_data->buff+len, "POSITION=%u\r\n", brd->position);
 	// gsm
 	for (i = 0; i < 8; i++) {
 		if (brd->gsm_modules[i]) {
@@ -936,6 +938,8 @@ static int __init k32isa_init(void)
 			continue;
 		}
 		verbose("found K32 ISA board type=%04x\n", k32isa_boards[k]->type & 0x00ff);
+		// set board number
+		k32isa_boards[k]->position = k & 3;
 		// read board rom
 		memset(k32isa_boards[k]->rom, 0, 256);
 		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);

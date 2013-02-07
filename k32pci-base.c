@@ -431,6 +431,8 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 	len = 0;
 	// type
 	len += sprintf(private_data->buff+len, "TYPE=%u\r\n", brd->type & 0x00ff);
+	// position
+	len += sprintf(private_data->buff+len, "POSITION=%u\r\n", brd->position);
 	// gsm
 	for (i = 0; i < 8; i++) {
 		if (brd->gsm_modules[i]) {
@@ -649,6 +651,9 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		rc = -1;
 		goto k32pci_board_probe_error;
 	}
+
+	// get board number
+	brd->position = inb(addr + PG_PCI_NUM_BASE) & 3;
 
 	// read board rom
 	memset(brd->rom, 0, 256);
