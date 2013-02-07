@@ -279,8 +279,7 @@ static void k32pci_sim_set_speed(void *data, int speed)
 {
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
 
-	switch (speed)
-	{
+	switch (speed) {
 		case 57600:
 			mod->control.bits.sim_spd_0 = 1;
 			mod->control.bits.sim_spd_1 = 0;
@@ -314,8 +313,7 @@ static void k32pci_tty_at_poll(unsigned long addr)
 	len = 0;
 
 	// read received data
-	while (len < sizeof(buff))
-	{
+	while (len < sizeof(buff)) {
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 		// select port
@@ -336,8 +334,7 @@ static void k32pci_tty_at_poll(unsigned long addr)
 
 	spin_lock(&mod->at_lock);
 
-	while (mod->at_xmit_count)
-	{
+	while (mod->at_xmit_count) {
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 		// select port
@@ -374,8 +371,7 @@ static void k32pci_tty_at_poll(unsigned long addr)
 					mod->at_xmit_count--;
 				} else {
 					xmit_write_room = 1024;
-					while ((mod->at_xmit_count) && (xmit_write_room))
-					{
+					while ((mod->at_xmit_count) && (xmit_write_room)) {
 						// put char to transmitter buffer
 #ifdef TTY_PORT
 						mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
@@ -433,8 +429,10 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 	private_data->board = brd;
 
 	len = 0;
-	for (i=0; i<8; i++)
-	{
+	// type
+	len += sprintf(private_data->buff+len, "TYPE=%u\r\n", brd->type & 0x00ff);
+	// gsm
+	for (i = 0; i < 8; i++) {
 		if (brd->gsm_modules[i]) {
 			mod = brd->gsm_modules[i];
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
@@ -453,8 +451,8 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 							status.bits.vio);
 		}
 	}
-	for (i=0; i<2; i++)
-	{
+	// vinetic
+	for (i = 0; i < 2; i++) {
 		if (brd->vinetics[i]) {
 			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
 						   (unsigned long int)i,
@@ -466,8 +464,7 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 							brd->vinetics[i]->device->class_id
 #endif
 							);
-			for (j=0; j<4; j++)
-			{
+			for (j = 0; j < 4; j++) {
 				if (brd->vinetics[i]->rtp_channels[j])
 					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
 								(unsigned long int)i,
@@ -639,8 +636,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 
 	// get board type
 	brd->type = 0;
-	for (i=0; i<16; i++)
-	{
+	for (i = 0; i < 16; i++) {
 		brd->type <<= 1;
 		brd->type |= inb(addr + PG_PCI_ID_BASE) & 0x01;
 	}
@@ -658,15 +654,14 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	memset(brd->rom, 0, 256);
 	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
 	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
-	for (i=0; i<brd->romsize; i++) brd->rom[i] = inb(addr + PG_PCI_ROM_BASE);
+	for (i = 0; i < brd->romsize; i++) brd->rom[i] = inb(addr + PG_PCI_ROM_BASE);
 	verbose("\"%.*s\"\n", (int)brd->romsize, brd->rom);
 
 	// get board serial number
 	i = brd->romsize - 1;
 	pow10 = 1;
 	brd->sn = 0;
-	while (i--)
-	{
+	while (i--) {
 		if ((brd->rom[i] < 0x30) || (brd->rom[i] > 0x39))
 			break;
 		brd->sn += (brd->rom[i] - 0x30) * pow10;
@@ -682,8 +677,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		goto k32pci_board_probe_error;
 	}
 
-	for (j=0; j<2; j++)
-	{
+	for (j = 0; j < 2; j++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
 #else
@@ -700,8 +694,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			rc = -1;
 			goto k32pci_board_probe_error;
 		}
-		for (i=0; i<4; i++)
-		{
+		for (i = 0; i < 4; i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
 #else
@@ -715,8 +708,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	}
 
 	// set GSM module data
-	for (i=0; i<8; i++)
-	{
+	for (i = 0; i < 8; i++) {
 		if (!(mod = kmalloc(sizeof(struct k32_gsm_module_data), GFP_KERNEL))) {
 			log(KERN_ERR, "can't get memory for struct k32_gsm_module_data\n");
 			rc = -1;
@@ -808,8 +800,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	}
 
 	// register polygator tty at device
-	for (i=0; i<8; i++)
-	{
+	for (i = 0; i < 8; i++) {
 		if ((mod = brd->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k32pci_tty_at_ops))) {
@@ -824,8 +815,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	}
 
 	// register polygator simcard device
-	for (i=0; i<8; i++)
-	{
+	for (i = 0; i < 8; i++) {
 		if (brd->gsm_modules[i]) {
 			if (!(brd->simcard_channels[i] = simcard_device_register(THIS_MODULE,
 																		brd->gsm_modules[i],
@@ -847,8 +837,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 
 k32pci_board_probe_error:
 	if (brd) {
-		for (i=0; i<8; i++)
-		{
+		for (i = 0; i < 8; i++) {
 			if (brd->simcard_channels[i]) simcard_device_unregister(brd->simcard_channels[i]);
 			if (brd->tty_at_channels[i]) polygator_tty_device_unregister(brd->tty_at_channels[i]);
 			if (brd->gsm_modules[i]) {
@@ -856,11 +845,9 @@ k32pci_board_probe_error:
 				kfree(brd->gsm_modules[i]);
 			}
 		}
-		for (j=0; j<2; j++)
-		{
+		for (j = 0; j < 2; j++) {
 			if (brd->vinetics[j]) {
-				for (i=0; i<4; i++)
-				{
+				for (i = 0; i < 4; i++) {
 					if (brd->vinetics[j]->rtp_channels[i])
 						vinetic_rtp_channel_unregister(brd->vinetics[j]->rtp_channels[i]);
 				}
@@ -881,8 +868,7 @@ static void __devexit k32pci_board_remove(struct pci_dev *pdev)
 	
 	struct k32_board *brd = pci_get_drvdata(pdev);
 
-	for (i=0; i<8; i++)
-	{
+	for (i = 0; i < 8; i++) {
 		if (brd->simcard_channels[i]) simcard_device_unregister(brd->simcard_channels[i]);
 		if (brd->tty_at_channels[i]) polygator_tty_device_unregister(brd->tty_at_channels[i]);
 		if (brd->gsm_modules[i]) {
@@ -891,10 +877,8 @@ static void __devexit k32pci_board_remove(struct pci_dev *pdev)
 		}
 	}
 
-	for (j=0; j<2; j++)
-	{
-		for (i=0; i<4; i++)
-		{
+	for (j = 0; j < 2; j++) {
+		for (i = 0; i < 4; i++) {
 			vinetic_rtp_channel_unregister(brd->vinetics[j]->rtp_channels[i]);
 		}
 		vinetic_device_unregister(brd->vinetics[j]);
@@ -985,8 +969,7 @@ static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	spin_lock_bh(&mod->at_lock);
 
 	if (mod->at_xmit_count < SERIAL_XMIT_SIZE) {
-		while (1)
-		{
+		while (1) {
 			if (mod->at_xmit_head == mod->at_xmit_tail) {
 				if (mod->at_xmit_count)
 					len = 0;
@@ -1064,8 +1047,7 @@ static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 
 	spin_lock_bh(&mod->at_lock);
 
-	switch (baud)
-	{
+	switch (baud) {
 		case 9600:
 			mod->control.bits.com_spd = 3;
 			break;

@@ -430,23 +430,39 @@ static int k5_board_open(struct inode *inode, struct file *filp)
 	private_data->board = brd;
 
 	len = 0;
+
+	// gsm
 	for (i = 0; i < 2; i++) {
 		if ((mod = brd->gsm_modules[i])) {
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 			len += sprintf(private_data->buff+len, "GSM%lu %s %s %s VIN0%s VIO=%u\r\n",
-							(unsigned long int)i,
-							polygator_print_gsm_module_type(mod->type),
+							(unsigned long int)i, // #
+							polygator_print_gsm_module_type(mod->type), // signaling
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							brd->tty_at_channels[i]?dev_name(brd->tty_at_channels[i]->device):"unknown",
-							brd->simcard_channels[i]?dev_name(brd->simcard_channels[i]->device):"unknown",
+							brd->tty_at_channels[i]?dev_name(brd->tty_at_channels[i]->device):"unknown", // signaling
+							brd->simcard_channels[i]?dev_name(brd->simcard_channels[i]->device):"unknown", // sim
 #else
-							brd->tty_at_channels[i]?brd->tty_at_channels[i]->device->class_id:"unknown",
-							brd->simcard_channels[i]?brd->simcard_channels[i]->device->class_id:"unknown",
+							brd->tty_at_channels[i]?brd->tty_at_channels[i]->device->class_id:"unknown", // signaling
+							brd->simcard_channels[i]?brd->simcard_channels[i]->device->class_id:"unknown", // sim
 #endif
-							i?"PCM0":"ALM3",
-							status.bits.status);
+							i?"PCM0":"ALM3", // voice
+							status.bits.status); // status
 		}
 	}
+	// fxs
+	for (i = 0; i < 2; i++) {
+		len += sprintf(private_data->buff+len, "FXS%lu VIN0%s\r\n",
+						(unsigned long int)i, // #
+						i?"ALM2":"ALM0"); // voice
+	}
+	// fxo
+	for (i = 0; i < 1; i++) {
+		len += sprintf(private_data->buff+len, "FXO%lu VIN0%s RING=%u\r\n",
+						(unsigned long int)i, // #
+						"ALM1", // voice
+						0); // ring
+	}
+	// vinetic
 	if (brd->vinetic) {
 		len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
 							0L,

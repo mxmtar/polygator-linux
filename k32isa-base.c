@@ -296,8 +296,7 @@ static void k32isa_sim_set_speed(void *data, int speed)
 {
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
 
-	switch (speed)
-	{
+	switch (speed) {
 		case 57600:
 			mod->control.bits.sim_spd_0 = 1;
 			mod->control.bits.sim_spd_1 = 0;
@@ -330,8 +329,7 @@ static void k32isa_tty_at_poll(unsigned long addr)
 	len = 0;
 
 	// read received data
-	while (len < sizeof(buff))
-	{
+	while (len < sizeof(buff)) {
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 		// select port
@@ -352,8 +350,7 @@ static void k32isa_tty_at_poll(unsigned long addr)
 
 	spin_lock(&mod->at_lock);
 
-	while (mod->at_xmit_count)
-	{
+	while (mod->at_xmit_count) {
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 		// select port
@@ -429,8 +426,10 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 	private_data->board = brd;
 
 	len = 0;
-	for (i=0; i<8; i++)
-	{
+	// type
+	len += sprintf(private_data->buff+len, "TYPE=%u\r\n", brd->type & 0x00ff);
+	// gsm
+	for (i = 0; i < 8; i++) {
 		if (brd->gsm_modules[i]) {
 			mod = brd->gsm_modules[i];
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
@@ -449,8 +448,8 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 							status.bits.vio);
 		}
 	}
-	for (i=0; i<2; i++)
-	{
+	// vinetic
+	for (i = 0; i < 2; i++) {
 		if (brd->vinetics[i]) {
 			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
 							(unsigned long int)i,
@@ -462,8 +461,7 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 							brd->vinetics[i]->device->class_id
 #endif
 							);
-			for (j=0; j<4; j++)
-			{
+			for (j = 0; j < 4; j++) {
 				if (brd->vinetics[i]->rtp_channels[j])
 					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
 									(unsigned long int)i,
@@ -666,8 +664,7 @@ static int k32isa_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	spin_lock_bh(&mod->at_lock);
 
 	if (mod->at_xmit_count < SERIAL_XMIT_SIZE) {
-		while (1)
-		{
+		while (1) {
 			if (mod->at_xmit_head == mod->at_xmit_tail) {
 				if (mod->at_xmit_count)
 					len = 0;
@@ -745,8 +742,7 @@ static void k32isa_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 
 	spin_lock_bh(&mod->at_lock);
 
-	switch (baud)
-	{
+	switch (baud) {
 		case 9600:
 			mod->control.bits.com_spd = 3;
 			break;
@@ -831,11 +827,11 @@ static int __init k32isa_init(void)
 
 	verbose("loading ...\n");
 	
-	for (k=0; k<4; k++)
-	{
+	for (k = 0; k < 4; k++) {
 		k32isa_boards[k] = NULL;
-		for (j=0; j<2; j++)
+		for (j = 0; j < 2; j++) {
 			k32isa_vd_ioport_reg[k][j] = NULL;
+		}
 	}
 	
 	// request region for Polygator K32 ISA board ID
@@ -893,11 +889,9 @@ static int __init k32isa_init(void)
 		goto k32isa_init_error;
 	}
 	// request region for Polygator K32 ISA board VINETIC
-	for (k=0; k<4; k++)
-	{
-		for (j=0; j<2; j++)
-		{
-			start = PG_ISA_VD_BASE + k*64 + j*32;
+	for (k = 0; k < 4; k++) {
+		for (j = 0; j < 2; j++) {
+			start = PG_ISA_VD_BASE + k * 64 + j * 32;
 			length = 0x20;
 			end = start + length - 1;
 			if (!(k32isa_vd_ioport_reg[k][j] = request_region(start, length, "polygator_k32isa"))) {
@@ -910,15 +904,14 @@ static int __init k32isa_init(void)
 
 	// search Polygator K32 ISA boards
 	// reset all ISA board
-	for (k=0; k<4; k++)
+	for (k = 0; k < 4; k++)
 		outb(0xff, PG_ISA_RESET_BASE + k*2);
 	mdelay(10);
-	for (k=0; k<4; k++)
+	for (k = 0; k < 4; k++)
 		outb(0x00, PG_ISA_RESET_BASE + k*2);
 
 	// search boards
-	for (k=0; k<4; k++)
-	{
+	for (k = 0; k < 4; k++) {
 		// alloc memory for board data
 		if (!(k32isa_boards[k] = kmalloc(sizeof(struct k32_board), GFP_KERNEL))) {
 			log(KERN_ERR, "can't get memory for struct k32_board\n");
@@ -927,8 +920,7 @@ static int __init k32isa_init(void)
 		}
 		memset(k32isa_boards[k], 0, sizeof(struct k32_board));
 		// get board type
-		for (i=0; i<16; i++)
-		{
+		for (i = 0; i < 16; i++) {
 			k32isa_boards[k]->type <<= 1;
 			k32isa_boards[k]->type |= inb(PG_ISA_ID_BASE + k*2) & 0x01;
 		}
@@ -948,7 +940,7 @@ static int __init k32isa_init(void)
 		memset(k32isa_boards[k]->rom, 0, 256);
 		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);
 		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);
-		for (i=0; i<k32isa_boards[k]->romsize; i++) k32isa_boards[k]->rom[i] = inb(PG_ISA_ROM_BASE + k*4);
+		for (i = 0; i < k32isa_boards[k]->romsize; i++) k32isa_boards[k]->rom[i] = inb(PG_ISA_ROM_BASE + k*4);
 		verbose("\"%.*s\"\n", (int)k32isa_boards[k]->romsize, k32isa_boards[k]->rom);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32-isa-%lu", (long unsigned int)k);
@@ -960,8 +952,7 @@ static int __init k32isa_init(void)
 			goto k32isa_init_error;
 		}
 
-		for (j=0; j<2; j++)
-		{
+		for (j = 0; j < 2; j++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32-isa-%lu-vin%lu", (long unsigned int)k, (unsigned long int)j);
 #else
@@ -978,8 +969,7 @@ static int __init k32isa_init(void)
 				rc = -1;
 				goto k32isa_init_error;
 			}
-			for (i=0; i<4; i++)
-			{
+			for (i = 0; i < 4; i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32-isa-%lu-vin%lu-rtp%lu", (long unsigned int)k, (unsigned long int)j, (unsigned long int)i);
 #else
@@ -992,8 +982,7 @@ static int __init k32isa_init(void)
 			}
 		}
 		// set GSM module data
-		for (i=0; i<8; i++)
-		{
+		for (i = 0; i < 8; i++) {
 			if (!(mod = kmalloc(sizeof(struct k32_gsm_module_data), GFP_KERNEL))) {
 				log(KERN_ERR, "can't get memory for struct k32_gsm_module_data\n");
 				rc = -1;
@@ -1080,8 +1069,7 @@ static int __init k32isa_init(void)
 		}
 
 		// register polygator tty at device
-		for (i=0; i<8; i++)
-		{
+		for (i = 0; i < 8; i++) {
 			if ((mod = k32isa_boards[k]->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 				if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k32isa_tty_at_ops))) {
@@ -1096,8 +1084,7 @@ static int __init k32isa_init(void)
 		}
 
 		// register polygator simcard device
-		for (i=0; i<8; i++)
-		{
+		for (i = 0; i < 8; i++) {
 			if (k32isa_boards[k]->gsm_modules[i]) {
 				if (!(k32isa_boards[k]->simcard_channels[i] = simcard_device_register(THIS_MODULE,
 																						k32isa_boards[k]->gsm_modules[i],
@@ -1119,11 +1106,9 @@ static int __init k32isa_init(void)
 	return 0;
 
 k32isa_init_error:
-	for (k=0; k<4; k++)
-	{
+	for (k = 0; k < 4; k++) {
 		if (k32isa_boards[k]) {
-			for (i=0; i<8; i++)
-			{
+			for (i = 0; i < 8; i++) {
 				if (k32isa_boards[k]->simcard_channels[i]) simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
 				if (k32isa_boards[k]->tty_at_channels[i]) polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
 				if (k32isa_boards[k]->gsm_modules[i]) {
@@ -1131,11 +1116,9 @@ k32isa_init_error:
 					kfree(k32isa_boards[k]->gsm_modules[i]);
 				}
 			}
-			for (j=0; j<2; j++)
-			{
+			for (j = 0; j < 2; j++) {
 				if (k32isa_boards[k]->vinetics[j]) {
-					for (i=0; i<4; i++)
-					{
+					for (i = 0; i < 4; i++) {
 						if (k32isa_boards[k]->vinetics[j]->rtp_channels[i])
 							vinetic_rtp_channel_unregister(k32isa_boards[k]->vinetics[j]->rtp_channels[i]);
 					}
@@ -1153,10 +1136,8 @@ k32isa_init_error:
 	if (k32isa_vs_ioport_reg) release_region(PG_ISA_VS_BASE, PG_ISA_VS_LENGTH);
 	if (k32isa_sim_ioport_reg) release_region(PG_ISA_SIM_BASE, PG_ISA_SIM_LENGTH);
 	if (k32isa_imei_ioport_reg) release_region(PG_ISA_IMEI_BASE, PG_ISA_IMEI_LENGTH);
-	for (k=0; k<4; k++)
-	{
-		for (j=0; j<2; j++)
-		{
+	for (k = 0; k < 4; k++) {
+		for (j = 0; j < 2; j++) {
 			if (k32isa_vd_ioport_reg[k][j])
 				release_region(PG_ISA_VD_BASE + k*64 + j*32, PG_ISA_VD_LENGTH);
 		}
@@ -1170,11 +1151,9 @@ static void __exit k32isa_exit(void)
 
 	size_t i, j, k;
 
-	for (k=0; k<4; k++)
-	{
+	for (k = 0; k < 4; k++) {
 		if (k32isa_boards[k]) {
-			for (i=0; i<8; i++)
-			{
+			for (i = 0; i < 8; i++) {
 				if (k32isa_boards[k]->simcard_channels[i]) simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
 				if (k32isa_boards[k]->tty_at_channels[i]) polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
 				if (k32isa_boards[k]->gsm_modules[i]) {
@@ -1182,10 +1161,10 @@ static void __exit k32isa_exit(void)
 					kfree(k32isa_boards[k]->gsm_modules[i]);
 				}
 			}
-			for (j=0; j<2; j++)
-			{
-				for (i=0; i<4; i++)
+			for (j = 0; j < 2; j++) {
+				for (i = 0; i < 4; i++) {
 					vinetic_rtp_channel_unregister(k32isa_boards[k]->vinetics[j]->rtp_channels[i]);
+				}
 				vinetic_device_unregister(k32isa_boards[k]->vinetics[j]);
 			}
 			polygator_board_unregister(k32isa_boards[k]->pg_board);
@@ -1200,10 +1179,8 @@ static void __exit k32isa_exit(void)
 	release_region(PG_ISA_VS_BASE, PG_ISA_VS_LENGTH);
 	release_region(PG_ISA_SIM_BASE, PG_ISA_SIM_LENGTH);
 	release_region(PG_ISA_IMEI_BASE, PG_ISA_IMEI_LENGTH);
-	for (k=0; k<4; k++)
-	{
-		for (j=0; j<2; j++)
-		{
+	for (k = 0; k < 4; k++) {
+		for (j = 0; j < 2; j++) {
 			release_region(PG_ISA_VD_BASE + k*64 + j*32, PG_ISA_VD_LENGTH);
 		}
 	}
