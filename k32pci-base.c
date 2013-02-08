@@ -721,7 +721,8 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		}
 		memset(mod, 0, sizeof(struct k32_gsm_module_data));
 		// select GSM module type
-		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083) || ((brd->type & 0x00ff) == 0x0084)) {
+		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083) ||
+				((brd->type & 0x00ff) == 0x0084) || ((brd->type & 0x00ff) != 0x0085)) {
 			if (brd->rom[8] == '*') {
 				if (brd->rom[i] == 'M')
 					mod->type = POLYGATOR_MODULE_TYPE_M10;

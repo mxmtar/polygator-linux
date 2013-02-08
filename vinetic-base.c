@@ -99,6 +99,8 @@ static void vinetic_poll_proc(unsigned long addr)
 	size_t ch;
 	size_t pkt_write[8];
 
+	struct vin_status_registers status_changed;
+
 	size_t wr;
 
 	size_t len;
@@ -116,8 +118,7 @@ static void vinetic_poll_proc(unsigned long addr)
 	spin_lock(&vin->lock);
 
 	// check data for read
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -126,8 +127,7 @@ static void vinetic_poll_proc(unsigned long addr)
 		goto vinetic_poll_proc_error;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rOBXML);
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -142,8 +142,7 @@ static void vinetic_poll_proc(unsigned long addr)
 	// read voice packet from mailbox
 	if (vin->pdata_size) {
 		// write short commands rPOBX
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -152,13 +151,10 @@ static void vinetic_poll_proc(unsigned long addr)
 			goto vinetic_poll_proc_error;
 		}
 		vin->write_nwd(vin->cbdata, VIN_rPOBX);
-// 		debug("%s: 1 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
-		while (vin->pdata_size)
-		{
+		while (vin->pdata_size) {
 			// read vop/evt packet first part
 			vin->pdata_size--;
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -167,7 +163,6 @@ static void vinetic_poll_proc(unsigned long addr)
 				goto vinetic_poll_proc_error;
 			}
 			cmd.parts.first.full = vin->read_nwd(vin->cbdata);
-// 			debug("cmd.parts.first.full=%04x\n", cmd.parts.first.full);
 			// check for read marker
 			if (cmd.parts.first.bits.rw != VIN_READ) {
 				log(KERN_ERR, "%s: write type is wrong\n", vin->name);
@@ -195,8 +190,7 @@ static void vinetic_poll_proc(unsigned long addr)
 			}
 			// read vop/evt packet second part
 			vin->pdata_size--;
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -205,7 +199,6 @@ static void vinetic_poll_proc(unsigned long addr)
 				goto vinetic_poll_proc_error;
 			}
 			cmd.parts.second.full = vin->read_nwd(vin->cbdata);
-// 			debug("cmd.parts.second.full=%04x\n", cmd.parts.second.full);
 			// get packet data length
 			cnt = cmd.parts.second.vop.bits.length;
 			if (cnt > 253) {
@@ -214,21 +207,15 @@ static void vinetic_poll_proc(unsigned long addr)
 			}
 			// sort packet by channel
 			rtp = vin->rtp_channels[cmd.parts.first.bits.chan];
-// 			rtp = NULL;
 			if (rtp) {
-
 				spin_lock(&rtp->lock);
-
 				rtp->read_slot[rtp->read_slot_write].length = cnt * 2;
 				if (cmd.parts.second.vop.bits.odd) rtp->read_slot[rtp->read_slot_write].length--;
 				datap = rtp->read_slot[rtp->read_slot_write].data;
-// 				debug("%s: 3 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
-				while (vin->pdata_size && cnt)
-				{
+				while (vin->pdata_size && cnt) {
 					vin->pdata_size--;
 					cnt--;
-					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-					{
+					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 						if (!vin->is_not_ready(vin->cbdata)) break;
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
@@ -237,11 +224,11 @@ static void vinetic_poll_proc(unsigned long addr)
 						log(KERN_ERR, "%s: timeout\n", vin->name);
 						goto vinetic_poll_proc_error;
 					}
-					if (vin->pdata_size)
+					if (vin->pdata_size) {
 						*datap++ = vin->read_nwd(vin->cbdata);
-					else
+					} else {
 						*datap++ = vin->read_eom(vin->cbdata);
-// 					debug("%s: 4 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
+					}
 				}
 				// adjust read packet slot index
 				rtp->read_slot_count++;
@@ -254,23 +241,17 @@ static void vinetic_poll_proc(unsigned long addr)
 				rtp->read_slot_write++;
 				if (rtp->read_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT)
 					rtp->read_slot_write = 0;
-
 				// wake read_slot_count waitqueue
 				wake_up_interruptible(&rtp->read_slot_count_waitq);
-
 				// wake poll waitqueue
 				wake_up_interruptible(&rtp->poll_waitq);
-
 				spin_unlock(&rtp->lock);
-
 			} else {
 				// unknown data packet - flush out mailbox
-				while (vin->pdata_size && cnt)
-				{
+				while (vin->pdata_size && cnt) {
 					vin->pdata_size--;
 					cnt--;
-					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-					{
+					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 						if (!vin->is_not_ready(vin->cbdata)) break;
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
@@ -278,13 +259,13 @@ static void vinetic_poll_proc(unsigned long addr)
 						log(KERN_ERR, "%s: timeout\n", vin->name);
 						goto vinetic_poll_proc_error;
 					}
-					if (vin->pdata_size)
+					if (vin->pdata_size) {
 						vin->read_nwd(vin->cbdata);
-					else
+					} else {
 						vin->read_eom(vin->cbdata);
+					}
 				}
 			}
-// 			debug("%s: 2 vin->pdata_size=%lu, cnt=%lu\n", vin->name, (long unsigned int)vin->pdata_size, (long unsigned int)cnt);
 		}
 	}
 
@@ -292,24 +273,21 @@ static void vinetic_poll_proc(unsigned long addr)
 	if (vin->cdata_size) {
 // 		debug("cdata_size=%lu\n", vin->cdata_size);
 		// write short commands rCOBX
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
 			log(KERN_ERR, "%s: timeout\n", vin->name);
 			goto vinetic_poll_proc_error;
-			}
+		}
 		vin->write_nwd(vin->cbdata, VIN_rCOBX);
 		// read rest data
 		vin->read_cbox_length = vin->cdata_size;
 		datap = vin->read_cbox_data;
-		while (vin->cdata_size)
-		{
+		while (vin->cdata_size) {
 			vin->cdata_size--;
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -317,32 +295,28 @@ static void vinetic_poll_proc(unsigned long addr)
 				log(KERN_ERR, "%s: timeout\n", vin->name);
 				goto vinetic_poll_proc_error;
 			}
-			if (vin->cdata_size)
+			if (vin->cdata_size) {
 				*datap++ = vin->read_nwd(vin->cbdata);
-			else
+			} else {
 				*datap++ = vin->read_eom(vin->cbdata);
+			}
 		}
 		wake_up_interruptible(&vin->read_cbox_waitq);
 	}
 	// write voice packet into vinetic
-	for (ch=0; ch<8; ch++)
-		pkt_write[ch] = 1;
+	for (ch = 0; ch < 8; ch++) pkt_write[ch] = 1;
 	wr = 1;
-	while (wr)
-	{
+	while (wr) {
 		// test for write is actual
 		wr = 0;
-		for (ch=0; ch<8; ch++)
-		{
+		for (ch = 0; ch < 8; ch++) {
 			if (pkt_write[ch]) {
 				wr = 1;
 				break;
 			}
 		}
-
 		// check free mailbox space
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -351,8 +325,7 @@ static void vinetic_poll_proc(unsigned long addr)
 			goto vinetic_poll_proc_error;
 		}
 		vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -362,19 +335,14 @@ static void vinetic_poll_proc(unsigned long addr)
 		}
 		res = vin->read_eom(vin->cbdata);
 		vin->free_pbox_space = res & 0xff;
-
-		for (ch=0; ch<8; ch++)
-		{
+		for (ch = 0; ch < 8; ch++) {
 			if (pkt_write[ch]) {
 				rtp = vin->rtp_channels[ch];
-// 				rtp = NULL;
 				if (rtp) {
 					spin_lock(&rtp->lock);
 					if (rtp->write_slot_count) {
 						len = rtp->write_slot[rtp->write_slot_read].length/2;
-						if (rtp->write_slot[rtp->write_slot_read].length%2)
-							len++;
-// 						debug("%lu: count=%lu slot=%lu f=%lu n=%lu\n", (unsigned long int)ch, (unsigned long int)rtp->write_slot_count, (unsigned long int)rtp->write_slot_read, (unsigned long int)vin->free_pbox_space, (unsigned long int)(len + 2));
+						if (rtp->write_slot[rtp->write_slot_read].length%2) len++;
 						if (vin->free_pbox_space >= (len + 2)) {
 							cmd.parts.first.bits.rw = VIN_WRITE;
 							cmd.parts.first.bits.sc = VIN_SC_NO;
@@ -386,11 +354,8 @@ static void vinetic_poll_proc(unsigned long addr)
 							cmd.parts.second.vop.bits.odd = rtp->write_slot[rtp->write_slot_read].length%2;
 							cmd.parts.second.vop.bits.res0 = 0;
 							cmd.parts.second.vop.bits.length = len;
-// 							debug("%lu: length=%lu\n", (unsigned long int)ch, (unsigned long int)cmd.parts.second.vop.bits.length);
-// 							debug("%lu: %04x:%04x\n", (unsigned long int)ch, cmd.parts.first.full, cmd.parts.second.full);
 							// write voice packet header to vinetic
-							for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-							{
+							for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 								if (!vin->is_not_ready(vin->cbdata)) break;
 								udelay(VINETIC_WAIT_TIMEOUT);
 							}
@@ -400,8 +365,7 @@ static void vinetic_poll_proc(unsigned long addr)
 								goto vinetic_poll_proc_error;
 							}
 							vin->write_nwd(vin->cbdata, cmd.parts.first.full);
-							for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-							{
+							for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 								if (!vin->is_not_ready(vin->cbdata)) break;
 								udelay(VINETIC_WAIT_TIMEOUT);
 							}
@@ -412,10 +376,8 @@ static void vinetic_poll_proc(unsigned long addr)
 							}
 							vin->write_nwd(vin->cbdata, cmd.parts.second.full);
 							// write voice packet data to vinetic
-							for (cnt=0; cnt<len; cnt++)
-							{
-								for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-								{
+							for (cnt = 0; cnt < len; cnt++) {
+								for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 									if (!vin->is_not_ready(vin->cbdata)) break;
 									udelay(VINETIC_WAIT_TIMEOUT);
 								}
@@ -424,39 +386,37 @@ static void vinetic_poll_proc(unsigned long addr)
 									log(KERN_ERR, "%s: timeout\n", vin->name);
 									goto vinetic_poll_proc_error;
 								}
-								if (cnt == (len-1))
+								if (cnt == (len-1)) {
 									vin->write_eom(vin->cbdata, rtp->write_slot[rtp->write_slot_read].data[cnt]);
-								else
+								} else {
 									vin->write_nwd(vin->cbdata, rtp->write_slot[rtp->write_slot_read].data[cnt]);
+								}
 							}
-
 							// adjust free pbox space
 							vin->free_pbox_space -= (len+2);
-
 							// adjust write packet slot index
 							rtp->write_slot_read++;
 							if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
 								rtp->write_slot_read = 0;
 							rtp->write_slot_count--;
-	
 							// wake write_slot_count waitqueue
 							wake_up_interruptible(&rtp->write_slot_count_waitq);
-							
 							// wake poll waitqueue
 							wake_up_interruptible(&rtp->poll_waitq);
 						}
 						pkt_write[ch]--;
-					} else
+					} else {
 						pkt_write[ch] = 0;
+					}
 					spin_unlock(&rtp->lock);
-				} else
+				} else {
 					pkt_write[ch] = 0;
+				}
 			}
 		}
 	}
 	// read edsp channel status
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -466,10 +426,8 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	vin->write_nwd(vin->cbdata, VIN_rSR(VIN_BC, 0));
 	datap = (u_int16_t *)&vin->status.sr;
-	for (cnt=0; cnt < 24; cnt++)
-	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+	for (cnt = 0; cnt < 24; cnt++) {
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -477,14 +435,14 @@ static void vinetic_poll_proc(unsigned long addr)
 			log(KERN_ERR, "%s: timeout\n", vin->name);
 			goto vinetic_poll_proc_error;
 		}
-		if (cnt == 23)
+		if (cnt == 23) {
 			*datap++ = vin->read_eom(vin->cbdata);
-		else
+		} else {
 			*datap++ = vin->read_nwd(vin->cbdata);
+		}
 	}
 	// read hardware status
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -494,10 +452,8 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	vin->write_nwd(vin->cbdata, VIN_rHWSR);
 	datap = (u_int16_t *)&vin->status.hwsr;
-	for (cnt=0; cnt < 2; cnt++)
-	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+	for (cnt = 0; cnt < 2; cnt++) {
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -505,14 +461,14 @@ static void vinetic_poll_proc(unsigned long addr)
 			log(KERN_ERR, "%s: timeout\n", vin->name);
 			goto vinetic_poll_proc_error;
 		}
-		if (cnt == 1)
+		if (cnt == 1) {
 			*datap++ = vin->read_eom(vin->cbdata);
-		else
+		} else {
 			*datap++ = vin->read_nwd(vin->cbdata);
+		}
 	}
 	// read mailbox status
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -522,10 +478,8 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	vin->write_nwd(vin->cbdata, VIN_rBXSR);
 	datap = (u_int16_t *)&vin->status.bxsr;
-	for (cnt=0; cnt < 2; cnt++)
-	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+	for (cnt = 0; cnt < 2; cnt++) {
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -533,77 +487,61 @@ static void vinetic_poll_proc(unsigned long addr)
 			log(KERN_ERR, "%s: timeout\n", vin->name);
 			goto vinetic_poll_proc_error;
 		}
-		if (cnt == 1)
+		if (cnt == 1) {
 			*datap++ = vin->read_eom(vin->cbdata);
-		else
+		} else {
 			*datap++ = vin->read_nwd(vin->cbdata);
+		}
 	}
-	// apply mask
-	vin->status.sr.sre1_0.full &= vin->status_mask.sr.sre1_0.full;
-	vin->status.sr.sre2_0.full &= vin->status_mask.sr.sre2_0.full;
-	vin->status.sr.srs1_0.full &= vin->status_mask.sr.srs1_0.full;
-	vin->status.sr.srs2_0.full &= vin->status_mask.sr.srs2_0.full;
-	vin->status.sr.sre1_1.full &= vin->status_mask.sr.sre1_1.full;
-	vin->status.sr.sre2_1.full &= vin->status_mask.sr.sre2_1.full;
-	vin->status.sr.srs1_1.full &= vin->status_mask.sr.srs1_1.full;
-	vin->status.sr.srs2_1.full &= vin->status_mask.sr.srs2_1.full;
-	vin->status.sr.sre1_2.full &= vin->status_mask.sr.sre1_2.full;
-	vin->status.sr.sre2_2.full &= vin->status_mask.sr.sre2_2.full;
-	vin->status.sr.srs1_2.full &= vin->status_mask.sr.srs1_2.full;
-	vin->status.sr.srs2_2.full &= vin->status_mask.sr.srs2_2.full;
-	vin->status.sr.sre1_3.full &= vin->status_mask.sr.sre1_3.full;
-	vin->status.sr.sre2_3.full &= vin->status_mask.sr.sre2_3.full;
-	vin->status.sr.srs1_3.full &= vin->status_mask.sr.srs1_3.full;
-	vin->status.sr.srs2_3.full &= vin->status_mask.sr.srs2_3.full;
-	vin->status.sr.sre1_4.full &= vin->status_mask.sr.sre1_4.full;
-	vin->status.sr.sre2_4.full &= vin->status_mask.sr.sre2_4.full;
-	vin->status.sr.sre1_5.full &= vin->status_mask.sr.sre1_5.full;
-	vin->status.sr.sre2_5.full &= vin->status_mask.sr.sre2_5.full;
-	vin->status.sr.sre1_6.full &= vin->status_mask.sr.sre1_6.full;
-	vin->status.sr.sre2_6.full &= vin->status_mask.sr.sre2_6.full;
-	vin->status.sr.sre1_7.full &= vin->status_mask.sr.sre1_7.full;
-	vin->status.sr.sre2_7.full &= vin->status_mask.sr.sre2_7.full;
-	vin->status.hwsr.hwsr1.full &= vin->status_mask.hwsr.hwsr1.full;
-	vin->status.hwsr.hwsr2.full &= vin->status_mask.hwsr.hwsr2.full;
-	vin->status.bxsr.bxsr1.full &= vin->status_mask.bxsr.bxsr1.full;
-	vin->status.bxsr.bxsr2.full &= vin->status_mask.bxsr.bxsr2.full;
+	// get changes
+	status_changed.sr.sre1_0.full = (vin->status.sr.sre1_0.full ^ vin->status_old.sr.sre1_0.full) & vin->status_mask.sr.sre1_0.full;
+	status_changed.sr.sre2_0.full = (vin->status.sr.sre2_0.full ^ vin->status_old.sr.sre2_0.full) & vin->status_mask.sr.sre2_0.full;
+	status_changed.sr.srs1_0.full = (vin->status.sr.srs1_0.full ^ vin->status_old.sr.srs1_0.full) & vin->status_mask.sr.srs1_0.full;
+	status_changed.sr.srs2_0.full = (vin->status.sr.srs2_0.full ^ vin->status_old.sr.srs2_0.full) & vin->status_mask.sr.srs2_0.full;
+	status_changed.sr.sre1_1.full = (vin->status.sr.sre1_1.full ^ vin->status_old.sr.sre1_1.full) & vin->status_mask.sr.sre1_1.full;
+	status_changed.sr.sre2_1.full = (vin->status.sr.sre2_1.full ^ vin->status_old.sr.sre2_1.full) & vin->status_mask.sr.sre2_1.full;
+	status_changed.sr.srs1_1.full = (vin->status.sr.srs1_1.full ^ vin->status_old.sr.srs1_1.full) & vin->status_mask.sr.srs1_1.full;
+	status_changed.sr.srs2_1.full = (vin->status.sr.srs2_1.full ^ vin->status_old.sr.srs2_1.full) & vin->status_mask.sr.srs2_1.full;
+	status_changed.sr.sre1_2.full = (vin->status.sr.sre1_2.full ^ vin->status_old.sr.sre1_2.full) & vin->status_mask.sr.sre1_2.full;
+	status_changed.sr.sre2_2.full = (vin->status.sr.sre2_2.full ^ vin->status_old.sr.sre2_2.full) & vin->status_mask.sr.sre2_2.full;
+	status_changed.sr.srs1_2.full = (vin->status.sr.srs1_2.full ^ vin->status_old.sr.srs1_2.full) & vin->status_mask.sr.srs1_2.full;
+	status_changed.sr.srs2_2.full = (vin->status.sr.srs2_2.full ^ vin->status_old.sr.srs2_2.full) & vin->status_mask.sr.srs2_2.full;
+	status_changed.sr.sre1_3.full = (vin->status.sr.sre1_3.full ^ vin->status_old.sr.sre1_3.full) & vin->status_mask.sr.sre1_3.full;
+	status_changed.sr.sre2_3.full = (vin->status.sr.sre2_3.full ^ vin->status_old.sr.sre2_3.full) & vin->status_mask.sr.sre2_3.full;
+	status_changed.sr.srs1_3.full = (vin->status.sr.srs1_3.full ^ vin->status_old.sr.srs1_3.full) & vin->status_mask.sr.srs1_3.full;
+	status_changed.sr.srs2_3.full = (vin->status.sr.srs2_3.full ^ vin->status_old.sr.srs2_3.full) & vin->status_mask.sr.srs2_3.full;
+	status_changed.sr.sre1_4.full = (vin->status.sr.sre1_4.full ^ vin->status_old.sr.sre1_4.full) & vin->status_mask.sr.sre1_4.full;
+	status_changed.sr.sre2_4.full = (vin->status.sr.sre2_4.full ^ vin->status_old.sr.sre2_4.full) & vin->status_mask.sr.sre2_4.full;
+	status_changed.sr.sre1_5.full = (vin->status.sr.sre1_5.full ^ vin->status_old.sr.sre1_5.full) & vin->status_mask.sr.sre1_5.full;
+	status_changed.sr.sre2_5.full = (vin->status.sr.sre2_5.full ^ vin->status_old.sr.sre2_5.full) & vin->status_mask.sr.sre2_5.full;
+	status_changed.sr.sre1_6.full = (vin->status.sr.sre1_6.full ^ vin->status_old.sr.sre1_6.full) & vin->status_mask.sr.sre1_6.full;
+	status_changed.sr.sre2_6.full = (vin->status.sr.sre2_6.full ^ vin->status_old.sr.sre2_6.full) & vin->status_mask.sr.sre2_6.full;
+	status_changed.sr.sre1_7.full = (vin->status.sr.sre1_7.full ^ vin->status_old.sr.sre1_7.full) & vin->status_mask.sr.sre1_7.full;
+	status_changed.sr.sre2_7.full = (vin->status.sr.sre2_7.full ^ vin->status_old.sr.sre2_7.full) & vin->status_mask.sr.sre2_7.full;
+	status_changed.hwsr.hwsr1.full = (vin->status.hwsr.hwsr1.full ^ vin->status_old.hwsr.hwsr1.full) & vin->status_mask.hwsr.hwsr1.full;
+	status_changed.hwsr.hwsr2.full = (vin->status.hwsr.hwsr2.full ^ vin->status_old.hwsr.hwsr2.full) & vin->status_mask.hwsr.hwsr2.full;
+	status_changed.bxsr.bxsr1.full = (vin->status.bxsr.bxsr1.full ^ vin->status_old.bxsr.bxsr1.full) & vin->status_mask.bxsr.bxsr1.full;
+	status_changed.bxsr.bxsr2.full = (vin->status.bxsr.bxsr2.full ^ vin->status_old.bxsr.bxsr2.full) & vin->status_mask.bxsr.bxsr2.full;
+	// store current status as old
+	memcpy(&vin->status_old, &vin->status, sizeof(struct vin_status_registers));
 	// check status
-	if ((vin->status.sr.sre1_0.full != vin->status_old.sr.sre1_0.full) ||
-		(vin->status.sr.sre2_0.full != vin->status_old.sr.sre2_0.full) ||
-		(vin->status.sr.srs1_0.full != vin->status_old.sr.srs1_0.full) ||
-		(vin->status.sr.srs2_0.full != vin->status_old.sr.srs2_0.full) ||
-		(vin->status.sr.sre1_1.full != vin->status_old.sr.sre1_1.full) ||
-		(vin->status.sr.sre2_1.full != vin->status_old.sr.sre2_1.full) ||
-		(vin->status.sr.srs1_1.full != vin->status_old.sr.srs1_1.full) ||
-		(vin->status.sr.srs2_1.full != vin->status_old.sr.srs2_1.full) ||
-		(vin->status.sr.sre1_2.full != vin->status_old.sr.sre1_2.full) ||
-		(vin->status.sr.sre2_2.full != vin->status_old.sr.sre2_2.full) ||
-		(vin->status.sr.srs1_2.full != vin->status_old.sr.srs1_2.full) ||
-		(vin->status.sr.srs2_2.full != vin->status_old.sr.srs2_2.full) ||
-		(vin->status.sr.sre1_3.full != vin->status_old.sr.sre1_3.full) ||
-		(vin->status.sr.sre2_3.full != vin->status_old.sr.sre2_3.full) ||
-		(vin->status.sr.srs1_3.full != vin->status_old.sr.srs1_3.full) ||
-		(vin->status.sr.srs2_3.full != vin->status_old.sr.srs2_3.full) ||
-		(vin->status.sr.sre1_4.full != vin->status_old.sr.sre1_4.full) ||
-		(vin->status.sr.sre2_4.full != vin->status_old.sr.sre2_4.full) ||
-		(vin->status.sr.sre1_5.full != vin->status_old.sr.sre1_5.full) ||
-		(vin->status.sr.sre2_5.full != vin->status_old.sr.sre2_5.full) ||
-		(vin->status.sr.sre1_6.full != vin->status_old.sr.sre1_6.full) ||
-		(vin->status.sr.sre2_6.full != vin->status_old.sr.sre2_6.full) ||
-		(vin->status.sr.sre1_7.full != vin->status_old.sr.sre1_7.full) ||
-		(vin->status.sr.sre2_7.full != vin->status_old.sr.sre2_7.full) ||
-		(vin->status.hwsr.hwsr1.full != vin->status_old.hwsr.hwsr1.full) ||
-		(vin->status.hwsr.hwsr2.full != vin->status_old.hwsr.hwsr2.full) ||
-		(vin->status.bxsr.bxsr1.full != vin->status_old.bxsr.bxsr1.full) ||
-		(vin->status.bxsr.bxsr2.full != vin->status_old.bxsr.bxsr2.full)) {
+	if (status_changed.sr.sre1_0.full || status_changed.sr.sre2_0.full || status_changed.sr.srs1_0.full || status_changed.sr.srs2_0.full ||
+		status_changed.sr.sre1_1.full || status_changed.sr.sre2_1.full || status_changed.sr.srs1_1.full || status_changed.sr.srs2_1.full ||
+		status_changed.sr.sre1_2.full || status_changed.sr.sre2_2.full || status_changed.sr.srs1_2.full || status_changed.sr.srs2_2.full ||
+		status_changed.sr.sre1_3.full || status_changed.sr.sre2_3.full || status_changed.sr.srs1_3.full || status_changed.sr.srs2_3.full ||
+		status_changed.sr.sre1_4.full || status_changed.sr.sre2_4.full ||
+		status_changed.sr.sre1_5.full || status_changed.sr.sre2_5.full ||
+		status_changed.sr.sre1_6.full || status_changed.sr.sre2_6.full ||
+		status_changed.sr.sre1_7.full || status_changed.sr.sre2_7.full ||
+		status_changed.hwsr.hwsr1.full ||
+		status_changed.hwsr.hwsr2.full ||
+		status_changed.bxsr.bxsr1.full ||
+		status_changed.bxsr.bxsr2.full ) {
 		vin->status_ready = 1;
 		wake_up_interruptible(&vin->status_waitq);
 	}
-	// store currebt flags
-	memcpy(&vin->status_old, &vin->status, sizeof(struct vin_status_registers));
 	// check free mailbox space
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -612,8 +550,7 @@ static void vinetic_poll_proc(unsigned long addr)
 		goto vinetic_poll_proc_error;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
-	for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-	{
+	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 		if (!vin->is_not_ready(vin->cbdata)) break;
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
@@ -629,12 +566,13 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 
 	spin_unlock(&vin->lock);
-	if (vin->poll)
+	if (vin->poll) {
 #if HZ >= 200
-		mod_timer(&vin->poll_timer, jiffies + (5*HZ)/1000);
+		mod_timer(&vin->poll_timer, jiffies + (5 * HZ) / 1000);
 #else
 		mod_timer(&vin->poll_timer, jiffies + 1);
 #endif
+	}
 	return;
 
 vinetic_poll_proc_error:
@@ -722,8 +660,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		cmd_short.full = cmd.parts.first.full;
 		spin_lock_bh(&vin->lock);
 		// write command to vinetic
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -734,8 +671,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		}
 		vin->write_nwd(vin->cbdata, cmd_short.full);
 		// get actual data length to read
-		switch ((cmd_short.full >> 4) & 0x1f)
-		{
+		switch ((cmd_short.full >> 4) & 0x1f) {
 			case VIN_SH_CMD_CODE_rIR:
 				res = 1;
 				break;
@@ -745,8 +681,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 					res = 24;
 					break;
 				} else {
-					switch (cmd_short.bits.chan)
-					{
+					switch (cmd_short.bits.chan) {
 						case 0: case 1: case 2: case 3:
 							res = 4;
 							break;
@@ -803,10 +738,8 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				goto vinetic_read_end;
 		}
 		// read data from vinetic
-		for (cnt=0; cnt<res; cnt++)
-		{
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+		for (cnt = 0; cnt < res; cnt++) {
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -815,10 +748,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				res = -EIO;
 				goto vinetic_read_end;
 			}
-			if (cnt == res-1)
+			if (cnt == res-1) {
 				data[cnt] = vin->read_eom(vin->cbdata);
-			else
+			} else {
 				data[cnt] = vin->read_nwd(vin->cbdata);
+			}
 		}
 		// check data count
 		if (count < res*2) {
@@ -839,10 +773,8 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		spin_lock_bh(&vin->lock);
 		// check for free space in mailbox
 		cnt = HZ;
-		for (;;)
-		{
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+		for (;;) {
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -852,8 +784,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				goto vinetic_read_end;
 			}
 			vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -863,9 +794,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				goto vinetic_read_end;
 			}
 			vin->free_cbox_space = (vin->read_eom(vin->cbdata) >> 8) & 0xff;
-
 			if (vin->free_cbox_space >= 2) break;
-
 			if (filp->f_flags & O_NONBLOCK) {
 				spin_unlock_bh(&vin->lock);
 				res = -EAGAIN;
@@ -882,8 +811,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			spin_lock_bh(&vin->lock);
 		}
 		// write command to vinetic
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -893,8 +821,7 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			goto vinetic_read_end;
 		}
 		vin->write_nwd(vin->cbdata, cmd.parts.first.full);
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -907,8 +834,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		vin->read_cbox_length = 0;
 		spin_unlock_bh(&vin->lock);
 		res = wait_event_interruptible(vin->read_cbox_waitq, vin->read_cbox_length != 0);
-		if (res)
+		if (res) {
 			goto vinetic_read_end;
+		}
 		spin_lock_bh(&vin->lock);
 		res = vin->read_cbox_length * 2;
 		memcpy(data, vin->read_cbox_data, vin->read_cbox_length * 2);
@@ -961,7 +889,7 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		// copy data from user
 		cnt = sizeof(struct vin_status_registers);
 		cnt = min(cnt, count);
-		if (copy_from_user(&mask, buff, res)) {
+		if (copy_from_user(&mask, buff, cnt)) {
 			res = -EFAULT;
 			goto vinetic_write_end;
 		}
@@ -986,8 +914,7 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		length = 1;
 	} else {
 		// regular command
-		switch (cmd.parts.first.bits.cmd)
-		{
+		switch (cmd.parts.first.bits.cmd) {
 			case VIN_CMD_SOP:
 				memcpy(data, &cmd.full, sizeof(u_int32_t));
 				res = cmd.parts.second.sop.bits.length;
@@ -1031,10 +958,8 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	// check for free space in mailbox
 	spin_lock_bh(&vin->lock);
 	cnt = HZ;
-	for (;;)
-	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+	for (;;) {
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -1044,8 +969,7 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			goto vinetic_write_end;
 		}
 		vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -1054,11 +978,8 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			res = -EIO;
 			goto vinetic_write_end;
 		}
-
 		vin->free_cbox_space = (vin->read_eom(vin->cbdata) >> 8) & 0xff;
-
 		if (vin->free_cbox_space >= length) break;
-
 		if (filp->f_flags & O_NONBLOCK) {
 			spin_unlock_bh(&vin->lock);
 			res = -EAGAIN;
@@ -1075,10 +996,8 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		spin_lock_bh(&vin->lock);
 	}
 	// write data to vinetic
-	for (cnt=0; cnt<length; cnt++)
-	{
-		for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-		{
+	for (cnt = 0; cnt < length; cnt++) {
+		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) break;
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
@@ -1121,8 +1040,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 
 // 	debug("%s cmd=0x%08x\n", vin->name, cmd);
 
-	switch (cmd)
-	{
+	switch (cmd) {
 		case VINETIC_RESET:
 			spin_lock_bh(&vin->lock);
 			vin->reset(vin->cbdata);
@@ -1133,8 +1051,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 		case VINETIC_RESET_RDYQ:
 			spin_lock_bh(&vin->lock);
 			vin->write_nwd(vin->cbdata, VIN_rIR);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1148,8 +1065,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			break;
 		case VINETIC_FLUSH_MBOX:
 			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1159,8 +1075,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				break;
 			}
 			vin->write_nwd(vin->cbdata, VIN_rOBXML);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1174,8 +1089,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			vin->cdata_size = (phi >> 8) & 0x1f;
 			if (vin->pdata_size) {
 				// write short commands rPOBX
-				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-				{
+				for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 					if (!vin->is_not_ready(vin->cbdata)) break;
 					udelay(VINETIC_WAIT_TIMEOUT);
 				}
@@ -1185,11 +1099,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 					break;
 				}
 				vin->write_nwd(vin->cbdata, VIN_rPOBX);
-				while (vin->pdata_size)
-				{
+				while (vin->pdata_size) {
 					vin->pdata_size--;
-					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-					{
+					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 						if (!vin->is_not_ready(vin->cbdata)) break;
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
@@ -1198,16 +1110,16 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 						res = -EIO;
 						break;
 					}
-					if (vin->pdata_size)
+					if (vin->pdata_size) {
 						vin->read_nwd(vin->cbdata);
-					else
+					} else {
 						vin->read_eom(vin->cbdata);
+					}
 				}
 			}
 			if (vin->cdata_size) {
 				// write short commands rCOBX
-				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-				{
+				for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 					if (!vin->is_not_ready(vin->cbdata)) break;
 					udelay(VINETIC_WAIT_TIMEOUT);
 				}
@@ -1217,11 +1129,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 					break;
 				}
 				vin->write_nwd(vin->cbdata, VIN_rCOBX);
-				while (vin->cdata_size)
-				{
+				while (vin->cdata_size) {
 					vin->cdata_size--;
-					for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-					{
+					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 						if (!vin->is_not_ready(vin->cbdata)) break;
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
@@ -1230,18 +1140,18 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 						res = -EIO;
 						break;
 					}
-					if (vin->cdata_size)
+					if (vin->cdata_size) {
 						vin->read_nwd(vin->cbdata);
-					else
+					} else {
 						vin->read_eom(vin->cbdata);
+					}
 				}
 			}
 			spin_unlock_bh(&vin->lock);
 			break;
 		case VINETIC_DISABLE_IRQ:
 			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1251,8 +1161,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				break;
 			}
 			vin->write_nwd(vin->cbdata, 0x0801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1263,10 +1172,8 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, 0x4020);
 			// write data to vinetic
-			for (cnt=0; cnt<32; cnt++)
-			{
-				for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-				{
+			for (cnt = 0; cnt < 32; cnt++) {
+				for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 					if (!vin->is_not_ready(vin->cbdata)) break;
 					udelay(VINETIC_WAIT_TIMEOUT);
 				}
@@ -1275,11 +1182,12 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 					res = -EIO;
 					goto vinetic_generic_ioctl_end;
 				}
-				if (cnt == 31)
+				if (cnt == 31) {
 					vin->write_eom(vin->cbdata, 0xffff);
-				else
+				} else {
 					vin->write_nwd(vin->cbdata, 0xffff);
 				}
+			}
 			spin_unlock_bh(&vin->lock);
 			break;
 		case VINETIC_GET_NOT_READY:
@@ -1294,8 +1202,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			break;
 		case VINETIC_REVISION:
 			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1305,8 +1212,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				break;
 			}
 			vin->write_nwd(vin->cbdata, 0x8801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1316,8 +1222,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				break;
 			}
 			vin->write_nwd(vin->cbdata, 0x8001);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1333,8 +1238,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			break;
 		case VINETIC_CHECKSUM:
 			spin_lock_bh(&vin->lock);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1344,8 +1248,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				break;
 			}
 			vin->write_nwd(vin->cbdata, 0x8801);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1355,8 +1258,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				break;
 			}
 			vin->write_nwd(vin->cbdata, 0x8901);
-			for (wait_count=0; wait_count<VINETIC_WAIT_COUNT; wait_count++)
-			{
+			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 				if (!vin->is_not_ready(vin->cbdata)) break;
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
@@ -1420,8 +1322,7 @@ loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
 	loff_t newpos;
 	struct vinetic *vin = filp->private_data;
 
-	switch (whence)
-	{
+	switch (whence) {
 		case 0: /* SEEK_SET */
 			newpos = off;
 			break;
@@ -1438,8 +1339,7 @@ loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
 	if (newpos < 0) return -EINVAL;
 
 	spin_lock_bh(&vin->lock);
-	for (;;)
-	{
+	for (;;) {
 		if (filp->f_pos == 0) break;
 		
 		if (filp->f_flags & O_NONBLOCK) {
@@ -1527,8 +1427,7 @@ static ssize_t vinetic_rtp_channel_read(struct file *filp, char __user *buff, si
 
 	spin_lock_bh(&rtp->lock);
 
-	for (;;)
-	{
+	for (;;) {
 		// successfull return
 		if (rtp->read_slot_count > 0)
 			break;
@@ -1580,8 +1479,7 @@ static ssize_t vinetic_rtp_channel_write(struct file *filp, const char __user *b
 
 	spin_lock_bh(&rtp->lock);
 
-	for (;;)
-	{
+	for (;;) {
 		// successfull return
 		if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT)
 			break;
@@ -1643,7 +1541,7 @@ static unsigned int vinetic_rtp_channel_poll(struct file *filp, struct poll_tabl
 	spin_unlock_bh(&rtp->lock);
 
 	return res;
-	}
+}
 
 static struct file_operations vinetic_rtp_channel_fops = {
 	.owner   = THIS_MODULE,
@@ -1680,8 +1578,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 
 	mutex_lock(&vinetic_device_list_lock);
 	// check for name is not used
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		if (!strcmp(vinetic_device_list[i].name, name)) {
 			mutex_unlock(&vinetic_device_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
@@ -1689,8 +1586,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 		}
 	}
 	// get free slot
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		if (!vinetic_device_list[i].data) {
 			devno = MKDEV(vinetic_major, i);
 			vinetic_device_list[i].devno = devno;
@@ -1711,7 +1607,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	slot_alloc = 1;
 	
 	// init vinetic private data
-	for (i=0; i<8; i++) vin->rtp_channels[i] = NULL;
+	for (i = 0; i < 8; i++) vin->rtp_channels[i] = NULL;
 	spin_lock_init(&vin->lock);
 	init_waitqueue_head(&vin->free_cbox_waitq);
 	init_waitqueue_head(&vin->read_cbox_waitq);
@@ -1783,8 +1679,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 vinetic_device_register_error:
 	if (slot_alloc) {
 		mutex_lock(&vinetic_device_list_lock);
-		for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-		{
+		for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 			if (!strcmp(vinetic_device_list[i].name, name)) {
 				vinetic_device_list[i].name[0] = '\0';
 				vinetic_device_list[i].devno = 0;
@@ -1808,8 +1703,7 @@ void vinetic_device_unregister(struct vinetic *vin)
 
 	mutex_lock(&vinetic_device_list_lock);
 
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		if ((vinetic_device_list[i].type == VINETIC_DEVTYPE_VINETIC) &&
 				(!strcmp(vinetic_device_list[i].name, vin->name))) {
 			vinetic_device_list[i].name[0] = '\0';
@@ -1844,8 +1738,7 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 
 	mutex_lock(&vinetic_device_list_lock);
 	// check for name is not used
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		if (!strcmp(vinetic_device_list[i].name, name)) {
 			mutex_unlock(&vinetic_device_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
@@ -1853,8 +1746,7 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 		}
 	}
 	// get free slot
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		if (!vinetic_device_list[i].data) {
 			devno = MKDEV(vinetic_major, i);
 			vinetic_device_list[i].devno = devno;
@@ -1925,8 +1817,7 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 vinetic_rtp_channel_register_error:
 	if (slot_alloc) {
 		mutex_lock(&vinetic_device_list_lock);
-		for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-		{
+		for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 			if (!strcmp(vinetic_device_list[i].name, name)) {
 				vinetic_device_list[i].name[0] = '\0';
 				vinetic_device_list[i].devno = 0;
@@ -1952,8 +1843,7 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 
 	mutex_lock(&vinetic_device_list_lock);
 
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		if ((vinetic_device_list[i].type == VINETIC_DEVTYPE_RTPCHAN) &&
 				(!strcmp(vinetic_device_list[i].name, rtp->name))) {
 			vinetic_device_list[i].name[0] = '\0';
@@ -1982,8 +1872,7 @@ static int __init vinetic_init(void)
 	verbose("loading ...\n");
 
 	// Init vinetic device list
-	for (i=0; i<VINETIC_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < VINETIC_DEVICE_MAXCOUNT; i++) {
 		vinetic_device_list[i].name[0] = '\0';
 		vinetic_device_list[i].devno = 0;
 		vinetic_device_list[i].type = VINETIC_DEVTYPE_UNKNOWN;
