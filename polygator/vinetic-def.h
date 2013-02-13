@@ -881,6 +881,7 @@ enum {
 	VIN_MOD_SIG = 0x2,
 	VIN_MOD_CODER = 0x3,
 	VIN_MOD_CONT = 0x5,
+	VIN_MOD_RESOURCE = 0x6,
 	VIN_MOD_TEST = 0x7,
 };
 
@@ -1139,6 +1140,7 @@ enum {
 	VIN_EOP_SIG_CONT		= 0x00,
 	VIN_EOP_SIG_CHAN		= 0x01,
 	VIN_EOP_DTMFREC			= 0x04,
+	VIN_EOP_UTG				= 0x0A,
 	VIN_EOP_SIG_CONF_RTP	= 0x10,
 };
 /*!
@@ -1187,6 +1189,71 @@ struct vin_cmd_eop_dtmf_receiver {
 enum {
 	VIN_IS_SIGINA = 0, /*! Signal SIG-InA of Signaling-Module is input for the DTMF Receiver */
 	VIN_IS_SIGINB = 1, /*! Signal SIG-InB of Signaling-Module is input for the DTMF Receiver */
+};
+/*!
+ * \brief Command_UTG
+ * Description: This command activates the universal tone generator in the addressed channel.
+ */ 
+struct vin_cmd_eop_utg {
+	union vin_cmd header;
+	struct vin_eop_utg {
+		u_int16_t utgnr:4;
+		u_int16_t add_b:2;
+		u_int16_t add_a:2;
+		u_int16_t res:4;
+		u_int16_t log:1;
+		u_int16_t sq:1;
+		u_int16_t sm:1;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_utg;
+} __attribute__((packed));
+/*!
+ * \brief VINETIC Stop Mask
+ */
+enum {
+	VIN_SM_STOP = 0, /*! The tone generator immediately stops the tone generation
+						in case of a deactivation. The SA bit within mask registers
+						is not regarded in this case. */
+	VIN_SM_CONTINUE = 1, /*! The tone generator continues the tone generation until
+						it has reached a tone generation step which allows a
+						deactivation. The SA bit within the mask coefficient
+						determines when the tone generator is deactivated by itself. */
+};
+/*!
+ * \brief VINETIC Square Wave Select
+ */
+enum {
+	VIN_SQ_SINUS = 0, /*! The tone generator generates a sinus tone. */
+	VIN_SQ_SQUARE = 1, /*! The tone generator generates a square wave. */
+};
+/*!
+ * \brief VINETIC Fade-IN/Out Logarithmic Select
+ */
+enum {
+	VIN_FADE_LINEAR = 0, /*! The fade-in/out block works linear. */
+	VIN_FADE_LOGARITHMIC = 1, /*! The fade-in/out block works logarithmic. */
+};
+/*!
+ * \brief VINETIC Adder-A
+ */
+enum {
+	VIN_A1_NO = 0, /*! No tone signal injection into adder-A. */
+	VIN_A1_TONESIGNAL = 1, /*! Tone signal injection into adder-A. Coefficient GO_1
+								determines the signal amplitude. */
+	VIN_A1_TONESIGNAL_VOICESIGNAL = 2, /*! Tone signal injection into adder-A and
+											muting the voice signal. Coefficient
+											GO_1 determines the signal amplitude. */
+};
+/*!
+ * \brief VINETIC Adder-B
+ */
+enum {
+	VIN_A2_NOINJECTION = 0, /*! No tone signal injection into adder-B. */
+	VIN_A2_INJECTION = 1, /*! Tone signal injection into adder-B. Coefficient GO_2
+								determines the signal amplitude. */
+	VIN_A2_INJECTION_MUTE = 2, /*! Tone signal injection into adder-B and muting
+									the voice signal. Coefficient GO_2 determines
+									the signal amplitude. */
 };
 /*!
  * \brief Command_Signaling_Chan_Configuration_RTP_Support
@@ -1484,7 +1551,50 @@ enum {
 	VIN_LITTLE_ENDIAN = 1,
 };
 /*!
- * \brief Test and Download
+ * \brief Resource Commands
+ */
+enum {
+	VIN_EOP_UTG_COEFF = 0x11,
+};
+/*!
+ * \brief Command_UTG_Coefficients
+	Description: This command determines the coefficients for the UTG.
+ */
+struct vin_cmd_eop_utg_coefficients {
+	union vin_cmd header;
+	struct vin_eop_utg_coefficients {
+		u_int16_t fd_in_att;
+		u_int16_t fd_in_sp;
+		u_int16_t fd_in_tim;
+		u_int16_t fd_ot_sp;
+		u_int16_t mod_12:8;
+		u_int16_t fd_ot_tim:8;
+		u_int16_t f1;
+		u_int16_t f2;
+		u_int16_t f3;
+		u_int16_t f4;
+		u_int16_t lev_2:8;
+		u_int16_t lev_1:8;
+		u_int16_t lev_4:8;
+		u_int16_t lev_3:8;
+		u_int16_t t_1;
+		u_int16_t msk_1;
+		u_int16_t t_2;
+		u_int16_t msk_2;
+		u_int16_t t_3;
+		u_int16_t msk_3;
+		u_int16_t t_4;
+		u_int16_t msk_4;
+		u_int16_t t_5;
+		u_int16_t msk_5;
+		u_int16_t t_6;
+		u_int16_t msk_6;
+		u_int16_t go_add_a;
+		u_int16_t go_add_b;
+	} __attribute__((packed)) eop_utg_coefficients;
+} __attribute__((packed));
+/*!
+ * \brief Test and Download Commands
  */
 enum {
 	VIN_EOP_EDSPSWVERSREG = 0x06,
