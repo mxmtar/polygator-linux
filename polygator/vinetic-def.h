@@ -1560,6 +1560,39 @@ enum {
  * \brief Command_UTG_Coefficients
 	Description: This command determines the coefficients for the UTG.
  */
+struct vin_utg_msk {
+	u_int16_t sa:2;
+	u_int16_t fo:1;
+	u_int16_t m12:1;
+	u_int16_t f4:1;
+	u_int16_t f3:1;
+	u_int16_t f2:1;
+	u_int16_t f1:1;
+	u_int16_t fi:1;
+	u_int16_t rep:3;
+	u_int16_t nxt:4;
+} __attribute__((packed));
+/*!
+ * \brief VINETIC Stop Allowed
+ * If the bit SM is set to 1, the tone generator is deactivated by itself.
+ * The bit SA determines when the deactivation occurs.
+ */
+enum {
+	VIN_SA_NO = 0, /*! A deactivation of the tone generator is not
+						allowed within and after the current tone generation step. */
+	VIN_SA_DELAYED_REP = 1, /*! If the host has set the EN bit to 0, the deactivation
+								of the tone generator is delayed until the 
+								current tone generation step has been completely executed
+								inclusive of the requested repetitions (if REP > 0). */
+	VIN_SA_DELAYED_EXECUTED = 2, /*! If the host has set the EN bit to 0, the deactivation
+									of the tone generator is delayed until the current tone
+									generation step has been completely executed. The REP bits
+									are not regarded which means that the deactivation is made
+									immediately after the execution of the current tone
+									generation step. */
+	VIN_SA_IMMEDIATE = 3, /*! If the host deactivates the universal tone generator, the tone
+								generator is deactivated immediately by the time control block. */
+};
 struct vin_cmd_eop_utg_coefficients {
 	union vin_cmd header;
 	struct vin_eop_utg_coefficients {
@@ -1578,17 +1611,17 @@ struct vin_cmd_eop_utg_coefficients {
 		u_int16_t lev_4:8;
 		u_int16_t lev_3:8;
 		u_int16_t t_1;
-		u_int16_t msk_1;
+		struct vin_utg_msk msk_1;
 		u_int16_t t_2;
-		u_int16_t msk_2;
+		struct vin_utg_msk msk_2;
 		u_int16_t t_3;
-		u_int16_t msk_3;
+		struct vin_utg_msk msk_3;
 		u_int16_t t_4;
-		u_int16_t msk_4;
+		struct vin_utg_msk msk_4;
 		u_int16_t t_5;
-		u_int16_t msk_5;
+		struct vin_utg_msk msk_5;
 		u_int16_t t_6;
-		u_int16_t msk_6;
+		struct vin_utg_msk msk_6;
 		u_int16_t go_add_a;
 		u_int16_t go_add_b;
 	} __attribute__((packed)) eop_utg_coefficients;
