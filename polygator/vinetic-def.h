@@ -396,7 +396,7 @@ enum {
 	VIN_OP_MODE_ATI				= 0x12A, // 1 0010 1010
 	VIN_OP_MODE_SPDR			= 0x130, // 1 0011 0000
 	VIN_OP_MODE_GS				= 0x140, // 1 0100 0000
-	VIN_OP_MODE_AGS				= 0x140, // 1 0100 0001
+	VIN_OP_MODE_AGS				= 0x141, // 1 0100 0001
 	VIN_OP_MODE_GSFRP			= 0x144, // 1 0100 0100
 	VIN_OP_MODE_R				= 0x150, // 1 0101 0000
 	VIN_OP_MODE_R1				= 0x154, // 1 0101 0100
@@ -1139,6 +1139,8 @@ struct vin_cmd_eop_ali_near_end_lec {
 enum {
 	VIN_EOP_SIG_CONT		= 0x00,
 	VIN_EOP_SIG_CHAN		= 0x01,
+	VIN_EOP_CIDSEND			= 0x02,
+	VIN_EOP_DTMFATGEN		= 0x03,
 	VIN_EOP_DTMFREC			= 0x04,
 	VIN_EOP_UTG				= 0x0A,
 	VIN_EOP_SIG_CONF_RTP	= 0x10,
@@ -1168,6 +1170,91 @@ struct vin_cmd_eop_signaling_channel {
 		u_int16_t en:1;
 	} __attribute__((packed)) eop_signaling_channel;
 } __attribute__((packed));
+
+/*!
+ * \brief Command_CID_Sender
+ * Description: This command activates one of the CID Senders in the addressed channel.
+ */
+struct vin_cmd_eop_cid_sender {
+	union vin_cmd header;
+	struct vin_eop_cid_sender {
+		u_int16_t cisnr:4;
+		u_int16_t add_b:2;
+		u_int16_t add_a:2;
+		u_int16_t res0:2;
+		u_int16_t ar:1;
+		u_int16_t v23:1;
+		u_int16_t hlev:1;
+		u_int16_t ad:1;
+		u_int16_t res1:1;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_cid_sender;
+} __attribute__((packed));
+/*!
+ * \brief High Level CID Generation Mode
+ */
+enum {
+	VIN_HLEV_LOW = 0, /*! Low Level CID generation mode (simple FSK modulator) */
+	VIN_HLEV_HIGH = 1, /*! High level CID generation mode (with automatic framing) */
+};
+/*!
+ * \brief CID Specification
+ */
+enum {
+	VIN_V23_BEL202 = 0, /*! The Bellcore specification (Bel202) is used for the CID Sender */
+	VIN_V23_ITU_T = 1, /*! The ITU-T V.23 specification is used for the CID Sender */
+};
+/*!
+ * \brief Add CID to Adder-A
+ */
+enum {
+	VIN_ADD_A_NONE = 0, /*! No CID signal injection into adder-A */
+	VIN_ADD_A_CID = 1, /*! CID signal injection into adder-A */
+	VIN_ADD_A_CID_MUTE = 2, /*! CID signal injection into adder-A and mute voice signal */
+};
+/*!
+ * \brief Add CID to Adder-B
+ */
+enum {
+	VIN_ADD_B_NONE = 0, /*! No CID signal injection into adder-B */
+	VIN_ADD_B_CID = 1, /*! CID signal injection into adder-B */
+	VIN_ADD_B_CID_MUTE = 2, /*! CID signal injection into adder-B and mute voice signal */
+};
+/*!
+ * \brief Command_DTMF_AT_Generator
+ * Description: This command activates one of the DTMF/AT Generators in the addressed channel.
+ */
+struct vin_cmd_eop_dtmfat_generator {
+	union vin_cmd header;
+	struct vin_eop_dtmfat_generator {
+		u_int16_t gennr:4;
+		u_int16_t add_2:2;
+		u_int16_t add_1:2;
+		u_int16_t res0:1;
+		u_int16_t fg:1;
+		u_int16_t md:1;
+		u_int16_t ad:1;
+		u_int16_t res1:2;
+		u_int16_t et:1;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_dtmfat_generator;
+} __attribute__((packed));
+/*!
+ * \brief Add DTMF to Adder-A
+ */
+enum {
+	VIN_ADD_A_DTMFAT = 1, /*! DTMF/AT signal injection into the adder-A */
+	VIN_ADD_A_DTMFAT_MUTE = 2, /*! DTMF/AT signal injection into the adder-A and mute voice signal */
+	VIN_ADD_A_RES = 3, /*! Reserved */
+};
+/*!
+ * \brief  Add DTMF to Adder-B
+ */
+enum {
+	VIN_ADD_B_DTMFAT = 1, /*! DTMF/AT signal injection into the adder-B */
+	VIN_ADD_B_DTMFAT_MUTE = 2, /*! DTMF/AT signal injection into the adder-B and mute voice signal */
+	VIN_ADD_B_RES = 3, /*! Reserved */
+};
 /*!
  * \brief Command_DTMF_Receiver
  * Description: This command activates the DTMF Receiver in the addressed channel.
@@ -1554,11 +1641,38 @@ enum {
  * \brief Resource Commands
  */
 enum {
+	VIN_EOP_DTMFATCOEFF = 0x0A,
+	VIN_EOP_DTM_AT_GEN_DATA = 0x0B,
 	VIN_EOP_UTG_COEFF = 0x11,
 };
 /*!
+ * \brief Command_DTMF_AT_Generator_Coefficients
+ * Description: This command determines the coefficients for the DTMF/AT Generator.
+ */
+struct vin_cmd_eop_dtmfat_generator_coefficients {
+	union vin_cmd header;
+	struct vin_eop_dtmfat_generator_coefficients {
+		u_int16_t level2:8;
+		u_int16_t level1:8;
+		u_int16_t timp:8;
+		u_int16_t timt:8;
+		u_int16_t att_add_b:8;
+		u_int16_t att_add_a:8;
+	} __attribute__((packed)) eop_dtmfat_generator_coefficients;
+} __attribute__((packed));
+/*!
+ * \brief Command_DTMF_AT_Generator_Data
+ * Description: This command sends new data to the DTMF/AT Generator.
+ */
+struct vin_cmd_eop_dtmfat_generator_data {
+	union vin_cmd header;
+	struct vin_eop_dtmfat_generator_data {
+		u_int16_t dtc[10];
+	} __attribute__((packed)) eop_dtmfat_generator_data;
+} __attribute__((packed));
+/*!
  * \brief Command_UTG_Coefficients
-	Description: This command determines the coefficients for the UTG.
+ * Description: This command determines the coefficients for the UTG.
  */
 struct vin_utg_msk {
 	u_int16_t sa:2;
