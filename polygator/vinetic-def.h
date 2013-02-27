@@ -539,13 +539,6 @@ enum {
 #define VIN_wPHIERR \
 	VIN_CMD_SHORT_BUILD(VIN_WRITE, 0, (VIN_SH_CMD_CODE_wPHIERR >> 8) & 0x1, (VIN_SH_CMD_CODE_wPHIERR >> 4) & 0xf, VIN_SH_CMD_CODE_wPHIERR & 0xf, 0)
 
-
-#define VIN_POWER_DOWN_HIGH_IMPEDANCE(_chan) \
-	VIN_CMD_SHORT_BUILD(VIN_WRITE, 0, (VIN_SH_CMD_CODE_POWER_DOWN_HIGH_IMPEDANCE >> 8) & 0x1, (VIN_SH_CMD_CODE_POWER_DOWN_HIGH_IMPEDANCE >> 4) & 0xf, VIN_SH_CMD_CODE_POWER_DOWN_HIGH_IMPEDANCE & 0xf, _chan)
-
-#define VIN_ACTIVE_HIGH_VBATH(_chan) \
-	VIN_CMD_SHORT_BUILD(VIN_WRITE, 0, (VIN_SH_CMD_CODE_ACTIVE_HIGH_VBATH >> 8) & 0x1, (VIN_SH_CMD_CODE_ACTIVE_HIGH_VBATH >> 4) & 0xf, VIN_SH_CMD_CODE_ACTIVE_HIGH_VBATH & 0xf, _chan)
-
 /*!
  * \brief VINETIC Command
  */
@@ -903,7 +896,7 @@ struct vin_cmd_eop_pcm_interface_control {
 		u_int16_t drive_0:1;
 		u_int16_t r_slope:1;
 		u_int16_t x_slope:1;
-		u_int16_t db_clk:1;
+		u_int16_t dbl_clk:1;
 		u_int16_t pcmxo:3;
 		u_int16_t res:3;
 		u_int16_t ds:1;

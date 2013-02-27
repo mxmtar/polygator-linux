@@ -103,8 +103,9 @@ static void simcard_poll_proc(unsigned long addr)
 		sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
 		sim->command.header.length = 0;
 		// store data
-		while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (!sim->is_read_ready(sim->data)))
+		while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (!sim->is_read_ready(sim->data))) {
 			sim->command.container.data[sim->command.header.length++] = sim->read(sim->data);
+		}
 		// set data status bit
 		sim->read_status.bits.data = 1;
 	}
@@ -116,8 +117,9 @@ static void simcard_poll_proc(unsigned long addr)
 
 	spin_unlock(&sim->lock);
 
-	if (sim->poll)
+	if (sim->poll) {
 		mod_timer(&sim->poll_timer, jiffies + 1);
+	}
 }
 
 static int simcard_open(struct inode *inode, struct file *filp)
@@ -154,11 +156,14 @@ static int simcard_release(struct inode *inode, struct file *filp)
 
 	spin_lock_bh(&sim->lock);
 	usage = --sim->usage;
-	if (!usage) sim->poll = 0;
+	if (!usage) {
+		sim->poll = 0;
+	}
 	spin_unlock_bh(&sim->lock);
 
-	if (!usage)
+	if (!usage) {
 		del_timer_sync(&sim->poll_timer);
+	}
 
 	return 0;
 }
@@ -175,9 +180,10 @@ static ssize_t simcard_read(struct file *filp, char __user *buff, size_t count, 
 
 	spin_lock_bh(&sim->lock);
 
-	for (;;)
-	{
-		if (sim->read_status.full) break;
+	for (;;) {
+		if (sim->read_status.full) {
+			break;
+		}
 
 		if (filp->f_flags & O_NONBLOCK) {
 			spin_unlock_bh(&sim->lock);
@@ -186,8 +192,9 @@ static ssize_t simcard_read(struct file *filp, char __user *buff, size_t count, 
 		}
 		// sleeping
 		spin_unlock_bh(&sim->lock);
-		if ((res = wait_event_interruptible(sim->read_waitq, sim->read_status.full)))
+		if ((res = wait_event_interruptible(sim->read_waitq, sim->read_status.full))) {
 			goto simcard_read_end;
+		}
 		spin_lock_bh(&sim->lock);
 	}
 
@@ -241,9 +248,10 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
 
 	spin_lock_bh(&sim->lock);
 
-	for (;;)
-	{
-		if (sim->write_status.full) break;
+	for (;;) {
+		if (sim->write_status.full) {
+			break;
+		}
 
 		if (filp->f_flags & O_NONBLOCK) {
 			spin_unlock_bh(&sim->lock);
@@ -252,17 +260,16 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
 		}
 		// sleeping
 		spin_unlock_bh(&sim->lock);
-		if ((res = wait_event_interruptible(sim->write_waitq, sim->write_status.full)))
+		if ((res = wait_event_interruptible(sim->write_waitq, sim->write_status.full))) {
 			goto simcard_write_end;
+		}
 		spin_lock_bh(&sim->lock);
 	}
 
-	switch (data.header.type)
-	{
+	switch (data.header.type) {
 		case SIMCARD_CONTAINER_TYPE_DATA:
 			i = 0;
-			while (data.header.length)
-			{
+			while (data.header.length) {
 				if (sim->is_write_ready(sim->data)) {
 					sim->write(sim->data, data.container.data[i++]);
 					data.header.length--;
@@ -297,11 +304,13 @@ static unsigned int simcard_poll(struct file *filp, struct poll_table_struct *wa
 
 	spin_lock_bh(&sim->lock);
 
-	if (sim->read_status.full)
+	if (sim->read_status.full) {
 		res |= POLLIN | POLLRDNORM;
+	}
 
-	if (sim->write_status.full)
+	if (sim->write_status.full) {
 		res |= POLLOUT | POLLWRNORM;
+	}
 
 	spin_unlock_bh(&sim->lock);
 
@@ -341,8 +350,7 @@ struct simcard_device *simcard_device_register(struct module *owner,
 
 	mutex_lock(&simcard_device_list_lock);
 	// get free slot
-	for (i=0; i<SIMCARD_DEVICE_MAXCOUNT; i++)
-	{
+	for (i=0; i<SIMCARD_DEVICE_MAXCOUNT; i++) {
 		if (!simcard_device_list[i]) {
 			sim->devno = devno = MKDEV(simcard_major, i);
 			simcard_device_list[i] = sim;
@@ -452,8 +460,9 @@ static int __init simcard_init(void)
 	verbose("loading ...\n");
 
 	// Init simcard device list
-	for (i=0; i<SIMCARD_DEVICE_MAXCOUNT; i++)
+	for (i=0; i<SIMCARD_DEVICE_MAXCOUNT; i++) {
 		simcard_device_list[i] = NULL;
+	}
 
 	// Registering simcard device class
 	if (!(simcard_class = class_create(THIS_MODULE, "simcard"))) {
