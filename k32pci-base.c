@@ -553,37 +553,43 @@ static ssize_t k32pci_board_write(struct file *filp, const char __user *buff, si
 			mod->control.bits.pwr_off = !pwr_state;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = - ENODEV;
+		}
 	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
 			mod->control.bits.mod_off = !key_state;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = -ENODEV;
+		}
 	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
-			if (baudrate == 9600)
+			if (baudrate == 9600) {
 				mod->control.bits.com_spd = 3;
-			else
+			} else {
 				mod->control.bits.com_spd = 2;
+			}
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = -ENODEV;
+		}
 	} else if (sscanf(cmd, "GSM%u SERIAL=%u", &at_chan, &serial) == 2) {
 		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
-			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300)
+			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300) {
 				mod->at_port_select = serial;
+			}
 			res = len;
 		} else
 			res = -ENODEV;
-	} else
+	} else {
 		res = -ENOMSG;
+	}
 
 k32pci_board_write_end:
 	return res;
@@ -597,12 +603,16 @@ static struct file_operations k32pci_board_fops = {
 	.write   = k32pci_board_write,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
+static int k32pci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+#else
 static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+#endif
 {
 	int rc;
 	unsigned long addr;
 	u_int32_t pow10;
-	size_t i,j;
+	size_t i, j;
 	char devname[POLYGATOR_BRDNAME_MAXLEN];
 	struct k32_gsm_module_data *mod;
 	struct k32_board *brd = NULL;
@@ -724,25 +734,29 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083) ||
 				((brd->type & 0x00ff) == 0x0084) || ((brd->type & 0x00ff) == 0x0085)) {
 			if (brd->rom[8] == '*') {
-				if (brd->rom[i] == 'M')
+				if (brd->rom[i] == 'M') {
 					mod->type = POLYGATOR_MODULE_TYPE_M10;
-				else if (brd->rom[i] == '9')
+				} else if (brd->rom[i] == '9') {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM900;
-				else if (brd->rom[i] == 'S')
+				} else if (brd->rom[i] == 'S'){
 					mod->type = POLYGATOR_MODULE_TYPE_SIM300;
-				else if (brd->rom[i] == 'G')
+				} else if (brd->rom[i] == 'G') {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
-				else
+				} else {
 					mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
-			} else
+				}
+			} else {
 				mod->type = POLYGATOR_MODULE_TYPE_SIM300;
-		} else
+			}
+		} else {
 			mod->type = POLYGATOR_MODULE_TYPE_SIM300;
+		}
 
-		if ((brd->type & 0x00ff) == 0x0085)
+		if ((brd->type & 0x00ff) == 0x0085) {
 			mod->at_no_buf = 0;
-		else
+		} else {
 			mod->at_no_buf = 1;
+		}
 
 		if (mod->type == POLYGATOR_MODULE_TYPE_SIM300) {
 			mod->control.bits.mod_off = 1;		// module inactive
@@ -868,9 +882,13 @@ k32pci_board_probe_error:
 	return rc;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
+static void k32pci_board_remove(struct pci_dev *pdev)
+#else
 static void __devexit k32pci_board_remove(struct pci_dev *pdev)
+#endif
 {
-	size_t i,j;
+	size_t i, j;
 	
 	struct k32_board *brd = pci_get_drvdata(pdev);
 
