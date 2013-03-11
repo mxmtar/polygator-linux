@@ -1,0 +1,5 @@
+KERNEL=="polygator/subsystem", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="polygator/board*", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="polygator/ttyPG*", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="ttyPG*", OWNER="asterisk", GROUP="asterisk", MODE="0660"
+KERNEL=="polygator/sim*", OWNER="asterisk", GROUP="asterisk", MODE="0660"

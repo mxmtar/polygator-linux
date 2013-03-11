@@ -1358,6 +1358,7 @@ enum {
 	VIN_EOP_CODER_CONF = 0x10,
 	VIN_EOP_CODER_CONF_RTP = 0x11,
 	VIN_EOP_CODER_JBSTAT = 0x14,
+	VIN_EOP_DECCODER_STATUS = 0x15,
 };
 /*!
  * \brief Command_Coder_Control
@@ -1600,6 +1601,42 @@ struct vin_cmd_eop_coder_channel_jb_statistics {
 		u_int16_t sid_lw;
 	} __attribute__((packed)) eop_coder_channel_jb_statistics;
 } __attribute__((packed));
+/*!
+ * \brief Command_Coder_Channel_Decoder_Status
+ * Description: This command reflects the current decoder status, which means the currently used decoder and the packet time.
+ * A read access will clear the status bit DEC_CHG.
+ * The bits PTC and DC can be changed via a write command. The bits PTD and DEC are read only.
+ */
+struct vin_cmd_eop_coder_channel_decoder_status {
+	union vin_cmd header;
+	struct vin_eop_coder_channel_decoder_status  {
+		u_int16_t dec:5;
+		u_int16_t res:1;
+		u_int16_t dc:1;
+		u_int16_t ptc:1;
+		u_int16_t ptd:8;
+	} __attribute__((packed)) eop_coder_channel_decoder_status;
+} __attribute__((packed));
+
+/*!
+ * \brief VINETIC Decoder Algorithm
+ */
+enum {
+	VIN_DEC_NO = 0x00, /*! No decoder is running. */
+	VIN_DEC_G711_ALAW = 0x02, /*! G.711, 64 kbit/s, A-Law */
+	VIN_DEC_G711_MLAW = 0x03, /*! G.711, 64 kbit/s, μ-Law */
+	VIN_DEC_G726_16 = 0x04, /*! G.726, 16 kbit/s */
+	VIN_DEC_G726_24 = 0x05, /*! G.726, 24 kbit/s */
+	VIN_DEC_G726_32 = 0x06, /*! G.726, 32 kbit/s */
+	VIN_DEC_G726_40 = 0x07, /*! G.726, 40 kbit/s */
+	VIN_DEC_G728_16 = 0x10, /*! G.728, 16 kbit/s */
+	VIN_DEC_G729AB_8 = 0x12, /*! G.729A,B, 8 kbit/s */
+	VIN_DEC_G729E_11_8 = 0x13, /*! G.729E, 11.8 kbit/s */
+	VIN_DEC_ILBC_15_2 = 0x1a, /*! iLBC, 15.2 kB/s */
+	VIN_DEC_ILBS_13_3 = 0x01b, /*! iLBC, 13.3 kB/s */
+	VIN_DEC_G7231_5_3 = 0x1c, /*! G.723.1, 5.3 kbit/s */
+	VIN_DEC_G7231_6_3 = 0x1d, /*! G.723.1, 6.3 kbit/s */
+};
 /*!
  * \brief Control Commands
  */

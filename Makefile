@@ -83,38 +83,41 @@ all: modules
 modules:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) modules
 
-install: modules_install headers_install
+install: install_modules install_headers
 
-modules_install:
+install_modules:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) INSTALL_MOD_PATH=$(KERNEL_STG_DIR) INSTALL_MOD_DIR=$(KERNEL_MOD_DIR) modules_install
 
-headers_install:
+install_headers:
 	$(INSTALL) -m 755 -d "$(DESTDIR)/usr/include/polygator"
 	for header in polygator/*.h ; do \
 		$(INSTALL) -m 644 $$header "$(DESTDIR)/usr/include/polygator" ; \
 	done
 
-sysvinit_install:
+install_sysvinit:
 	$(INSTALL) -m 755 polygator.sysvinit $(DESTDIR)/etc/init.d/polygator
 ifneq (,$(SYSVINIT_ADD))
 	$(SYSVINIT_ADD)
 endif
 
-pgctl_install:
+install_pgctl:
 	$(INSTALL) -m 755 pgctl $(DESTDIR)/usr/bin/pgctl
 	$(INSTALL) -m 755 pgsncfg $(DESTDIR)/usr/bin/pgsncfg
 	$(INSTALL) -m 755 pgtty $(DESTDIR)/usr/bin/pgtty
-    
-uninstall: modules_uninstall headers_uninstall sysvinit_uninstall pgctl_uninstall
 
-modules_uninstall:
+install_asterisk_owner_udev_rules:
+	$(INSTALL) -m 644 98-polygator-asterisk.rules "$(DESTDIR)/etc/udev/rules.d"
+    
+uninstall: uninstall_modules uninstall_headers uninstall_sysvinit uninstall_pgctl uninstall_asterisk_owner_udev_rules
+
+uninstall_modules:
 	rm -rvf "$(DESTDIR)/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
 	depmod
 
-headers_uninstall:
+uninstall_headers:
 	rm -rvf "$(DESTDIR)/usr/include/polygator"
 
-sysvinit_uninstall:
+uninstall_sysvinit:
 	rm -fv $(DESTDIR)/etc/rc0.d/*polygator
 	rm -fv $(DESTDIR)/etc/rc1.d/*polygator
 	rm -fv $(DESTDIR)/etc/rc2.d/*polygator
@@ -124,10 +127,13 @@ sysvinit_uninstall:
 	rm -fv $(DESTDIR)/etc/rc6.d/*polygator
 	rm -fv $(DESTDIR)/etc/init.d/polygator
 
-pgctl_uninstall:
+uninstall_pgctl:
 	rm -fv $(DESTDIR)/usr/bin/pgctl
 	rm -fv $(DESTDIR)/usr/bin/pgsncfg
 	rm -fv $(DESTDIR)/usr/bin/pgtty
+
+uninstall_asterisk_owner_udev_rules:
+	rm -fv $(DESTDIR)/etc/udev/rules.d/98-polygator-asterisk.rules
 
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean

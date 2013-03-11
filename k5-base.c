@@ -45,6 +45,7 @@ MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator
 #define K5_CS_STATUS_1	0x10C0
 #define K5_CS_AT_COM_1	0x10D0
 #define K5_CS_SIM_COM_1	0x10E0
+#define K5_CS_FXO		0x1130
 #define K5_CS_SWITCH	0x1170
 #define K5_MODE_AUTONOM	0x1190
 #define K5_RESET_BOARD	0x11F0
@@ -230,60 +231,66 @@ static u_int16_t k5_vinetic_read_dia(uintptr_t cbdata)
 static void k5_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	uintptr_t addr = cbdata;
-	if (pos)
+	if (pos) {
 		addr += K5_CS_STATUS_2;
-	else
+	} else {
 		addr += K5_CS_STATUS_1;
+	}
 	iowrite8(reg, addr);
 }
 
 static u_int8_t k5_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
-	if (pos)
+	if (pos) {
 		addr += K5_CS_STATUS_2;
-	else
+	} else {
 		addr += K5_CS_STATUS_1;
+	}
 	return ioread8(addr);
 }
 
 static void k5_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	uintptr_t addr = cbdata;
-	if (pos)
+	if (pos) {
 		addr += K5_CS_AT_COM_2;
-	else
+	} else {
 		addr += K5_CS_AT_COM_1;
+	}
 	iowrite8(reg, addr);
 }
 
 static u_int8_t k5_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
-	if (pos)
+	if (pos) {
 		addr += K5_CS_AT_COM_2;
-	else
+	} else {
 		addr += K5_CS_AT_COM_1;
+	}
 	return ioread8(addr);
 }
 
 static void k5_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	uintptr_t addr = cbdata;
-	if (pos)
+	if (pos) {
 		addr += K5_CS_SIM_COM_2;
-	else
+	} else {
 		addr += K5_CS_SIM_COM_1;
+	}
 	iowrite8(reg, addr);
 }
 
 static u_int8_t k5_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
-	if (pos)
+	if (pos) {
 		addr += K5_CS_SIM_COM_2;
-	else
+	} else {
 		addr += K5_CS_SIM_COM_1;
+	}
 	return ioread8(addr);
 }
 
@@ -335,8 +342,7 @@ static void k5_sim_set_speed(void *data, int speed)
 {
 	struct k5_gsm_module_data *mod = (struct k5_gsm_module_data *)data;
 
-	switch (speed)
-	{
+	switch (speed) {
 		case 57600:
 			mod->control.bits.cn_speed_a = 1;
 			mod->control.bits.cn_speed_b = 0;
@@ -368,8 +374,9 @@ static void k5_tty_at_poll(unsigned long addr)
 	while (len < sizeof(buff)) {
 		// read status register
 		status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
-		if (status.bits.at_rd_empty)
+		if (status.bits.at_rd_empty) {
 			break;
+		}
 		// put char to receiving buffer
 		buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
 	}
@@ -386,8 +393,9 @@ static void k5_tty_at_poll(unsigned long addr)
 			mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
 			mod->at_xmit_tail++;
-			if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+			if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 				mod->at_xmit_tail = 0;
+			}
 			mod->at_xmit_count--;
 		}
 	}
@@ -460,7 +468,7 @@ static int k5_board_open(struct inode *inode, struct file *filp)
 		len += sprintf(private_data->buff+len, "FXO%lu VIN0%s RING=%u\r\n",
 						(unsigned long int)i, // #
 						"ALM1", // voice
-						0); // ring
+						ioread8(k5_cs3_base_ptr + K5_CS_FXO) & 1); // ring
 	}
 	// vinetic
 	if (brd->vinetic) {
@@ -538,10 +546,8 @@ static ssize_t k5_board_write(struct file *filp, const char __user *buff, size_t
 	char cmd[256];
 	size_t len;
 
-	u_int32_t at_chan;
-	u_int32_t pwr_state;
-	u_int32_t key_state;
-	u_int32_t baudrate;
+	u_int32_t ch;
+	u_int32_t value;
 	struct k5_gsm_module_data *mod;
 	struct k5_board_private_data *private_data = filp->private_data;
 
@@ -554,32 +560,40 @@ static ssize_t k5_board_write(struct file *filp, const char __user *buff, size_t
 		goto k5_board_write_end;
 	}
 
-	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 2) && ((mod = private_data->board->gsm_modules[at_chan]))) {
-			mod->control.bits.vbat = pwr_state;
+	if (sscanf(cmd, "GSM%u PWR=%u", &ch, &value) == 2) {
+		if ((ch >= 0) && (ch <= 2) && ((mod = private_data->board->gsm_modules[ch]))) {
+			mod->control.bits.vbat = value;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res= -ENODEV;
-	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 2) && ((mod = private_data->board->gsm_modules[at_chan]))) {
-			mod->control.bits.pkey = !key_state;
+		}
+	} else if (sscanf(cmd, "GSM%u KEY=%u", &ch, &value) == 2) {
+		if ((ch >= 0) && (ch <= 2) && ((mod = private_data->board->gsm_modules[ch]))) {
+			mod->control.bits.pkey = !value;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res= -ENODEV;
-	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 2) && ((mod = private_data->board->gsm_modules[at_chan]))) {
-			if (baudrate == 9600)
+		}
+	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &ch, &value) == 2) {
+		if ((ch >= 0) && (ch <= 2) && ((mod = private_data->board->gsm_modules[ch]))) {
+			if (value == 9600) {
 				mod->control.bits.at_baudrate = 0;
-			else
+			} else {
 				mod->control.bits.at_baudrate = 2;
+			}
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res= -ENODEV;
-	} else
+		}
+	} else if (sscanf(cmd, "FXO0 HOOK=%u", &value) == 1) {
+		iowrite8(value & 1, k5_cs3_base_ptr + K5_CS_FXO);
+		res = len;
+	} else {
 		res = -ENOMSG;
+	}
 
 k5_board_write_end:
 	return res;
