@@ -947,7 +947,7 @@ static int __init k32isa_init(void)
 		for (i = 0; i < k32isa_boards[k]->romsize; i++) k32isa_boards[k]->rom[i] = inb(PG_ISA_ROM_BASE + k*4);
 		verbose("\"%.*s\"\n", (int)k32isa_boards[k]->romsize, k32isa_boards[k]->rom);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32-isa-%lu", (long unsigned int)k);
+		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32isa-%lu", (long unsigned int)k);
 #else
 		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bi%lu", (long unsigned int)k);
 #endif
@@ -958,7 +958,7 @@ static int __init k32isa_init(void)
 
 		for (j = 0; j < 2; j++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32-isa-%lu-vin%lu", (long unsigned int)k, (unsigned long int)j);
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32isa-%lu-vin%lu", (long unsigned int)k, (unsigned long int)j);
 #else
 			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vi%lu%lu", (long unsigned int)k, (unsigned long int)j);
 #endif
@@ -975,7 +975,7 @@ static int __init k32isa_init(void)
 			}
 			for (i = 0; i < 4; i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32-isa-%lu-vin%lu-rtp%lu", (long unsigned int)k, (unsigned long int)j, (unsigned long int)i);
+				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32isa-%lu-vin%lu-rtp%lu", (long unsigned int)k, (unsigned long int)j, (unsigned long int)i);
 #else
 				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "ri%lu%lu%lu", (long unsigned int)k, (unsigned long int)j, (unsigned long int)i);
 #endif

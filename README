@@ -70,12 +70,3 @@ astdatadir => /path/to/asterisk/datadir
 
 Remove if exist exclamation mark (!) after [directories] to enable directories
 configuration sections.
-
-2. If asterisk run by user:group rather than root:root you must change
-ownership for polygator-linux device files.
-
-# chown -R user:group /dev/polygator
-
-and if exist
-
-# chown user:group /dev/ttyPG*

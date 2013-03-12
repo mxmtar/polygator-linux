@@ -683,7 +683,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		pow10 *= 10;
 	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32pci-pci-%u", brd->sn);
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32pci-%u", brd->sn);
 #else
 	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bp%u", brd->sn);
 #endif
@@ -694,7 +694,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 
 	for (j = 0; j < 2; j++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-pci-%u-vin%lu", brd->sn, (unsigned long int)j);
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-%u-vin%lu", brd->sn, (unsigned long int)j);
 #else
 		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vp%u%lu", brd->sn, (unsigned long int)j);
 #endif
@@ -711,9 +711,9 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		}
 		for (i = 0; i < 4; i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
 #else
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vp%u%lu%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "rp%u%lu%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
 #endif
 			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i)) {
 				rc = -1;
