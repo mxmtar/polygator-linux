@@ -1671,10 +1671,41 @@ enum {
  * \brief Resource Commands
  */
 enum {
+	VIN_EOP_CIDS_COEFF = 0x08,
+	VIN_EOP_CIDS_DATA = 0x09,
 	VIN_EOP_DTMFATCOEFF = 0x0A,
 	VIN_EOP_DTM_AT_GEN_DATA = 0x0B,
 	VIN_EOP_UTG_COEFF = 0x11,
 };
+/*!
+ * \brief Command_CID_Sender_Coefficients
+ * Description: This command determines the coefficients for the CID Sender.
+ */
+struct vin_cmd_eop_cid_sender_coefficients {
+	union vin_cmd header;
+	struct vin_eop_cid_sender_coefficients {
+		u_int16_t level:15;
+		u_int16_t res0:1;
+		u_int16_t seizure:15;
+		u_int16_t res1:1;
+		u_int16_t mark:15;
+		u_int16_t res2:1;
+		u_int16_t brs:8;
+		u_int16_t res3:8;
+	} __attribute__((packed)) eop_cid_sender_coefficients;
+} __attribute__((packed));
+/*!
+ * \brief Command_CID_Sender_Data
+ * Description: This command sends new data to the CID Sender.
+ */
+struct vin_cmd_eop_cid_sender_data {
+	union vin_cmd header;
+	struct vin_eop_cid_sender_data {
+		u_int16_t odd:1;
+		u_int16_t res:15;
+		u_int16_t data[10];
+	} __attribute__((packed)) eop_cid_sender_data;
+} __attribute__((packed));
 /*!
  * \brief Command_DTMF_AT_Generator_Coefficients
  * Description: This command determines the coefficients for the DTMF/AT Generator.
