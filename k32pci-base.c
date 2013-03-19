@@ -806,7 +806,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		mod->imei_write = k32pci_gsm_mod_imei_write;
 		mod->imei_read = k32pci_gsm_mod_imei_read;
 
-		mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+// 		mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 		init_timer(&mod->at_poll_timer);
 
 		spin_lock_init(&mod->at_lock);
