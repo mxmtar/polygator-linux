@@ -79,23 +79,35 @@ static DEFINE_MUTEX(simcard_device_list_lock);
 
 static void simcard_poll_proc(unsigned long addr)
 {
+	size_t i;
 	int reset;
+	int check;
 	struct simcard_device *sim = (struct simcard_device *)addr;
 
 	spin_lock(&sim->lock);
 
 	// reset
-	reset = sim->is_reset_request(sim->data);
+	check = reset = sim->is_reset_request(sim->data);
 	if (reset != sim->reset_state) {
-		// fill simcard reset container
-		sim->reset.header.type = SIMCARD_CONTAINER_TYPE_RESET;
-		sim->reset.header.length = sizeof(sim->reset.container.reset);
-		// store data
-		sim->reset.container.reset = reset;
-		// set reset status bit
-		sim->read_status.bits.reset = 1;
+		for (i = 0; i < 10; i++) {
+			udelay(10);
+			check = sim->is_reset_request(sim->data);
+			if (check != reset) {
+				break;
+			}
+		}
+		if (i == 10) {
+			// fill simcard reset container
+			sim->reset.header.type = SIMCARD_CONTAINER_TYPE_RESET;
+			sim->reset.header.length = sizeof(sim->reset.container.reset);
+			// store data
+			sim->reset.container.reset = reset;
+			// set reset status bit
+			sim->read_status.bits.reset = 1;
+			// store old state
+			sim->reset_state = reset;
+		}
 	}
-	sim->reset_state = reset;
 
 	// read
 	if (!sim->is_read_ready(sim->data)) {
