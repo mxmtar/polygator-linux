@@ -527,11 +527,8 @@ static ssize_t k32isa_board_write(struct file *filp, const char __user *buff, si
 	char cmd[256];
 	size_t len;
 
-	u_int32_t at_chan;
-	u_int32_t pwr_state;
-	u_int32_t key_state;
-	u_int32_t baudrate;
-	u_int32_t serial;
+	u_int32_t chan;
+	u_int32_t value;
 	struct k32_gsm_module_data *mod;
 	struct k32_board_private_data *private_data = filp->private_data;
 
@@ -544,43 +541,59 @@ static ssize_t k32isa_board_write(struct file *filp, const char __user *buff, si
 		goto k32isa_board_write_end;
 	}
 
-	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
-			mod = private_data->board->gsm_modules[at_chan];
-			mod->control.bits.pwr_off = !pwr_state;
+	if (sscanf(cmd, "GSM%u PWR=%u", &chan, &value) == 2) {
+		if ((chan >= 0) && (chan <= 7) && (private_data->board->gsm_modules[chan])) {
+			mod = private_data->board->gsm_modules[chan];
+			mod->control.bits.pwr_off = !value;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = - ENODEV;
-	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
-			mod = private_data->board->gsm_modules[at_chan];
-			mod->control.bits.mod_off = !key_state;
+		}
+	} else if (sscanf(cmd, "GSM%u KEY=%u", &chan, &value) == 2) {
+		if ((chan >= 0) && (chan <= 7) && (private_data->board->gsm_modules[chan])) {
+			mod = private_data->board->gsm_modules[chan];
+			mod->control.bits.mod_off = !value;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = -ENODEV;
-	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
-			mod = private_data->board->gsm_modules[at_chan];
-			if (baudrate == 9600)
+		}
+	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &chan, &value) == 2) {
+		if ((chan >= 0) && (chan <= 7) && (private_data->board->gsm_modules[chan])) {
+			mod = private_data->board->gsm_modules[chan];
+			if (value == 9600) {
 				mod->control.bits.com_spd = 3;
-			else
+			} else {
 				mod->control.bits.com_spd = 2;
+			}
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = -ENODEV;
-	} else if (sscanf(cmd, "GSM%u SERIAL=%u", &at_chan, &serial) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
-			mod = private_data->board->gsm_modules[at_chan];
-			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300)
-				mod->at_port_select = serial;
+		}
+	} else if (sscanf(cmd, "GSM%u COM=%u", &chan, &value) == 2) {
+		if ((chan >= 0) && (chan <= 7) && (private_data->board->gsm_modules[chan])) {
+			mod = private_data->board->gsm_modules[chan];
+			mod->control.bits.rst = value;
+			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res = -ENODEV;
-	} else
+		}
+	} else if (sscanf(cmd, "GSM%u SERIAL=%u", &chan, &value) == 2) {
+		if ((chan >= 0) && (chan <= 7) && (private_data->board->gsm_modules[chan])) {
+			mod = private_data->board->gsm_modules[chan];
+			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300) {
+				mod->at_port_select = value;
+			}
+			res = len;
+		} else {
+			res = -ENODEV;
+		}
+	} else {
 		res = -ENOMSG;
+	}
 
 k32isa_board_write_end:
 	return res;
