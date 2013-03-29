@@ -41,6 +41,10 @@ MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux module for K32 ISA boards");
 MODULE_LICENSE("GPL");
 
+static int rom = 0;
+module_param(rom, int, 0);
+MODULE_PARM_DESC(tty_major, "Print board's ROM");
+
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32isa-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32isa-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
@@ -958,7 +962,7 @@ static int __init k32isa_init(void)
 		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);
 		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);
 		for (i = 0; i < k32isa_boards[k]->romsize; i++) k32isa_boards[k]->rom[i] = inb(PG_ISA_ROM_BASE + k*4);
-		verbose("\"%.*s\"\n", (int)k32isa_boards[k]->romsize, k32isa_boards[k]->rom);
+		if (rom) verbose("\"%.*s\"\n", (int)k32isa_boards[k]->romsize, k32isa_boards[k]->rom);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32isa-%lu", (long unsigned int)k);
 #else

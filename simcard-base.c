@@ -110,7 +110,7 @@ static void simcard_poll_proc(unsigned long addr)
 	}
 
 	// read
-	if (!sim->is_read_ready(sim->data)) {
+	if (reset && !sim->is_read_ready(sim->data)) {
 		// reset simcard data container
 		sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
 		sim->command.header.length = 0;

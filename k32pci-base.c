@@ -41,6 +41,10 @@ MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Polygator Linux module for K32 PCI boards");
 MODULE_LICENSE("GPL");
 
+static int rom = 0;
+module_param(rom, int, 0);
+MODULE_PARM_DESC(tty_major, "Print board's ROM");
+
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
@@ -677,7 +681,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
 	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
 	for (i = 0; i < brd->romsize; i++) brd->rom[i] = inb(addr + PG_PCI_ROM_BASE);
-	verbose("\"%.*s\"\n", (int)brd->romsize, brd->rom);
+	if (rom) verbose("\"%.*s\"\n", (int)brd->romsize, brd->rom);
 
 	// get board serial number
 	i = brd->romsize - 1;
