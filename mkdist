@@ -16,7 +16,7 @@ else
 	fi
 fi
 
-./mkverhdr POLYGATOR_LINUX polygator/version.h
+./mkverhdr POLYGATOR_LINUX ${VERSION} > polygator/version.h
 
 rm -f polygator-linux-${VERSION}.tar.gz
 rm -rf polygator-linux-${VERSION}

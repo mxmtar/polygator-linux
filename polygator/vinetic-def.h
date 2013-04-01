@@ -1135,6 +1135,7 @@ enum {
 	VIN_EOP_CIDSEND			= 0x02,
 	VIN_EOP_DTMFATGEN		= 0x03,
 	VIN_EOP_DTMFREC			= 0x04,
+	VIN_EOP_CPT				= 0x09,
 	VIN_EOP_UTG				= 0x0A,
 	VIN_EOP_SIG_CONF_RTP	= 0x10,
 };
@@ -1269,6 +1270,77 @@ struct vin_cmd_eop_dtmf_receiver {
 enum {
 	VIN_IS_SIGINA = 0, /*! Signal SIG-InA of Signaling-Module is input for the DTMF Receiver */
 	VIN_IS_SIGINB = 1, /*! Signal SIG-InB of Signaling-Module is input for the DTMF Receiver */
+};
+/*!
+ * \brief Command_CPT
+ * Description: This command activates the Call Progress Tone Detection (CPT) in the addressed channel.
+ */ 
+struct vin_cmd_eop_cpt {
+	union vin_cmd header;
+	struct vin_eop_cpt {
+		u_int16_t cptnr:4;
+		u_int16_t is:2;
+		u_int16_t res:1;
+		u_int16_t ws:1;
+		u_int16_t fl:2;
+		u_int16_t cnt:1;
+		u_int16_t tp:1;
+		u_int16_t ats:2;
+		u_int16_t at:1;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_cpt;
+} __attribute__((packed));
+/*!
+ * \brief Any Tone Status
+ */
+enum {
+	VIN_ATS_NO = 0, /*! No tone has been detected */
+	VIN_ATS_RES = 1, /*! Reserved */
+	VIN_ATS_DETECTED = 2, /*! Any tone has been detected (total energy was greater than
+							AT_POWER for more than AT_DUR) and the tone is still active
+							(total energy was not below AT_POWER for more than AT_GAP) */
+	VIN_ATS_SEEN = 3, /*! Any tone has been seen (total energy was greater than AT_POWER
+							for more than AT_DUR) but the tone is still not there (total
+							energy was below AT_POWER for more than AT_GAP) */
+};
+/*!
+ * \brief Total Power
+ */
+enum {
+	VIN_TP_10_3400 = 0, /*! The total power is calculated between 10 Hz and 3400 Hz */
+	VIN_TP_250_3400 = 1, /*! The total power is calculated between 250 Hz and 3400 Hz */
+};
+/*!
+ * \brief Continuous Tone Detect
+ */
+enum {
+	VIN_CNT_CADENCE = 0, /*! The CPT has to detect a cadenced tone */
+	VIN_CNT_CONTINUOUS = 1, /*! The CPT has to detect a continuous tone */
+};
+/*!
+ * \brief Frame Length
+ * Frame length which is used for the Goertzel algorithm.
+ */
+enum {
+	VIN_FL_128_16MS = 0, /*! 128 samples, 16 ms */
+	VIN_FL_256_32MS = 1, /*! 256 samples, 32 ms */
+	VIN_FL_512_64MS = 2, /*! 512 samples, 64 ms */
+	VIN_FL_RES = 3, /*! Reserved */
+};
+/*!
+ * \brief Window Select
+ */
+enum {
+	VIN_WS_HAMMING = 0, /*! Hamming window */
+	VIN_WS_BLACKMAN = 1, /*! Blackman window */
+};
+/*!
+ * \brief Input Signal
+ */
+enum {
+	VIN_IS_I1 = 0, /*! Signal I1 is input for the CPT */
+	VIN_IS_I2 = 1, /*! Signal I2 is input for the CPT */
+	VIN_IS_I1_I2 = 2/*3*/, /*! I1 + I2 is input for the CPT */
 };
 /*!
  * \brief Command_UTG
@@ -1675,6 +1747,7 @@ enum {
 	VIN_EOP_CIDS_DATA = 0x09,
 	VIN_EOP_DTMFATCOEFF = 0x0A,
 	VIN_EOP_DTM_AT_GEN_DATA = 0x0B,
+	VIN_EOP_CPT_COEFF = 0x10,
 	VIN_EOP_UTG_COEFF = 0x11,
 };
 /*!
@@ -1730,6 +1803,54 @@ struct vin_cmd_eop_dtmfat_generator_data {
 	struct vin_eop_dtmfat_generator_data {
 		u_int16_t dtc[10];
 	} __attribute__((packed)) eop_dtmfat_generator_data;
+} __attribute__((packed));
+/*!
+ * \brief Command_CPT_Coefficients
+ * Description: This command sets the coefficients for the CPT.
+ */
+struct vin_cpt_msk {
+	u_int16_t f1:2;
+	u_int16_t f2:2;
+	u_int16_t f3:2;
+	u_int16_t f4:2;
+	u_int16_t tw12:1;
+	u_int16_t tw34:1;
+	u_int16_t f1xor2:1;
+	u_int16_t f3xor4:1;
+	u_int16_t f12or34:1;
+	u_int16_t e:1;
+	u_int16_t p:1;
+	u_int16_t res:1;
+} __attribute__((packed));
+struct vin_cmd_eop_cpt_coefficients {
+	union vin_cmd header;
+	struct vin_eop_cpt_coefficients {
+		u_int16_t goe_1;
+		u_int16_t goe_2;
+		u_int16_t goe_3;
+		u_int16_t goe_4;
+		u_int16_t lev_1;
+		u_int16_t lev_2;
+		u_int16_t lev_3;
+		u_int16_t lev_4;
+		u_int16_t twist_34:8;
+		u_int16_t twist_12:8;
+		u_int16_t t_1;
+		struct vin_cpt_msk msk_1;
+		u_int16_t t_2;
+		struct vin_cpt_msk msk_2;
+		u_int16_t t_3;
+		struct vin_cpt_msk msk_3;
+		u_int16_t t_4;
+		struct vin_cpt_msk msk_4;
+		u_int16_t nr:8;
+		u_int16_t tim_tol:8;
+		u_int16_t pow_pause;
+		u_int16_t fp_tp_r;
+		u_int16_t at_power;
+		u_int16_t at_gap:8;
+		u_int16_t at_dur:8;
+	} __attribute__((packed)) eop_cpt_coefficients;
 } __attribute__((packed));
 /*!
  * \brief Command_UTG_Coefficients
