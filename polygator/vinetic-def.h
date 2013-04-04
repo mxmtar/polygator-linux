@@ -1135,6 +1135,8 @@ enum {
 	VIN_EOP_CIDSEND			= 0x02,
 	VIN_EOP_DTMFATGEN		= 0x03,
 	VIN_EOP_DTMFREC			= 0x04,
+	VIN_EOP_UTD1			= 0x07,
+	VIN_EOP_UTD2			= 0x08,
 	VIN_EOP_CPT				= 0x09,
 	VIN_EOP_UTG				= 0x0A,
 	VIN_EOP_SIG_CONF_RTP	= 0x10,
@@ -1272,9 +1274,51 @@ enum {
 	VIN_IS_SIGINB = 1, /*! Signal SIG-InB of Signaling-Module is input for the DTMF Receiver */
 };
 /*!
+ * \brief Command_UTD
+ * Description: This command activates the UTD in the addressed channel.
+ */
+struct vin_cmd_eop_utd_1 {
+	union vin_cmd header;
+	struct vin_eop_utd_1 {
+		u_int16_t utdnr:4;
+		u_int16_t is:2;
+		u_int16_t md:2;
+		u_int16_t res:7;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_utd_1;
+} __attribute__((packed));
+struct vin_cmd_eop_utd_2 {
+	union vin_cmd header;
+	struct vin_eop_utd_2 {
+		u_int16_t utdnr:4;
+		u_int16_t is:2;
+		u_int16_t res0:1;
+		u_int16_t md:2;
+		u_int16_t res1:6;
+		u_int16_t en:1;
+	} __attribute__((packed)) eop_utd_2;
+} __attribute__((packed));
+/*!
+ * \brief Input Signal
+ */
+enum {
+	VIN_IS_SIGNINA = 0, /*! Signal SIG-InA of Signaling-Module is input for the UTD */
+	VIN_IS_SIGNINB = 1, /*! Signal SIG-InB of Signaling-Module is input for the UTD */
+	VIN_IS_SIGNINA_SIGINB = 2, /*! SIG-InA of Signaling-Module and SIG-InB of Signaling-Module are input for the UTD */
+};
+
+/*!
+ * \brief Mode
+ */
+enum {
+	VIN_MD_UTD = 0, /*! Universal tone detection */
+	VIN_MD_V18A = 1, /*! V.18A detection */
+	VIN_MD_MODEM = 2, /* Modem holding characteristic/signal level detection */
+};
+/*!
  * \brief Command_CPT
  * Description: This command activates the Call Progress Tone Detection (CPT) in the addressed channel.
- */ 
+ */
 struct vin_cmd_eop_cpt {
 	union vin_cmd header;
 	struct vin_eop_cpt {
@@ -1747,6 +1791,7 @@ enum {
 	VIN_EOP_CIDS_DATA = 0x09,
 	VIN_EOP_DTMFATCOEFF = 0x0A,
 	VIN_EOP_DTM_AT_GEN_DATA = 0x0B,
+	VIN_EOP_UTD_COEFF = 0x0E,
 	VIN_EOP_CPT_COEFF = 0x10,
 	VIN_EOP_UTG_COEFF = 0x11,
 };
@@ -1803,6 +1848,25 @@ struct vin_cmd_eop_dtmfat_generator_data {
 	struct vin_eop_dtmfat_generator_data {
 		u_int16_t dtc[10];
 	} __attribute__((packed)) eop_dtmfat_generator_data;
+} __attribute__((packed));
+/*!
+ * \brief Command_UTD_Coefficients
+ * Description: This command determines the coefficients for the universal tone detector.
+ */
+struct vin_cmd_eop_utd_coefficients {
+	union vin_cmd header;
+	struct vin_eop_utd_coefficients {
+		u_int16_t levels;
+		u_int16_t cf;
+		u_int16_t bw;
+		u_int16_t nlev:8;
+		u_int16_t del_snr:8;
+		u_int16_t levelh;
+		u_int16_t rtime:8;
+		u_int16_t agap:8;
+		u_int16_t rgap:8;
+		u_int16_t abreak:8;
+	} __attribute__((packed)) eop_utd_coefficients;
 } __attribute__((packed));
 /*!
  * \brief Command_CPT_Coefficients
