@@ -83,6 +83,8 @@ all: modules
 modules:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) modules
 
+modules_install: install_modules
+
 install: install_modules install_headers
 
 install_modules:
