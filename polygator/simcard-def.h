@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #endif
 
-#define SIMCARD_MAX_DATA_LENGTH 256
+#define SIMCARD_MAX_DATA_LENGTH 512
 
 enum {
 	SIMCARD_CONTAINER_TYPE_DATA = 0,

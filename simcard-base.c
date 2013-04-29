@@ -94,6 +94,8 @@ static void simcard_poll_proc(unsigned long addr)
 		sim->reset.container.reset = reset;
 		// set reset status bit
 		sim->read_status.bits.reset = 1;
+		// clear data status bit
+		sim->read_status.bits.data = 0;
 	}
 	sim->reset_state = reset;
 
