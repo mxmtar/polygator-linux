@@ -326,7 +326,9 @@ static void k32isa_tty_at_poll(unsigned long addr)
 {
 	char buff[512];
 	size_t len;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
 	struct tty_struct *tty;
+#endif
 	union k32_gsm_mod_status_reg status;
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)addr;
 
@@ -395,10 +397,15 @@ static void k32isa_tty_at_poll(unsigned long addr)
 
 	if (len) {
 #ifdef TTY_PORT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
+		tty_insert_flip_string(&mod->at_port, buff, len);
+		tty_flip_buffer_push(&mod->at_port);
+#else
 		tty = tty_port_tty_get(&mod->at_port);
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 		tty_kref_put(tty);
+#endif
 #else
 		tty = mod->at_tty;
 		tty_insert_flip_string(tty, buff, len);
