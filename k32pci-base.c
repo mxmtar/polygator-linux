@@ -284,18 +284,22 @@ static void k32pci_sim_set_speed(void *data, int speed)
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
 
 	switch (speed) {
+		case 0x94:
 		case 57600:
 			mod->control.bits.sim_spd_0 = 1;
 			mod->control.bits.sim_spd_1 = 0;
 			break;
+		case 0x95:
 		case 115200:
 			mod->control.bits.sim_spd_0 = 0;
 			mod->control.bits.sim_spd_1 = 1;
 			break;
+		case 0x96:
 		case 230400:
 			mod->control.bits.sim_spd_0 = 1;
 			mod->control.bits.sim_spd_1 = 1;
 			break;
+		case 0x11:
 		default: // 9600 
 			mod->control.bits.sim_spd_0 = 0;
 			mod->control.bits.sim_spd_1 = 0;

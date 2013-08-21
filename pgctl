@@ -61,7 +61,7 @@ if [ -c $1 ]; then
 		while (( WAIT_COUNT > 0 )); do
 
 			VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
-			if [ ${VIO} = "1" ]; then
+			if [ "${VIO}" = "1" ]; then
 				break
 			fi
 			sleep 1
@@ -70,7 +70,7 @@ if [ -c $1 ]; then
 		done
 
 		VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
-		if [ ${VIO} = "1" ]; then
+		if [ "${VIO}" = "1" ]; then
 			break
 		fi
 
@@ -90,7 +90,7 @@ if [ -c $1 ]; then
 	echo "disable channel" $2
 
 	VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
-	if [ ${VIO} = "1" ]; then
+	if [ "${VIO}" = "1" ]; then
 
 		while [ 1 ]; do
 
@@ -102,7 +102,7 @@ if [ -c $1 ]; then
 			while (( WAIT_COUNT > 0 )); do
 
 				VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
-				if [ ${VIO} = "0" ]; then
+				if [ "${VIO}" = "0" ]; then
 					break
 				fi
 				sleep 1
@@ -111,7 +111,7 @@ if [ -c $1 ]; then
 			done
 
 			VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
-			if [ ${VIO} = "0" ]; then
+			if [ "${VIO}" = "0" ]; then
 				break
 			fi
 
@@ -127,63 +127,133 @@ fi
 
 }
 
-
-pg_enable_all ()
+pg_enable ()
 {
+
+	if [ "$1" = "all" ]; then
+
+		for BOARD in ${PG_BOARD_LIST}; do
+
+			BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
+			BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+			if [ -c ${BOARD_PATH} ]; then
+
+				echo "enable all channel on" ${BOARD_NAME}
+
+				BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+				for CHANNEL in ${BOARD_CHANNEL_LIST}; do
+					pg_enable_channel ${BOARD_PATH} ${CHANNEL} ${START_ORDER} &
+					START_ORDER=`expr ${START_ORDER} + 1`
+				done
+
+				wait
+
+			else
+				echo "board" ${BOARD_PATH} "not found"
+			fi
+
+		done
+
+	elif [ "$1" = "channel" ]; then
+
+		for BOARD in ${PG_BOARD_LIST}; do
+
+			BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+			if [ -c ${BOARD_PATH} ]; then
+				BOARD_POSITION=`cat ${BOARD_PATH} | grep POSITION | sed 's/POSITION=//g' | sed 's/[\r\n]//g'`
+				if [ "$2" = "${BOARD}" ]; then
+					pg_enable_channel ${BOARD_PATH} GSM$3 ${START_ORDER} &
+					START_ORDER=`expr ${START_ORDER} + 1`
+					wait
+				elif [ "$2" = "${BOARD_POSITION}" ]; then
+					pg_enable_channel ${BOARD_PATH} GSM$3 ${START_ORDER} &
+					START_ORDER=`expr ${START_ORDER} + 1`
+					wait
+				fi
+			fi
+
+		done
+
+	else
+
+		echo "Usage: pgctl enable {all|channel}"
+		exit 1
+
+	fi
+
+}
+
+pg_disable ()
+{
+
+	if [ "$1" = "all" ]; then
+
+		for BOARD in ${PG_BOARD_LIST}; do
+
+			BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
+			BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+			if [ -c ${BOARD_PATH} ]; then
+
+				echo "disable all channel on" ${BOARD_NAME}
+
+				BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
+
+				for CHANNEL in ${BOARD_CHANNEL_LIST}; do
+					pg_disable_channel ${BOARD_PATH} ${CHANNEL} &
+				done
+
+				wait
+
+			else
+				echo "board" ${BOARD_PATH} "not found"
+			fi
+
+		done
+
+	elif [ "$1" = "channel" ]; then
+
+		for BOARD in ${PG_BOARD_LIST}; do
+
+			BOARD_PATH=`printf "/dev/%s" ${BOARD}`
+
+			if [ -c ${BOARD_PATH} ]; then
+				BOARD_POSITION=`cat ${BOARD_PATH} | grep POSITION | sed 's/POSITION=//g' | sed 's/[\r\n]//g'`
+				if [ "$2" = "${BOARD}" ]; then
+					pg_disable_channel ${BOARD_PATH} GSM$3 &
+					wait
+				elif [ "$2" = "${BOARD_POSITION}" ]; then
+					pg_disable_channel ${BOARD_PATH} GSM$3 &
+					wait
+				fi
+			fi
+
+		done
+
+	else
+
+		echo "Usage: pgctl disable {all|channel}"
+		exit 1
+
+	fi
+}
 
 	for BOARD in ${PG_BOARD_LIST}; do
 
-		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
 		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
 
 		if [ -c ${BOARD_PATH} ]; then
 
-			echo "enable all channel on" ${BOARD_NAME}
-
-			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
-
-			for CHANNEL in ${BOARD_CHANNEL_LIST}; do
-				pg_enable_channel ${BOARD_PATH} ${CHANNEL} ${START_ORDER} &
-				START_ORDER=`expr ${START_ORDER} + 1`
-			done
-
-			wait
+			BOARD_POSITION=`cat ${BOARD_PATH} | grep POSITION | sed 's/POSITION=//g' | sed 's/[\r\n]//g'`
 
 		else
-			echo "board" ${BOARD_PATH} "not found"
+			BOARD_POSITION=""
 		fi
 
 	done
-
-}
-
-pg_disable_all ()
-{
-
-	for BOARD in ${PG_BOARD_LIST}; do
-
-		BOARD_NAME=`printf ${BOARD} | sed 's/polygator\///g'`
-		BOARD_PATH=`printf "/dev/%s" ${BOARD}`
-
-		if [ -c ${BOARD_PATH} ]; then
-
-			echo "disable all channel on" ${BOARD_NAME}
-
-			BOARD_CHANNEL_LIST=`cat ${BOARD_PATH} | grep GSM | awk -F ' ' '{print $1}' | sed 's/!/\//g' | sed 's/[\r\n]//g'`
-
-			for CHANNEL in ${BOARD_CHANNEL_LIST}; do
-				pg_disable_channel ${BOARD_PATH} ${CHANNEL} &
-			done
-
-			wait
-
-		else
-			echo "board" ${BOARD_PATH} "not found"
-		fi
-
-	done
-
-}
 
 if [ -c  ${PG_SUBSYSTEM} ]; then
 
@@ -201,11 +271,11 @@ fi
 
 case "$1" in
     enable)
-	pg_enable_all
+	pg_enable $2 $3 $4
 	exit $?
 	;;
     disable)
-	pg_disable_all
+	pg_disable $2 $3 $4
 	exit $?
 	;;
     *)
