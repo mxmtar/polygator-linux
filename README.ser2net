@@ -30,10 +30,22 @@ For ISA boards
 3. GSM modules On/Off.
 
 For turn all modules to ON.
-# pgctl enable
+# pgctl enable all
+
+For turn to ON one channel.
+# pgctl enable channel <board> <channel>
+
+<board> - board path. For example "/dev/polygator/board-k32pci-258".
+<channel> - channel number on board (0-7)
 
 For turn all modules to OFF.
-# pgctl disable
+# pgctl disable all
+
+For turn to OFF one channel.
+# pgctl disable channel <board> <channel>
+
+<board> - board path. For example "/dev/polygator/board-k32isa-1".
+<channel> - channel number on board (0-7)
 
 4. ser2net configuration.
 
