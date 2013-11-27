@@ -16,6 +16,17 @@ k5-objs := k5-base.o
 KERNEL_SRC_DIR := $(KERNEL_SRC)
 KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
+else ifeq ($(TARGET_DEVICE), gx)
+
+obj-m := polygator.o vinetic.o simcard.o gx.o
+polygator-objs := polygator-base.o
+vinetic-objs := vinetic-base.o
+simcard-objs := simcard-base.o
+gx-objs := gx-base.o
+
+KERNEL_SRC_DIR := $(KERNEL_SRC)
+KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
+
 else ifeq ($(TARGET_DEVICE), g8)
 
 obj-m := polygator.o vinetic.o simcard.o g8.o
@@ -68,15 +79,14 @@ endif
 CHKCONFIG	:= $(wildcard /sbin/chkconfig)
 UPDATE_RCD	:= $(wildcard /usr/sbin/update-rc.d)
 ifeq (,$(DESTDIR))
-ifneq (,$(CHKCONFIG))
-    SYSVINIT_ADD := $(CHKCONFIG) --add polygator
-else
-ifneq (,$(UPDATE_RCD))
-    SYSVINIT_ADD := $(UPDATE_RCD) polygator defaults 30 95
+	ifneq (,$(CHKCONFIG))
+		SYSVINIT_ADD := $(CHKCONFIG) --add polygator
+	else
+		ifneq (,$(UPDATE_RCD))
+			SYSVINIT_ADD := $(UPDATE_RCD) polygator defaults 30 95
+		endif
+	endif
 endif
-endif
-endif
-                        
 
 all: modules
 
@@ -109,7 +119,7 @@ install_pgctl:
 
 install_asterisk_owner_udev_rules:
 	$(INSTALL) -m 644 98-polygator-asterisk.rules "$(DESTDIR)/etc/udev/rules.d"
-    
+
 uninstall: uninstall_modules uninstall_headers uninstall_sysvinit uninstall_pgctl uninstall_asterisk_owner_udev_rules
 
 uninstall_modules:
