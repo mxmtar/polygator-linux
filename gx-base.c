@@ -39,21 +39,24 @@ MODULE_LICENSE("GPL");
 
 #define MAX_GX_BOARD_COUNT		5
 
-/*! */
+#define BOARD_TYPE_UNKNOWN		0
+#define BOARD_TYPE_G4			4
+#define BOARD_TYPE_G8			8
+
+#define MB_MODE_AUTONOM			0x2300	// 0 - bank, 1 -standalone
+#define MB_CS_ROM_KROSS			0x4000
+#define MB_RESET_ROM			0x4800
+
 #define GX_CS_VINETIC			0x1100
 #define GX_CS_STATUS_VINETIC	0x1120
 #define GX_PRESENCE_TEST1		0x1180
 #define GX_MODE_AUTONOM			0x1190
-#define GX_SIP_ONLY				0x11A0
-#define GX_PRESENCE_TEST0		0x11B0
-#define GX_RESET_VINETIC		0x11C0
-#define GX_CS_ROM				0x11D0
-#define GX_CS_PRESENCE			0x11E0
-#define GX_RESET_BOARD			0x11F0
-#define MB_MODE_AUTONOM			0x2300	// 0 - bank, 1 -standalone
-#define MB_CS_ROM_KROSS			0x4000
-#define MB_RESET_ROM			0x4800
-/*! */
+#define GX_SIP_ONLY				0x11a0
+#define GX_PRESENCE_TEST0		0x11b0
+#define GX_RESET_VINETIC		0x11c0
+#define GX_CS_ROM				0x11d0
+#define GX_CS_PRESENCE			0x11e0
+#define GX_RESET_BOARD			0x11f0
 
 union gx_gsm_mod_status_reg {
 	struct {
@@ -117,23 +120,22 @@ struct gx_gsm_module_data {
 
 struct gx_board {
 
-	size_t index;
-
 	struct polygator_board *pg_board;
 	struct cdev cdev;
+
+	u_int32_t type;
 
 	u_int8_t rom[256];
 	size_t romsize;
 	u_int32_t sn;
-	u_int16_t type;
 
-	struct vinetic *vinetic;
+	size_t vinetics_count;
+	struct vinetic *vinetics[2];
 
-	struct gx_gsm_module_data *gsm_modules[4];
-
-	struct polygator_tty_device *tty_at_channels[4];
-
-	struct simcard_device *simcard_channels[4];
+	size_t channels_count;
+	struct gx_gsm_module_data *gsm_modules[8];
+	struct polygator_tty_device *tty_at_channels[8];
+	struct simcard_device *simcard_channels[8];
 };
 
 struct gx_board_private_data {
@@ -517,6 +519,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 	size_t len;
 
 	struct gx_board *brd;
+	struct vinetic *vin;
 	struct gx_board_private_data *private_data;
 	union gx_gsm_mod_status_reg status;
 	struct gx_gsm_module_data *mod;
@@ -531,7 +534,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 	private_data->board = brd;
 
 	len = 0;
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < brd->channels_count; i++) {
 		if (brd->tty_at_channels[i]) {
 			mod = brd->gsm_modules[i];
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
@@ -545,33 +548,37 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 							brd->tty_at_channels[i]?brd->tty_at_channels[i]->device->class_id:"unknown",
 							brd->simcard_channels[i]?brd->simcard_channels[i]->device->class_id:"unknown",
 #endif
-							(unsigned long int)(i/4),
-							(unsigned long int)(i%4),
+							(unsigned long int)(i / 4),
+							(unsigned long int)(i % 4),
 							status.bits.status);
 		}
 	}
-	if (brd->vinetic) {
-		len += sprintf(private_data->buff+len, "VIN0 %s\r\n",
+	for (j = 0; j < brd->vinetics_count; j++) {
+		if ((vin = brd->vinetics[j])) {
+			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
+							(unsigned long int)j,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-						dev_name(brd->vinetic->device)
+							dev_name(vin->device)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-						dev_name(brd->vinetic->device)
+							dev_name(vin->device)
 #else
-						brd->vinetic->device->class_id
-#endif
-						);
-		for (j = 0; j < 4; j++) {
-			if (brd->vinetic->rtp_channels[j])
-				len += sprintf(private_data->buff+len, "VIN0RTP%lu %s\r\n",
-								(unsigned long int)j,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-								dev_name(brd->vinetic->rtp_channels[j]->device)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-								dev_name(brd->vinetic->rtp_channels[j]->device)
-#else
-								brd->vinetic->rtp_channels[j]->device->class_id
+							vin->device->class_id
 #endif
 							);
+			for (i = 0; i < 4; i++) {
+				if (vin->rtp_channels[j])
+					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
+									(unsigned long int)j,
+								   (unsigned long int)i,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+									dev_name(vin->rtp_channels[i]->device)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+									dev_name(vin->rtp_channels[i]->device)
+#else
+									vin->rtp_channels[i]->device->class_id
+#endif
+									);
+			}
 		}
 	}
 
@@ -642,23 +649,25 @@ static ssize_t gx_board_write(struct file *filp, const char __user *buff, size_t
 	}
 
 	if (sscanf(cmd, "GSM%u PWR=%u", &at_chan, &pwr_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 3) && (private_data->board->gsm_modules[at_chan])) {
+		if ((at_chan >= 0) && (at_chan < private_data->board->channels_count) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
 			mod->control.bits.vbat = !pwr_state;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res= -ENODEV;
+		}
 	} else if (sscanf(cmd, "GSM%u KEY=%u", &at_chan, &key_state) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 3) && (private_data->board->gsm_modules[at_chan])) {
+		if ((at_chan >= 0) && (at_chan < private_data->board->channels_count) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
 			mod->control.bits.pkey = !key_state;
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res= -ENODEV;
+		}
 	} else if (sscanf(cmd, "GSM%u BAUDRATE=%u", &at_chan, &baudrate) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 3) && (private_data->board->gsm_modules[at_chan])) {
+		if ((at_chan >= 0) && (at_chan < private_data->board->channels_count) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
 			if (baudrate == 9600) {
 				mod->control.bits.at_baudrate = 0;
@@ -667,18 +676,20 @@ static ssize_t gx_board_write(struct file *filp, const char __user *buff, size_t
 			}
 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
 			res = len;
-		} else
+		} else {
 			res= -ENODEV;
+		}
 	} else if (sscanf(cmd, "GSM%u SERIAL=%u", &at_chan, &serial) == 2) {
-		if ((at_chan >= 0) && (at_chan <= 7) && (private_data->board->gsm_modules[at_chan])) {
+		if ((at_chan >= 0) && (at_chan < private_data->board->channels_count) && (private_data->board->gsm_modules[at_chan])) {
 			mod = private_data->board->gsm_modules[at_chan];
 			mod->at_port_select = serial;
 			res = len;
-		} else
+		} else {
 			res = -ENODEV;
-	} else
+		}
+	} else {
 		res = -ENOMSG;
-
+	}
 gx_board_write_end:
 	return res;
 }
@@ -920,16 +931,19 @@ static void gx_tty_at_port_shutdown(struct tty_port *port)
 #endif
 static int __init gx_init(void)
 {
-	size_t i, k;
+	size_t i, j, k;
+	struct gx_board *brd;
+	struct vinetic *vin;
 	u32 tmpu32;
 	u8 modtype;
+	char brdname[POLYGATOR_BRDNAME_MAXLEN];
 	char devname[VINETIC_DEVNAME_MAXLEN];
 	struct gx_gsm_module_data *mod;
 	int rc = 0;
 
 	verbose("loading ...\n");
 
-	for (k = 0; k < 4; k++) {
+	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
 		gx_boards[k] = NULL;
 	}
 
@@ -980,42 +994,80 @@ static int __init gx_init(void)
 	verbose("mainboard: \"%s\"\n", &mainboard_rom[3]);
 	// set MainBoard SIM standalone mode
 	iowrite8(1, gx_cs3_base_ptr + MB_MODE_AUTONOM);
+
 	// Search for gx boards
 	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
-		// Reset G20 board
+		// alloc memory for board data
+		if (!(gx_boards[k] = kmalloc(sizeof(struct gx_board), GFP_KERNEL))) {
+			log(KERN_ERR, "can't get memory for struct gx_board\n");
+			rc = -1;
+			goto gx_init_error;
+		}
+		memset(gx_boards[k], 0, sizeof(struct gx_board));
+		brd = gx_boards[k];
+		// reset gx board
 		iowrite8(0, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * k));
+		iowrite8(0, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * (k + 1)));
 		mdelay(1);
 		iowrite8(1, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * k));
-		// Test G8 board present
-		iowrite8(0x55, gx_cs3_base_ptr + GX_PRESENCE_TEST0 + (0x0200 * k));
-		iowrite8(0xaa, gx_cs3_base_ptr + GX_PRESENCE_TEST1 + (0x0200 * k));
-		if ((ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST0 + (0x0200 * k)) == 0x55) &&
+		iowrite8(1, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * (k + 1)));
+		// check gx board for present
+		iowrite8(0x55, gx_cs3_base_ptr + GX_PRESENCE_TEST0 + 0x0200 * k);
+		iowrite8(0xaa, gx_cs3_base_ptr + GX_PRESENCE_TEST1 + 0x0200 * k);
+		iowrite8(0x5a, gx_cs3_base_ptr + GX_PRESENCE_TEST0 + 0x0200 * (k + 1));
+		iowrite8(0xa5, gx_cs3_base_ptr + GX_PRESENCE_TEST1 + 0x0200 * (k + 1));
+		if ((ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST0 + 0x0200 * k) == 0x5a) && (ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST1 + 0x0200 * k) == 0xa5) &&
+			(ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST0 + 0x0200 * (k + 1)) == 0x5a) && (ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST1 + 0x0200 * (k + 1)) == 0xa5)) {
+			// board g8
+			snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g8-cx");
+			brd->type = BOARD_TYPE_G8;
+			brd->channels_count = 8;
+			brd->vinetics_count = 2;
+		} else if ((ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST0 + (0x0200 * k)) == 0x55) &&
 			(ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST1 + (0x0200 * k)) == 0xaa)) {
-			// board present
-			// alloc memory for board data
-			if (!(gx_boards[k] = kmalloc(sizeof(struct gx_board), GFP_KERNEL))) {
-				log(KERN_ERR, "can't get memory for struct gx_board\n");
-				rc = -1;
-				goto gx_init_error;
+			// board g4
+			if (k == 0) {
+				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-ll");
+			} else if (k == 1) {
+				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-lr");
+			} else if (k == 2) {
+				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-rl");
+			} else if (k == 3) {
+				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-rr");
+			} else {
+				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-cx");
 			}
-			memset(gx_boards[k], 0, sizeof(struct gx_board));
-			gx_boards[k]->index = k;
-			snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-%lu", (unsigned long int)k);
-			if (!(gx_boards[k]->pg_board =  polygator_board_register(THIS_MODULE, devname, &gx_boards[k]->cdev, &gx_board_fops))) {
-				rc = -1;
-				goto gx_init_error;
-			}
-			for (i = 0; i < sizeof(gx_boards[k]->rom); i++) {
-				gx_boards[k]->rom[i] = ioread8(gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
-			}
-			verbose("found board G4: \"%s\"\n", &gx_boards[k]->rom[3]);
-			// set autonom
-			iowrite8(1, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * k));
-			// set sip only
-			iowrite8(0, gx_cs3_base_ptr + GX_SIP_ONLY + (0x0200 * k));
-			// Register vinetic
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-g4-%lu-vin0", (unsigned long int)k);
-			if (!(gx_boards[k]->vinetic = vinetic_device_register(THIS_MODULE, devname, (0x0200 * k),
+			brd->type = BOARD_TYPE_G4;
+			brd->channels_count = 4;
+			brd->vinetics_count = 1;
+		} else {
+			// board not present
+			kfree(gx_boards[k]);
+			gx_boards[k] = NULL;
+			continue;
+		}
+		if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, brdname, &brd->cdev, &gx_board_fops))) {
+			rc = -1;
+			goto gx_init_error;
+		}
+		for (i = 0; i < sizeof(brd->rom); i++) {
+			brd->rom[i] = ioread8(gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
+		}
+		verbose("found %s: \"%s\"\n", brdname, &brd->rom[3]);
+		// set autonom
+		iowrite8(1, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * k));
+		if (brd->type == BOARD_TYPE_G8) {
+			iowrite8(1, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * (k + 1)));
+		}
+		// set sip only
+		iowrite8(0, gx_cs3_base_ptr + GX_SIP_ONLY + (0x0200 * k));
+		if (brd->type == BOARD_TYPE_G8) {
+			iowrite8(0, gx_cs3_base_ptr + GX_SIP_ONLY + (0x0200 * (k + 1)));
+		}
+		// vinetics
+		for (j = 0; j < brd->vinetics_count; j++) {
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu", brdname, (unsigned long int)j);
+			if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, (0x0200 * (k + j)),
 																gx_vinetic_reset,
 																gx_vinetic_is_not_ready,
 																gx_vinetic_write_nwd,
@@ -1027,133 +1079,141 @@ static int __init gx_init(void)
 				goto gx_init_error;
 			}
 			for (i = 0; i < 4; i++) {
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-g4-%lu-vin0-rtp%lu", (unsigned long int)k, (unsigned long int)i);
-				if (!(vinetic_rtp_channel_register(THIS_MODULE, devname, gx_boards[k]->vinetic, i))) {
+				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu-rtp%lu", brdname, (unsigned long int)j, (unsigned long int)i);
+				if (!(vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i))) {
 					rc = -1;
 					goto gx_init_error;
 				}
 			}
-			// get board GSM module type
-			modtype = ioread8(gx_cs3_base_ptr + GX_CS_PRESENCE + (0x0200 * k));
-			// set AT command channels
-			for (i = 0; i < 4; i++) {
-				if (!(mod= kmalloc(sizeof(struct gx_gsm_module_data), GFP_KERNEL))) {
-					log(KERN_ERR, "can't get memory for struct gx_gsm_module_data\n");
-					rc = -1;
-					goto gx_init_error;
-				}
-				memset(mod, 0, sizeof(struct gx_gsm_module_data));
-				// select GSM module type
-				switch (modtype) {
-					case 4:
-					case 5:
-						mod->type = POLYGATOR_MODULE_TYPE_M10;
-						break;
-					case 6:
-						mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
-						break;
-					case 7:
-						mod->type = POLYGATOR_MODULE_TYPE_SIM900;
-						break;
-					default:
-						mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
-						verbose("unsupported GSM module type=%u\n", modtype);
-						break;
-				}
+		}
+		// get board GSM module type
+		modtype = ioread8(gx_cs3_base_ptr + GX_CS_PRESENCE + (0x0200 * k));
+		// set AT command channels
+		for (i = 0; i < brd->channels_count; i++) {
+			if (!(mod= kmalloc(sizeof(struct gx_gsm_module_data), GFP_KERNEL))) {
+				log(KERN_ERR, "can't get memory for struct gx_gsm_module_data\n");
+				rc = -1;
+				goto gx_init_error;
+			}
+			memset(mod, 0, sizeof(struct gx_gsm_module_data));
+			// select GSM module type
+			switch (modtype) {
+				case 4:
+				case 5:
+					mod->type = POLYGATOR_MODULE_TYPE_M10;
+					break;
+				case 6:
+					mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
+					break;
+				case 7:
+					mod->type = POLYGATOR_MODULE_TYPE_SIM900;
+					break;
+				default:
+					mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
+					verbose("unsupported GSM module type=%u\n", modtype);
+					break;
+			}
 
-				if (mod->type == POLYGATOR_MODULE_TYPE_UNKNOWN) {
-					kfree(mod);
-					continue;
-				}
+			if (mod->type == POLYGATOR_MODULE_TYPE_UNKNOWN) {
+				kfree(mod);
+				continue;
+			}
 
-				mod->control.bits.vbat = 1;
-				mod->control.bits.pkey = 1;
-				mod->control.bits.cn_speed_a = 0;
-				mod->control.bits.cn_speed_b = 0;
-				mod->control.bits.at_baudrate = 2;
+			mod->control.bits.vbat = 1;
+			mod->control.bits.pkey = 1;
+			mod->control.bits.cn_speed_a = 0;
+			mod->control.bits.cn_speed_b = 0;
+			mod->control.bits.at_baudrate = 2;
 
-				mod->pos_on_board = i;
-				mod->cbdata = (((uintptr_t)gx_cs3_base_ptr) + 0x1000 + (0x0200 * k) + (0x40 * (i%4)));
-				mod->set_control = gx_gsm_mod_set_control;
-				mod->get_status = gx_gsm_mod_get_status;
-				mod->at_write = gx_gsm_mod_at_write;
-				mod->at_read = gx_gsm_mod_at_read;
-				mod->sim_write = gx_gsm_mod_sim_write;
-				mod->sim_read = gx_gsm_mod_sim_read;
-				mod->imei_write = gx_gsm_mod_imei_write;
-				mod->imei_read = gx_gsm_mod_imei_read;
+			mod->pos_on_board = i;
+			mod->cbdata = (((uintptr_t)gx_cs3_base_ptr) + 0x1000 + (0x0200 * (k + (i / 4))) + (0x40 * (i % 4)));
+			mod->set_control = gx_gsm_mod_set_control;
+			mod->get_status = gx_gsm_mod_get_status;
+			mod->at_write = gx_gsm_mod_at_write;
+			mod->at_read = gx_gsm_mod_at_read;
+			mod->sim_write = gx_gsm_mod_sim_write;
+			mod->sim_read = gx_gsm_mod_sim_read;
+			mod->imei_write = gx_gsm_mod_imei_write;
+			mod->imei_read = gx_gsm_mod_imei_read;
 
-				mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
-				init_timer(&mod->at_poll_timer);
+			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+			init_timer(&mod->at_poll_timer);
 
-				spin_lock_init(&mod->at_lock);
+			spin_lock_init(&mod->at_lock);
 #ifdef TTY_PORT
-				tty_port_init(&mod->at_port);
-				mod->at_port.ops = &gx_tty_at_port_ops;
-				mod->at_port.close_delay = 0;
-				mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
+			tty_port_init(&mod->at_port);
+			mod->at_port.ops = &gx_tty_at_port_ops;
+			mod->at_port.close_delay = 0;
+			mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
 #endif
-				gx_boards[k]->gsm_modules[i] = mod;
-			}
-
-			// register polygator tty at device
-			for (i = 0; i < 4; i++) {
-				if (gx_boards[k]->gsm_modules[i]) {
-					if (!(gx_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, gx_boards[k]->gsm_modules[i], &gx_tty_at_ops))) {
-						log(KERN_ERR, "can't register polygator tty device\n");
-						rc = -1;
-						goto gx_init_error;
-					}
+			brd->gsm_modules[i] = mod;
+		}
+		// register polygator tty at device
+		for (i = 0; i < brd->channels_count; i++) {
+			if (brd->gsm_modules[i]) {
+				if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &gx_tty_at_ops))) {
+					log(KERN_ERR, "can't register polygator tty device\n");
+					rc = -1;
+					goto gx_init_error;
 				}
 			}
-
-			// register polygator simcard device
-			for (i = 0; i < 4; i++) {
-				if (gx_boards[k]->gsm_modules[i]) {
-					if (!(gx_boards[k]->simcard_channels[i] = simcard_device_register(THIS_MODULE,
-																							gx_boards[k]->gsm_modules[i],
-																							gx_sim_read,
-																							gx_sim_write,
-																							gx_sim_is_read_ready,
-																							gx_sim_is_write_ready,
-																							gx_sim_is_reset_request,
-																							gx_sim_set_speed))) {
-						log(KERN_ERR, "can't register polygator simcard device\n");
-						rc = -1;
-						goto gx_init_error;
-					}
+		}
+		// register polygator simcard device
+		for (i = 0; i < brd->channels_count; i++) {
+			if (brd->gsm_modules[i]) {
+				if (!(brd->simcard_channels[i] = simcard_device_register(THIS_MODULE,
+																		brd->gsm_modules[i],
+																		gx_sim_read,
+																		gx_sim_write,
+																		gx_sim_is_read_ready,
+																		gx_sim_is_write_ready,
+																		gx_sim_is_reset_request,
+																		gx_sim_set_speed))) {
+					log(KERN_ERR, "can't register polygator simcard device\n");
+					rc = -1;
+					goto gx_init_error;
 				}
 			}
 		}
 	}
+	// change board cyclic position 4 -> 2, 2 -> 3, 3 -> 4
+	brd = gx_boards[4];
+	gx_boards[4] = gx_boards[3];
+	gx_boards[3] = gx_boards[2];
+	gx_boards[2] = brd;
 
 	verbose("loaded successfull\n");
 	return rc;
 
 gx_init_error:
+	// boards
 	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
-		if (gx_boards[k]) {
+		if ((brd = gx_boards[k])) {
 			// channels
-			for (i = 0; i < 4; i++) {
-				if (gx_boards[k]->simcard_channels[i]) {
-					simcard_device_unregister(gx_boards[k]->simcard_channels[i]);
+			for (i = 0; i < brd->channels_count; i++) {
+				if (brd->simcard_channels[i]) {
+					simcard_device_unregister(brd->simcard_channels[i]);
 				}
-				if (gx_boards[k]->tty_at_channels[i]) {
-					polygator_tty_device_unregister(gx_boards[k]->tty_at_channels[i]);
+				if (brd->tty_at_channels[i]) {
+					polygator_tty_device_unregister(brd->tty_at_channels[i]);
 				}
-				if (gx_boards[k]->gsm_modules[i]) {
-					del_timer_sync(&gx_boards[k]->gsm_modules[i]->at_poll_timer);
-					kfree(gx_boards[k]->gsm_modules[i]);
+				if (brd->gsm_modules[i]) {
+					del_timer_sync(&brd->gsm_modules[i]->at_poll_timer);
+					kfree(brd->gsm_modules[i]);
 				}
 			}
-			// vinetic
-			for (i = 0; i < 4; i++) {
-				vinetic_rtp_channel_unregister(gx_boards[k]->vinetic->rtp_channels[i]);
+			// vinetics
+			for (j = 0; j < brd->vinetics_count; j++) {
+				if ((vin = brd->vinetics[j])) {
+					// rtp_channels
+					for (i = 0; i < 4; i++) {
+						vinetic_rtp_channel_unregister(vin->rtp_channels[i]);
+					}
+					vinetic_device_unregister(vin);
+				}
 			}
-			vinetic_device_unregister(gx_boards[k]->vinetic);
-			// board
-			if (gx_boards[k]->pg_board) {
-				polygator_board_unregister(gx_boards[k]->pg_board);
+			if (brd->pg_board) {
+				polygator_board_unregister(brd->pg_board);
 			}
 			kfree(gx_boards[k]);
 		}
@@ -1170,31 +1230,38 @@ gx_init_error:
 
 static void __exit gx_exit(void)
 {
-	size_t i, k;
+	size_t i, j, k;
+	struct gx_board *brd;
+	struct vinetic *vin;
 
+	// boards
 	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
-		if (gx_boards[k]) {
+		if ((brd = gx_boards[k])) {
 			// channels
-			for (i = 0; i < 4; i++) {
-				if (gx_boards[k]->simcard_channels[i]) {
-					simcard_device_unregister(gx_boards[k]->simcard_channels[i]);
+			for (i = 0; i < brd->channels_count; i++) {
+				if (brd->simcard_channels[i]) {
+					simcard_device_unregister(brd->simcard_channels[i]);
 				}
-				if (gx_boards[k]->tty_at_channels[i]) {
-					polygator_tty_device_unregister(gx_boards[k]->tty_at_channels[i]);
+				if (brd->tty_at_channels[i]) {
+					polygator_tty_device_unregister(brd->tty_at_channels[i]);
 				}
-				if (gx_boards[k]->gsm_modules[i]) {
-					del_timer_sync(&gx_boards[k]->gsm_modules[i]->at_poll_timer);
-					kfree(gx_boards[k]->gsm_modules[i]);
+				if (brd->gsm_modules[i]) {
+					del_timer_sync(&brd->gsm_modules[i]->at_poll_timer);
+					kfree(brd->gsm_modules[i]);
 				}
 			}
-			// vinetic
-			for (i = 0; i < 4; i++) {
-				vinetic_rtp_channel_unregister(gx_boards[k]->vinetic->rtp_channels[i]);
+			// vinetics
+			for (j = 0; j < brd->vinetics_count; j++) {
+				if ((vin = brd->vinetics[j])) {
+					// rtp_channels
+					for (i = 0; i < 4; i++) {
+						vinetic_rtp_channel_unregister(vin->rtp_channels[i]);
+					}
+					vinetic_device_unregister(vin);
+				}
 			}
-			vinetic_device_unregister(gx_boards[k]->vinetic);
-			// board
-			polygator_board_unregister(gx_boards[k]->pg_board);
-			kfree(gx_boards[k]);
+			polygator_board_unregister(brd->pg_board);
+			kfree(brd);
 		}
 	}
 
@@ -1208,5 +1275,5 @@ module_init(gx_init);
 module_exit(gx_exit);
 
 /******************************************************************************/
-/* end of gx-base.c                                                          */
+/* end of gx-base.c                                                           */
 /******************************************************************************/
