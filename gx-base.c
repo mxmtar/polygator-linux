@@ -12,11 +12,11 @@
 #include <linux/tty_flip.h>
 #include <linux/version.h>
 
-#include "../arch/arm/include/asm/io.h"
+#include <asm/io.h>
 #include "../arch/arm/mach-at91/include/mach/hardware.h"
-#include "../arch/arm/mach-at91/include/mach/io.h"
+// #include "../arch/arm/mach-at91/include/mach/io.h"
 #include "../arch/arm/mach-at91/include/mach/at91_pio.h"
-#include "../arch/arm/mach-at91/include/mach/at91sam9260_matrix.h"
+#include "../arch/arm/mach-at91/include/mach/at91sam9260_matrix.h"	
 
 #include "polygator/polygator-base.h"
 
@@ -27,6 +27,28 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36) // 2,6,30 - orig
 #define TTY_PORT
+#endif
+
+#ifndef __ASSEMBLY__
+static inline unsigned int at91_sys_read(unsigned int reg_offset)
+{
+	void __iomem *addr = (void __iomem *)AT91_VA_BASE_SYS;
+
+	return __raw_readl(addr + reg_offset);
+}
+static inline void at91_sys_write(unsigned int reg_offset, unsigned long value)
+{
+	void __iomem *addr = (void __iomem *)AT91_VA_BASE_SYS;
+
+	__raw_writel(value, addr + reg_offset);
+}
+#endif
+#ifndef AT91_PIOC
+#define AT91_PIOC	(AT91SAM9260_BASE_PIOC - AT91_BASE_SYS)
+#endif
+#ifndef AT91_SMC0
+#undef AT91_SMC
+#define AT91_SMC	(AT91SAM9260_BASE_SMC - AT91_BASE_SYS)
 #endif
 
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
@@ -183,14 +205,14 @@ static const struct tty_port_operations gx_tty_at_port_ops = {
 static char mainboard_rom[256];
 static struct gx_board *gx_boards[5];
 
-static struct resource * gx_cs3_iomem_reg = NULL;
-static void __iomem * gx_cs3_base_ptr = NULL;
+static struct resource *gx_cs3_iomem_reg = NULL;
+static void __iomem *gx_cs3_base_ptr = NULL;
 
 static void gx_vinetic_reset(uintptr_t cbdata)
 {
-	uintptr_t addr;
+	void __iomem *addr;
 
-	addr = (uintptr_t)gx_cs3_base_ptr;
+	addr = gx_cs3_base_ptr;
 	addr += cbdata + GX_RESET_VINETIC;
 	iowrite8(0, addr);
 	mdelay(10);
@@ -277,21 +299,21 @@ static u_int16_t gx_vinetic_read_dia(uintptr_t cbdata)
 
 static void gx_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	iowrite8(reg, addr);
 }
 
 static u_int8_t gx_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	return ioread8(addr);
 }
 
 static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x10;
 
@@ -300,7 +322,7 @@ static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 
 static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x10;
 
@@ -309,7 +331,7 @@ static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 
 static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x20;
 
@@ -318,7 +340,7 @@ static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 
 static u_int8_t gx_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x20;
 
@@ -327,7 +349,7 @@ static u_int8_t gx_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 
 static void gx_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x30;
 
@@ -336,7 +358,7 @@ static void gx_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 
 static u_int8_t gx_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x30;
 
@@ -413,7 +435,9 @@ static void gx_tty_at_poll(unsigned long addr)
 {
 	char buff[512];
 	size_t len;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
 	struct tty_struct *tty;
+#endif
 	union gx_gsm_mod_status_reg status;
 	struct gx_gsm_module_data *mod = (struct gx_gsm_module_data *)addr;
 
@@ -498,10 +522,15 @@ static void gx_tty_at_poll(unsigned long addr)
 
 	if (len) {
 #ifdef TTY_PORT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
+		tty_insert_flip_string(&mod->at_port, buff, len);
+		tty_flip_buffer_push(&mod->at_port);
+#else
 		tty = tty_port_tty_get(&mod->at_port);
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 		tty_kref_put(tty);
+#endif
 #else
 		tty = mod->at_tty;
 		tty_insert_flip_string(tty, buff, len);
@@ -1151,7 +1180,11 @@ static int __init gx_init(void)
 		// register polygator tty at device
 		for (i = 0; i < brd->channels_count; i++) {
 			if (brd->gsm_modules[i]) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+				if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &mod->at_port, &gx_tty_at_ops))) {
+#else
 				if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &gx_tty_at_ops))) {
+#endif
 					log(KERN_ERR, "can't register polygator tty device\n");
 					rc = -1;
 					goto gx_init_error;
