@@ -16,6 +16,16 @@ k5-objs := k5-base.o
 KERNEL_SRC_DIR := $(KERNEL_SRC)
 KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
+else ifeq ($(TARGET_DEVICE), fxo4)
+
+obj-m := polygator.o vinetic.o fxo4.o
+polygator-objs := polygator-base.o
+vinetic-objs := vinetic-base.o
+fxo4-objs := fxo4-base.o
+
+KERNEL_SRC_DIR := $(KERNEL_SRC)
+KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
+
 else ifeq ($(TARGET_DEVICE), gx)
 
 obj-m := polygator.o vinetic.o simcard.o gx.o
