@@ -145,6 +145,8 @@ struct gx_board {
 	struct polygator_board *pg_board;
 	struct cdev cdev;
 
+	char name[POLYGATOR_BRDNAME_MAXLEN];
+
 	u_int32_t type;
 
 	u_int8_t rom[256];
@@ -414,10 +416,12 @@ static void gx_sim_set_speed(void *data, int speed)
 	struct gx_gsm_module_data *mod = (struct gx_gsm_module_data *)data;
 
 	switch (speed) {
+		case 0x94:
 		case 57600:
 			mod->control.bits.cn_speed_a = 1;
 			mod->control.bits.cn_speed_b = 0;
 			break;
+		case 0x95:
 		case 115200:
 			mod->control.bits.cn_speed_a = 0;
 			mod->control.bits.cn_speed_b = 1;
@@ -751,7 +755,7 @@ static int gx_tty_at_open(struct tty_struct *tty, struct file *filp)
 		mod->at_xmit_buf = xbuf;
 		mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
-		mod->at_poll_timer.function = k32pci_tty_at_poll;
+		mod->at_poll_timer.function = gx_tty_at_poll;
 		mod->at_poll_timer.data = (unsigned long)mod;
 		mod->at_poll_timer.expires = jiffies + 1;
 		add_timer(&mod->at_poll_timer);
@@ -965,7 +969,6 @@ static int __init gx_init(void)
 	struct vinetic *vin;
 	u32 tmpu32;
 	u8 modtype;
-	char brdname[POLYGATOR_BRDNAME_MAXLEN];
 	char devname[VINETIC_DEVNAME_MAXLEN];
 	struct gx_gsm_module_data *mod;
 	int rc = 0;
@@ -1027,13 +1030,12 @@ static int __init gx_init(void)
 	// Search for gx boards
 	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
 		// alloc memory for board data
-		if (!(gx_boards[k] = kmalloc(sizeof(struct gx_board), GFP_KERNEL))) {
+		if (!(brd = kmalloc(sizeof(struct gx_board), GFP_KERNEL))) {
 			log(KERN_ERR, "can't get memory for struct gx_board\n");
 			rc = -1;
 			goto gx_init_error;
 		}
-		memset(gx_boards[k], 0, sizeof(struct gx_board));
-		brd = gx_boards[k];
+		memset(brd, 0, sizeof(struct gx_board));
 		// reset gx board
 		iowrite8(0, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * k));
 		iowrite8(0, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * (k + 1)));
@@ -1048,7 +1050,7 @@ static int __init gx_init(void)
 		if ((ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST0 + 0x0200 * k) == 0x5a) && (ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST1 + 0x0200 * k) == 0xa5) &&
 			(ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST0 + 0x0200 * (k + 1)) == 0x5a) && (ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST1 + 0x0200 * (k + 1)) == 0xa5)) {
 			// board g8
-			snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g8-cx");
+			snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "board-g8-cx");
 			brd->type = BOARD_TYPE_G8;
 			brd->channels_count = 8;
 			brd->vinetics_count = 2;
@@ -1056,33 +1058,29 @@ static int __init gx_init(void)
 			(ioread8(gx_cs3_base_ptr + GX_PRESENCE_TEST1 + (0x0200 * k)) == 0xaa)) {
 			// board g4
 			if (k == 0) {
-				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-ll");
+				snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "board-g4-ll");
 			} else if (k == 1) {
-				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-lr");
+				snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "board-g4-lr");
 			} else if (k == 2) {
-				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-rl");
+				snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "board-g4-rl");
 			} else if (k == 3) {
-				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-rr");
+				snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "board-g4-rr");
 			} else {
-				snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "board-g4-cx");
+				snprintf(brd->name, POLYGATOR_BRDNAME_MAXLEN, "board-g4-cx");
 			}
 			brd->type = BOARD_TYPE_G4;
 			brd->channels_count = 4;
 			brd->vinetics_count = 1;
 		} else {
 			// board not present
-			kfree(gx_boards[k]);
-			gx_boards[k] = NULL;
+			kfree(brd);
 			continue;
-		}
-		if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, brdname, &brd->cdev, &gx_board_fops))) {
-			rc = -1;
-			goto gx_init_error;
 		}
 		for (i = 0; i < sizeof(brd->rom); i++) {
 			brd->rom[i] = ioread8(gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
 		}
-		verbose("found %s: \"%s\"\n", brdname, &brd->rom[3]);
+		verbose("found %s: \"%s\"\n", brd->name, &brd->rom[3]);
+		gx_boards[k] = brd;
 		// set autonom
 		iowrite8(1, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * k));
 		if (brd->type == BOARD_TYPE_G8) {
@@ -1095,7 +1093,7 @@ static int __init gx_init(void)
 		}
 		// vinetics
 		for (j = 0; j < brd->vinetics_count; j++) {
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu", brdname, (unsigned long int)j);
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu", brd->name, (unsigned long int)j);
 			if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, (0x0200 * (k + j)),
 																gx_vinetic_reset,
 																gx_vinetic_is_not_ready,
@@ -1108,7 +1106,7 @@ static int __init gx_init(void)
 				goto gx_init_error;
 			}
 			for (i = 0; i < 4; i++) {
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu-rtp%lu", brdname, (unsigned long int)j, (unsigned long int)i);
+				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu-rtp%lu", brd->name, (unsigned long int)j, (unsigned long int)i);
 				if (!(vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i))) {
 					rc = -1;
 					goto gx_init_error;
@@ -1155,7 +1153,7 @@ static int __init gx_init(void)
 			mod->control.bits.at_baudrate = 2;
 
 			mod->pos_on_board = i;
-			mod->cbdata = (((uintptr_t)gx_cs3_base_ptr) + 0x1000 + (0x0200 * (k + (i / 4))) + (0x40 * (i % 4)));
+			mod->cbdata = (((uintptr_t)gx_cs3_base_ptr) + 0x1000 + 0x0200 * (k + (i / 4)) + 0x40 * (i % 4));
 			mod->set_control = gx_gsm_mod_set_control;
 			mod->get_status = gx_gsm_mod_get_status;
 			mod->at_write = gx_gsm_mod_at_write;
@@ -1179,7 +1177,7 @@ static int __init gx_init(void)
 		}
 		// register polygator tty at device
 		for (i = 0; i < brd->channels_count; i++) {
-			if (brd->gsm_modules[i]) {
+			if ((mod = brd->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 				if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &mod->at_port, &gx_tty_at_ops))) {
 #else
@@ -1214,7 +1212,15 @@ static int __init gx_init(void)
 	gx_boards[4] = gx_boards[3];
 	gx_boards[3] = gx_boards[2];
 	gx_boards[2] = brd;
-
+	// register board
+	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
+		if ((brd = gx_boards[k])) {
+			if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, brd->name, &brd->cdev, &gx_board_fops))) {
+				rc = -1;
+				goto gx_init_error;
+			}
+		}
+	}
 	verbose("loaded successfull\n");
 	return rc;
 

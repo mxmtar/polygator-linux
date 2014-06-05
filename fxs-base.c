@@ -329,13 +329,12 @@ static int __init fxs_init(void)
 	// test board slots
 	for (k = 0; k < FXS_BOARD_MAX_COUNT; k++) {
 		// alloc memory for board data
-		if (!(fxs_boards[k] = kmalloc(sizeof(struct fxs_board), GFP_KERNEL))) {
+		if (!(brd = kmalloc(sizeof(struct fxs_board), GFP_KERNEL))) {
 			log(KERN_ERR, "can't get memory for struct fxs_board\n");
 			rc = -1;
 			goto fxs_init_error;
 		}
-		memset(fxs_boards[k], 0, sizeof(struct fxs_board));
-		brd = fxs_boards[k];
+		memset(brd, 0, sizeof(struct fxs_board));
 		// Reset FXS board
 		iowrite16(0, fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_RESET);
 		mdelay(10);
@@ -343,7 +342,7 @@ static int __init fxs_init(void)
 		// check for FXS board present
 		iowrite16(0x5555, fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_TEST0);
 		iowrite16(0xaaaa, fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_TEST1);
- 		if ((ioread16(fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_TEST0) == 0x5555) &&
+		if ((ioread16(fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_TEST0) == 0x5555) &&
 			(ioread16(fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_TEST1) == 0xaaaa) &&
 			(ioread16(fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_TYPE) == FXS_BOARD_TYPE_FXS8)) {
 			if (k == 0) {
@@ -362,10 +361,10 @@ static int __init fxs_init(void)
 		} else {
 			// board not present
 			kfree(brd);
-			fxs_boards[k] = NULL;
 			continue;
 		}
 		verbose("found %s (ver.%u)", brd->name, ioread16(fxs_cs3_base_ptr + FXS_BOARD_MEM_BASE + k * FXS_BOARD_MEM_LENGTH + FXS_BOARD_REG_VERSION));
+		fxs_boards[k] = brd;
 		// register vinetics
 		for (j = 0; j < brd->vinetics_count; j++) {
 			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu", brd->name, (unsigned long int)j);

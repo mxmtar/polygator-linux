@@ -1,2 +1,4 @@
 2014-05-20
 	1. Added support for FXS8 board.
+2014-06-05
+	1. Fix gx board support with recent kernels.
