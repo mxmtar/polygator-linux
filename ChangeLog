@@ -1,3 +1,5 @@
+2014-07-01
+	1. Fix k5 board support with recent kernels.
 2014-05-20
 	1. Added support for FXS8 board.
 2014-06-05

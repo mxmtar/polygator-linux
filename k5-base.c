@@ -14,7 +14,7 @@
 
 #include "../arch/arm/include/asm/io.h"
 #include "../arch/arm/mach-at91/include/mach/hardware.h"
-#include "../arch/arm/mach-at91/include/mach/io.h"
+// #include "../arch/arm/mach-at91/include/mach/io.h"
 #include "../arch/arm/mach-at91/include/mach/at91_pio.h"
 #include "../arch/arm/mach-at91/include/mach/at91sam9260_matrix.h"
 
@@ -24,6 +24,28 @@
 #include "polygator/vinetic-def.h"
 
 #include "polygator/simcard-base.h"
+
+#ifndef __ASSEMBLY__
+static inline unsigned int at91_sys_read(unsigned int reg_offset)
+{
+	void __iomem *addr = (void __iomem *)AT91_VA_BASE_SYS;
+
+	return __raw_readl(addr + reg_offset);
+}
+static inline void at91_sys_write(unsigned int reg_offset, unsigned long value)
+{
+	void __iomem *addr = (void __iomem *)AT91_VA_BASE_SYS;
+
+	__raw_writel(value, addr + reg_offset);
+}
+#endif
+#ifndef AT91_PIOC
+#define AT91_PIOC	(AT91SAM9260_BASE_PIOC - AT91_BASE_SYS)
+#endif
+#ifndef AT91_SMC0
+#undef AT91_SMC
+#define AT91_SMC	(AT91SAM9260_BASE_SMC - AT91_BASE_SYS)
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36) // 2,6,30 - orig
 #define TTY_PORT
@@ -187,50 +209,83 @@ static void __iomem * k5_cs4_base_ptr = NULL;
 
 static void k5_vinetic_reset(uintptr_t cbdata)
 {
-	iowrite16(0, cbdata + 0x20);
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs3_base_ptr;
+	addr += cbdata + 0x20;
+	iowrite8(0, addr);
 	mdelay(10);
-	iowrite16(1, cbdata + 0x20);
+	iowrite8(1, addr);
 	mdelay(2);
 }
 static void k5_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
 {
-	iowrite16(value, cbdata + 0x04);
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs4_base_ptr;
+	addr += cbdata + 0x04;
+	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x04, value);
 }
 static void k5_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
 {
-	iowrite16(value, cbdata + 0x06);
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs4_base_ptr;
+	addr += cbdata + 0x06;
+	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x06, value);
 }
 static u_int16_t k5_vinetic_read_nwd(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x04);
+	u_int16_t value;
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs4_base_ptr;
+	addr += cbdata + 0x04;
+	value = ioread16(addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x04, value);
 	return value;
 }
 static u_int16_t k5_vinetic_read_eom(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x06);
+	u_int16_t value;
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs4_base_ptr;
+	addr += cbdata + 0x06;
+	value = ioread16(addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x06, value);
 	return value;
 }
 static size_t k5_vinetic_is_not_ready(uintptr_t cbdata)
 {
 	union vin_reg_ir reg_ir;
-	reg_ir.full = ioread16(cbdata + 0x18);
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs4_base_ptr;
+	addr += cbdata + 0x18;
+	reg_ir.full = ioread16(addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x18, reg_ir.full);
 	return reg_ir.bits.rdyq;
 }
 static u_int16_t k5_vinetic_read_dia(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x18);
+	u_int16_t value;
+	void __iomem *addr;
+
+	addr = (void __iomem *)k5_cs4_base_ptr;
+	addr += cbdata + 0x18;
+	value = ioread16(cbdata + 0x18);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x18, value);
 	return value;
 }
 
 static void k5_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr;
+	
+	addr = (void __iomem *)cbdata;
 	if (pos) {
 		addr += K5_CS_STATUS_2;
 	} else {
@@ -241,7 +296,9 @@ static void k5_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
 
 static u_int8_t k5_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr;
+	
+	addr = (void __iomem *)cbdata;
 	if (pos) {
 		addr += K5_CS_STATUS_2;
 	} else {
@@ -252,7 +309,9 @@ static u_int8_t k5_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 
 static void k5_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr;
+	
+	addr = (void __iomem *)cbdata;
 	if (pos) {
 		addr += K5_CS_AT_COM_2;
 	} else {
@@ -263,7 +322,9 @@ static void k5_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 
 static u_int8_t k5_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr;
+
+	addr = (void __iomem *)cbdata;
 	if (pos) {
 		addr += K5_CS_AT_COM_2;
 	} else {
@@ -274,7 +335,9 @@ static u_int8_t k5_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 
 static void k5_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr;
+
+	addr = (void __iomem *)cbdata;
 	if (pos) {
 		addr += K5_CS_SIM_COM_2;
 	} else {
@@ -285,7 +348,9 @@ static void k5_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 
 static u_int8_t k5_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
-	uintptr_t addr = cbdata;
+	void __iomem *addr;
+
+	addr = (void __iomem *)cbdata;
 	if (pos) {
 		addr += K5_CS_SIM_COM_2;
 	} else {
@@ -364,7 +429,9 @@ static void k5_tty_at_poll(unsigned long addr)
 {
 	char buff[512];
 	size_t len;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
 	struct tty_struct *tty;
+#endif
 	union k5_at_ch_status_reg status;
 	struct k5_gsm_module_data *mod = (struct k5_gsm_module_data *)addr;
 
@@ -403,10 +470,15 @@ static void k5_tty_at_poll(unsigned long addr)
 
 	if (len) {
 #ifdef TTY_PORT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
+		tty_insert_flip_string(&mod->at_port, buff, len);
+		tty_flip_buffer_push(&mod->at_port);
+#else
 		tty = tty_port_tty_get(&mod->at_port);
 		tty_insert_flip_string(tty, buff, len);
 		tty_flip_buffer_push(tty);
 		tty_kref_put(tty);
+#endif
 #else
 		tty = mod->at_tty;
 		tty_insert_flip_string(tty, buff, len);
@@ -617,23 +689,24 @@ static int k5_tty_at_open(struct tty_struct *tty, struct file *filp)
 #else
 	unsigned char *xbuf;
 	
-	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL)))
+	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL))) {
 		return -ENOMEM;
+	}
 
 	spin_lock_bh(&mod->at_lock);
 
 	if (!mod->at_count++) {
 		mod->at_xmit_buf = xbuf;
 		mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
-
 		mod->at_poll_timer.function = k5_tty_at_poll;
 		mod->at_poll_timer.data = (unsigned long)mod;
 		mod->at_poll_timer.expires = jiffies + 1;
 		add_timer(&mod->at_poll_timer);
 	
 		mod->at_tty = tty;
-	} else
+	} else {
 		kfree(xbuf);
+	}
 
 	spin_unlock_bh(&mod->at_lock);
 
@@ -679,29 +752,31 @@ static int k5_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int
 	spin_lock_bh(&mod->at_lock);
 
 	if (mod->at_xmit_count < SERIAL_XMIT_SIZE) {
-		while (1)
-		{
+		while (1) {
 			if (mod->at_xmit_head == mod->at_xmit_tail) {
-				if (mod->at_xmit_count)
+				if (mod->at_xmit_count) {
 					len = 0;
-				else
+				} else {
 					len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
-			} else if (mod->at_xmit_head > mod->at_xmit_tail)
+				}
+			} else if (mod->at_xmit_head > mod->at_xmit_tail) {
 				len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
-			else
+			} else {
 				len = mod->at_xmit_tail - mod->at_xmit_head;
-
+			}
 			len = min(len, (size_t)count);
-			if (!len)
+			if (!len) {
 				break;
+			}
 #ifdef TTY_PORT
 			memcpy(mod->at_port.xmit_buf + mod->at_xmit_head, bp, len);
 #else
 			memcpy(mod->at_xmit_buf + mod->at_xmit_head, bp, len);
 #endif
 			mod->at_xmit_head += len;
-			if (mod->at_xmit_head == SERIAL_XMIT_SIZE)
+			if (mod->at_xmit_head == SERIAL_XMIT_SIZE) {
 				mod->at_xmit_head = 0;
+			}
 			mod->at_xmit_count += len;
 			bp += len;
 			count -= len;
@@ -758,8 +833,7 @@ static void k5_tty_at_set_termios(struct tty_struct *tty, struct termios *old_te
 
 	spin_lock_bh(&mod->at_lock);
 
-	switch (baud)
-	{
+	switch (baud) {
 		case 9600:
 			mod->control.bits.at_baudrate = 0;
 			break;
@@ -811,8 +885,9 @@ static int k5_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty
 {
 	struct k5_gsm_module_data *mod = container_of(port, struct k5_gsm_module_data, at_port);
 
-	if (tty_port_alloc_xmit_buf(port) < 0)
+	if (tty_port_alloc_xmit_buf(port) < 0) {
 		return -ENOMEM;
+	}
 	mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
 	mod->at_poll_timer.function = k5_tty_at_poll;
@@ -922,7 +997,7 @@ static int __init k5_init(void)
 		goto k5_init_error;
 	}
 	// Register vinetic
-	if (!(k5_board->vinetic = vinetic_device_register(THIS_MODULE, "board-k5-vin0", (uintptr_t)k5_cs4_base_ptr,
+	if (!(k5_board->vinetic = vinetic_device_register(THIS_MODULE, "board-k5-vin0", 0,
 													k5_vinetic_reset,
 													k5_vinetic_is_not_ready,
 													k5_vinetic_write_nwd,
@@ -984,7 +1059,7 @@ static int __init k5_init(void)
 	}
 
 	// register polygator tty at device
-	for (i =0; i < 2; i++) {
+	for (i = 0; i < 2; i++) {
 		if ((mod = k5_board->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 			if (!(k5_board->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k5_tty_at_ops))) {
@@ -1021,29 +1096,43 @@ static int __init k5_init(void)
 
 k5_init_error:
 	if (k5_board) {
-		for (i=0; i<2; i++) {
-			if (k5_board->simcard_channels[i]) simcard_device_unregister(k5_board->simcard_channels[i]);
-			if (k5_board->tty_at_channels[i]) polygator_tty_device_unregister(k5_board->tty_at_channels[i]);
+		for (i = 0; i < 2; i++) {
+			if (k5_board->simcard_channels[i]) {
+				simcard_device_unregister(k5_board->simcard_channels[i]);
+			}
+			if (k5_board->tty_at_channels[i]) {
+				polygator_tty_device_unregister(k5_board->tty_at_channels[i]);
+			}
 			if (k5_board->gsm_modules[i]) {
 				del_timer_sync(&k5_board->gsm_modules[i]->at_poll_timer);
 				kfree(k5_board->gsm_modules[i]);
 			}
 		}
 		if (k5_board->vinetic) {
-			for (i=0; i<4; i++) {
+			for (i = 0; i < 4; i++) {
 				if (k5_board->vinetic->rtp_channels[i])
 					vinetic_rtp_channel_unregister(k5_board->vinetic->rtp_channels[i]);
 			}
 			vinetic_device_unregister(k5_board->vinetic);
 		}
-		if (k5_board->pg_board) polygator_board_unregister(k5_board->pg_board);
+		if (k5_board->pg_board) {
+			polygator_board_unregister(k5_board->pg_board);
+		}
 		kfree(k5_board);
 	}
 
-	if (k5_cs3_iomem_reg) release_mem_region(AT91_CHIPSELECT_3, 0x10000);
-	if (k5_cs3_base_ptr) iounmap(k5_cs3_base_ptr);
-	if (k5_cs4_iomem_reg) release_mem_region(AT91_CHIPSELECT_4, 0x10000);
-	if (k5_cs4_base_ptr) iounmap(k5_cs4_base_ptr);
+	if (k5_cs3_iomem_reg) {
+		release_mem_region(AT91_CHIPSELECT_3, 0x10000);
+	}
+	if (k5_cs3_base_ptr) {
+		iounmap(k5_cs3_base_ptr);
+	}
+	if (k5_cs4_iomem_reg) {
+		release_mem_region(AT91_CHIPSELECT_4, 0x10000);
+	}
+	if (k5_cs4_base_ptr) {
+		iounmap(k5_cs4_base_ptr);
+	}
 	return rc;
 }
 
@@ -1051,16 +1140,22 @@ static void __exit k5_exit(void)
 {
 	size_t i;
 
-	for (i=0; i<2; i++) {
-		if (k5_board->simcard_channels[i]) simcard_device_unregister(k5_board->simcard_channels[i]);
-		if (k5_board->tty_at_channels[i]) polygator_tty_device_unregister(k5_board->tty_at_channels[i]);
+	for (i = 0; i < 2; i++) {
+		if (k5_board->simcard_channels[i]) {
+			simcard_device_unregister(k5_board->simcard_channels[i]);
+		}
+		if (k5_board->tty_at_channels[i]) {
+			polygator_tty_device_unregister(k5_board->tty_at_channels[i]);
+		}
 		if (k5_board->gsm_modules[i]) {
 			del_timer_sync(&k5_board->gsm_modules[i]->at_poll_timer);
 			kfree(k5_board->gsm_modules[i]);
 		}
 	}
-	for (i=0; i<4; i++) {
-		if (k5_board->vinetic->rtp_channels[i]) vinetic_rtp_channel_unregister(k5_board->vinetic->rtp_channels[i]);
+	for (i = 0; i < 4; i++) {
+		if (k5_board->vinetic->rtp_channels[i]) {
+			vinetic_rtp_channel_unregister(k5_board->vinetic->rtp_channels[i]);
+		}
 	}
 	vinetic_device_unregister(k5_board->vinetic);
 	polygator_board_unregister(k5_board->pg_board);
