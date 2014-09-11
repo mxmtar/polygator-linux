@@ -763,6 +763,8 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 				} else if (brd->rom[i] == 'S'){
 					mod->type = POLYGATOR_MODULE_TYPE_SIM300;
 				} else if (brd->rom[i] == 'G') {
+					mod->type = POLYGATOR_MODULE_TYPE_SIM5215A2;
+				} else if (brd->rom[i] == 'g') {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
 				} else {
 					mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
@@ -796,7 +798,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			mod->control.bits.pwr_off = 1;		// power suply disabled
 			mod->control.bits.sync_mode = 1;	// 0 - synchronous, 1 - asynchronous
 			mod->control.bits.com_spd = 2;		// 3 - 9600, 2 - 115200
-		} else if (mod->type == POLYGATOR_MODULE_TYPE_SIM5215) {
+		} else if ((mod->type == POLYGATOR_MODULE_TYPE_SIM5215) || (mod->type == POLYGATOR_MODULE_TYPE_SIM5215A2)) {
 			mod->control.bits.mod_off = 1;		// module inactive
 			mod->control.bits.sim_spd_0 = 0;
 			mod->control.bits.sim_spd_1 = 0;

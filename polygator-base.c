@@ -124,11 +124,11 @@ static int polygator_tty_device_open(struct tty_struct *tty, struct file *filp)
 	size_t i;
 	struct polygator_tty_device *ptd = NULL;
 
-	if (mutex_lock_interruptible(&polygator_tty_device_list_lock))
+	if (mutex_lock_interruptible(&polygator_tty_device_list_lock)) {
 		return -ERESTARTSYS;
+	}
 
-	for (i=0; i<POLYGATOR_TTY_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < POLYGATOR_TTY_DEVICE_MAXCOUNT; i++) {
 		if ((polygator_tty_device_list[i]) && (polygator_tty_device_list[i]->tty_minor == tty->index)) {
 			ptd = polygator_tty_device_list[i];
 			break;
@@ -210,8 +210,7 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 
 	mutex_lock(&polygator_board_list_lock);
 	len = 0;
-	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
-	{
+	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if (polygator_board_list[i]) {
 			len += sprintf(private_data->buff+len, "%s %s\r\n", polygator_board_list[i]->cdev->owner->name,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
@@ -233,7 +232,9 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 	return 0;
 
 polygator_subsystem_open_error:
-	if (private_data) kfree(private_data);
+	if (private_data) {
+		kfree(private_data);
+	}
 	return res;
 }
 
@@ -276,12 +277,12 @@ static struct file_operations polygator_subsystem_fops = {
 
 char *polygator_print_gsm_module_type(int type)
 {
-	switch (type)
-	{
+	switch (type) {
 		case POLYGATOR_MODULE_TYPE_SIM300: return "SIM300";
 		case POLYGATOR_MODULE_TYPE_SIM900: return "SIM900";
 		case POLYGATOR_MODULE_TYPE_M10: return "M10";
 		case POLYGATOR_MODULE_TYPE_SIM5215: return "SIM5215";
+		case POLYGATOR_MODULE_TYPE_SIM5215A2: return "SIM5215A2";
 		default: return "UNKNOWN";
 	}
 }
@@ -301,8 +302,7 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 
 	mutex_lock(&polygator_board_list_lock);
 	// check for name is not used
-	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
-	{
+	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
 			mutex_unlock(&polygator_board_list_lock);
 			log(KERN_ERR, "\"%s\" already registered\n", name);
@@ -310,8 +310,7 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 		}
 	}
 	// get free slot
-	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
-	{
+	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if (!polygator_board_list[i]) {
 			devno = MKDEV(polygator_subsystem_major, i);
 			polygator_board_list[i] = brd;
@@ -348,8 +347,7 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 polygator_board_register_error:
 	if (devno >= 0) {
 		mutex_lock(&polygator_board_list_lock);
-		for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
-		{
+		for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 			if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
 				polygator_board_list[i] = NULL;
 				break;
@@ -357,7 +355,9 @@ polygator_board_register_error:
 		}
 		mutex_unlock(&polygator_board_list_lock);
 	}
-	if (brd) kfree(brd);
+	if (brd) {
+		kfree(brd);
+	}
 	return NULL;
 }
 
@@ -372,8 +372,7 @@ void polygator_board_unregister(struct polygator_board *brd)
 
 	mutex_lock(&polygator_board_list_lock);
 
-	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
-	{
+	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, brd->name))) {
 			kfree(polygator_board_list[i]);
 			polygator_board_list[i] = NULL;
@@ -400,8 +399,7 @@ struct polygator_tty_device *polygator_tty_device_register(struct module *owner,
 
 	mutex_lock(&polygator_tty_device_list_lock);
 	// get free slot
-	for (i=0; i<POLYGATOR_TTY_DEVICE_MAXCOUNT; i++)
-	{
+	for (i = 0; i < POLYGATOR_TTY_DEVICE_MAXCOUNT; i++) {
 		if (!polygator_tty_device_list[i]) {
 			polygator_tty_device_list[i] = ptd;
 			break;
@@ -468,8 +466,9 @@ static int __init polygator_init(void)
 
 	verbose("loading version \"%s\"...\n", POLYGATOR_LINUX_VERSION);
 
-	for (i=0; i<POLYGATOR_BOARD_MAXCOUNT; i++)
+	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		polygator_board_list[i] = NULL;
+	}
 
 	// Registering polygator device class
 	if (!(polygator_class = class_create(THIS_MODULE, "polygator"))) {
@@ -552,9 +551,15 @@ polygator_init_error:
 		tty_unregister_driver(polygator_tty_device_driver);
 		put_tty_driver(polygator_tty_device_driver);
 	}
-	if (device) CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
-	if (polygator_subsystem_major_reg) unregister_chrdev_region(MKDEV(polygator_subsystem_major, 0), POLYGATOR_DEVICE_MAXCOUNT);
-	if (polygator_class) class_destroy(polygator_class);
+	if (device) {
+		CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
+	}
+	if (polygator_subsystem_major_reg) {
+		unregister_chrdev_region(MKDEV(polygator_subsystem_major, 0), POLYGATOR_DEVICE_MAXCOUNT);
+	}
+	if (polygator_class) {
+		class_destroy(polygator_class);
+	}
 	return rc;
 }
 

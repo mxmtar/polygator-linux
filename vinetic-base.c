@@ -119,7 +119,9 @@ static void vinetic_poll_proc(unsigned long addr)
 
 	// check data for read
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -128,7 +130,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	vin->write_nwd(vin->cbdata, VIN_rOBXML);
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -143,7 +147,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	if (vin->pdata_size) {
 		// write short commands rPOBX
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -155,7 +161,9 @@ static void vinetic_poll_proc(unsigned long addr)
 			// read vop/evt packet first part
 			vin->pdata_size--;
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -191,7 +199,9 @@ static void vinetic_poll_proc(unsigned long addr)
 			// read vop/evt packet second part
 			vin->pdata_size--;
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -210,13 +220,17 @@ static void vinetic_poll_proc(unsigned long addr)
 			if (rtp) {
 				spin_lock(&rtp->lock);
 				rtp->read_slot[rtp->read_slot_write].length = cnt * 2;
-				if (cmd.parts.second.vop.bits.odd) rtp->read_slot[rtp->read_slot_write].length--;
+				if (cmd.parts.second.vop.bits.odd) {
+					rtp->read_slot[rtp->read_slot_write].length--;
+				}
 				datap = rtp->read_slot[rtp->read_slot_write].data;
 				while (vin->pdata_size && cnt) {
 					vin->pdata_size--;
 					cnt--;
 					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-						if (!vin->is_not_ready(vin->cbdata)) break;
+						if (!vin->is_not_ready(vin->cbdata)) {
+							break;
+						}
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
 					if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -235,12 +249,14 @@ static void vinetic_poll_proc(unsigned long addr)
 				if (rtp->read_slot_count > VINETIC_PACKETSLOT_MAXCOUNT) {
 					rtp->read_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
 					rtp->read_slot_read++;
-					if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+					if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT) {
 						rtp->read_slot_read = 0;
+					}
 				}
 				rtp->read_slot_write++;
-				if (rtp->read_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT)
+				if (rtp->read_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT) {
 					rtp->read_slot_write = 0;
+				}
 				// wake read_slot_count waitqueue
 				wake_up_interruptible(&rtp->read_slot_count_waitq);
 				// wake poll waitqueue
@@ -252,7 +268,9 @@ static void vinetic_poll_proc(unsigned long addr)
 					vin->pdata_size--;
 					cnt--;
 					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-						if (!vin->is_not_ready(vin->cbdata)) break;
+						if (!vin->is_not_ready(vin->cbdata)) {
+							break;
+						}
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
 					if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -274,7 +292,9 @@ static void vinetic_poll_proc(unsigned long addr)
 // 		debug("cdata_size=%lu\n", vin->cdata_size);
 		// write short commands rCOBX
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -288,7 +308,9 @@ static void vinetic_poll_proc(unsigned long addr)
 		while (vin->cdata_size) {
 			vin->cdata_size--;
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -304,7 +326,9 @@ static void vinetic_poll_proc(unsigned long addr)
 		wake_up_interruptible(&vin->read_cbox_waitq);
 	}
 	// write voice packet into vinetic
-	for (ch = 0; ch < 8; ch++) pkt_write[ch] = 1;
+	for (ch = 0; ch < 8; ch++) {
+		pkt_write[ch] = 1;
+	}
 	wr = 1;
 	while (wr) {
 		// test for write is actual
@@ -317,7 +341,9 @@ static void vinetic_poll_proc(unsigned long addr)
 		}
 		// check free mailbox space
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -326,7 +352,9 @@ static void vinetic_poll_proc(unsigned long addr)
 		}
 		vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -341,8 +369,10 @@ static void vinetic_poll_proc(unsigned long addr)
 				if (rtp) {
 					spin_lock(&rtp->lock);
 					if (rtp->write_slot_count) {
-						len = rtp->write_slot[rtp->write_slot_read].length/2;
-						if (rtp->write_slot[rtp->write_slot_read].length%2) len++;
+						len = rtp->write_slot[rtp->write_slot_read].length / 2;
+						if (rtp->write_slot[rtp->write_slot_read].length % 2) {
+							len++;
+						}
 						if (vin->free_pbox_space >= (len + 2)) {
 							cmd.parts.first.bits.rw = VIN_WRITE;
 							cmd.parts.first.bits.sc = VIN_SC_NO;
@@ -356,7 +386,9 @@ static void vinetic_poll_proc(unsigned long addr)
 							cmd.parts.second.vop.bits.length = len;
 							// write voice packet header to vinetic
 							for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-								if (!vin->is_not_ready(vin->cbdata)) break;
+								if (!vin->is_not_ready(vin->cbdata)) {
+									break;
+								}
 								udelay(VINETIC_WAIT_TIMEOUT);
 							}
 							if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -366,7 +398,9 @@ static void vinetic_poll_proc(unsigned long addr)
 							}
 							vin->write_nwd(vin->cbdata, cmd.parts.first.full);
 							for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-								if (!vin->is_not_ready(vin->cbdata)) break;
+								if (!vin->is_not_ready(vin->cbdata)) {
+									break;
+								}
 								udelay(VINETIC_WAIT_TIMEOUT);
 							}
 							if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -378,7 +412,9 @@ static void vinetic_poll_proc(unsigned long addr)
 							// write voice packet data to vinetic
 							for (cnt = 0; cnt < len; cnt++) {
 								for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-									if (!vin->is_not_ready(vin->cbdata)) break;
+									if (!vin->is_not_ready(vin->cbdata)) {
+										break;
+									}
 									udelay(VINETIC_WAIT_TIMEOUT);
 								}
 								if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -386,18 +422,19 @@ static void vinetic_poll_proc(unsigned long addr)
 									log(KERN_ERR, "%s: timeout\n", vin->name);
 									goto vinetic_poll_proc_error;
 								}
-								if (cnt == (len-1)) {
+								if (cnt == (len - 1)) {
 									vin->write_eom(vin->cbdata, rtp->write_slot[rtp->write_slot_read].data[cnt]);
 								} else {
 									vin->write_nwd(vin->cbdata, rtp->write_slot[rtp->write_slot_read].data[cnt]);
 								}
 							}
 							// adjust free pbox space
-							vin->free_pbox_space -= (len+2);
+							vin->free_pbox_space -= (len + 2);
 							// adjust write packet slot index
 							rtp->write_slot_read++;
-							if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+							if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT) {
 								rtp->write_slot_read = 0;
+							}
 							rtp->write_slot_count--;
 							// wake write_slot_count waitqueue
 							wake_up_interruptible(&rtp->write_slot_count_waitq);
@@ -417,7 +454,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	// read edsp channel status
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -428,7 +467,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	datap = (u_int16_t *)&vin->status.sr;
 	for (cnt = 0; cnt < 24; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -443,7 +484,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	// read hardware status
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -454,7 +497,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	datap = (u_int16_t *)&vin->status.hwsr;
 	for (cnt = 0; cnt < 2; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -469,7 +514,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	// read mailbox status
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -480,7 +527,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	datap = (u_int16_t *)&vin->status.bxsr;
 	for (cnt = 0; cnt < 2; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -542,7 +591,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	// check free mailbox space
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -551,7 +602,9 @@ static void vinetic_poll_proc(unsigned long addr)
 	}
 	vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
 	for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-		if (!vin->is_not_ready(vin->cbdata)) break;
+		if (!vin->is_not_ready(vin->cbdata)) {
+			break;
+		}
 		udelay(VINETIC_WAIT_TIMEOUT);
 	}
 	if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -577,6 +630,11 @@ static void vinetic_poll_proc(unsigned long addr)
 
 vinetic_poll_proc_error:
 	vin->status.custom.bits.timeout = 1;
+	wake_up_interruptible(&vin->free_cbox_waitq);
+	vin->read_cbox_length = 0x100;
+	wake_up_interruptible(&vin->read_cbox_waitq);
+	vin->filp->f_pos = 0;
+	wake_up_interruptible(&vin->seek_cbox_waitq);
 	vin->status_ready = 1;
 	wake_up_interruptible(&vin->status_waitq);
 	spin_unlock(&vin->lock);
@@ -590,6 +648,9 @@ static int vinetic_open(struct inode *inode, struct file *filp)
 	filp->private_data = vin;
 
 	spin_lock_bh(&vin->lock);
+	if (!vin->usage) {
+		vin->filp = filp;
+	}
 	vin->usage++;
 	spin_unlock_bh(&vin->lock);
 	return 0;
@@ -602,13 +663,15 @@ static int vinetic_release(struct inode *inode, struct file *filp)
 
 	spin_lock_bh(&vin->lock);
 	usage = --vin->usage;
-	if (!usage)
+	if (!usage) {
+		vin->filp = NULL;
 		vin->poll = 0;
+	}
 	spin_unlock_bh(&vin->lock);
 
-	if (!usage)
+	if (!usage) {
 		del_timer_sync(&vin->poll_timer);
-
+	}
 	return 0;
 }
 
@@ -642,10 +705,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		cnt = sizeof(struct vin_status_registers);
 		cnt = min(cnt, count);
 		// copy data to user
-		if (copy_to_user(buff, &status, cnt))
+		if (copy_to_user(buff, &status, cnt)) {
 			res = -EFAULT;
-		else
+		} else {
 			res = cnt;
+		}
 		goto vinetic_read_end;
 	}
 	// check for is read command
@@ -661,7 +725,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		spin_lock_bh(&vin->lock);
 		// write command to vinetic
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -698,10 +764,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				break;
 			case VIN_SH_CMD_CODE_rSRS:
 			case VIN_SH_CMD_CODE_rI_SRS:
-				if (cmd_short.bits.bc)
+				if (cmd_short.bits.bc) {
 					res = 16;
-				else
+				} else {
 					res = 2;
+				}
 				break;
 			case VIN_SH_CMD_CODE_rHWSR:
 			case VIN_SH_CMD_CODE_rI_HWSR:
@@ -740,7 +807,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		// read data from vinetic
 		for (cnt = 0; cnt < res; cnt++) {
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -775,7 +844,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		cnt = HZ;
 		for (;;) {
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -785,7 +856,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 			}
 			vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -794,7 +867,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 				goto vinetic_read_end;
 			}
 			vin->free_cbox_space = (vin->read_eom(vin->cbdata) >> 8) & 0xff;
-			if (vin->free_cbox_space >= 2) break;
+			if (vin->free_cbox_space >= 2) {
+				break;
+			}
 			if (filp->f_flags & O_NONBLOCK) {
 				spin_unlock_bh(&vin->lock);
 				res = -EAGAIN;
@@ -812,7 +887,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		}
 		// write command to vinetic
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -822,7 +899,9 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		}
 		vin->write_nwd(vin->cbdata, cmd.parts.first.full);
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -834,6 +913,11 @@ static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, 
 		vin->read_cbox_length = 0;
 		spin_unlock_bh(&vin->lock);
 		res = wait_event_interruptible(vin->read_cbox_waitq, vin->read_cbox_length != 0);
+		spin_lock_bh(&vin->lock);
+		if (vin->status.custom.bits.timeout) {
+			res = -EIO;
+		}
+		spin_unlock_bh(&vin->lock);
 		if (res) {
 			goto vinetic_read_end;
 		}
@@ -960,7 +1044,9 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	cnt = HZ;
 	for (;;) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -970,7 +1056,9 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 		}
 		vin->write_nwd(vin->cbdata, VIN_rFIBXMS);
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -979,7 +1067,9 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			goto vinetic_write_end;
 		}
 		vin->free_cbox_space = (vin->read_eom(vin->cbdata) >> 8) & 0xff;
-		if (vin->free_cbox_space >= length) break;
+		if (vin->free_cbox_space >= length) {
+			break;
+		}
 		if (filp->f_flags & O_NONBLOCK) {
 			spin_unlock_bh(&vin->lock);
 			res = -EAGAIN;
@@ -998,7 +1088,9 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 	// write data to vinetic
 	for (cnt = 0; cnt < length; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-			if (!vin->is_not_ready(vin->cbdata)) break;
+			if (!vin->is_not_ready(vin->cbdata)) {
+				break;
+			}
 			udelay(VINETIC_WAIT_TIMEOUT);
 		}
 		if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1006,7 +1098,7 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 			res = -EIO;
 			goto vinetic_write_end;
 		}
-		if (cnt == length-1) {
+		if (cnt == (length - 1)) {
 			vin->write_eom(vin->cbdata, data[cnt]);
 		} else {
 			vin->write_nwd(vin->cbdata, data[cnt]);
@@ -1052,7 +1144,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			spin_lock_bh(&vin->lock);
 			vin->write_nwd(vin->cbdata, VIN_rIR);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1066,7 +1160,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 		case VINETIC_FLUSH_MBOX:
 			spin_lock_bh(&vin->lock);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1076,7 +1172,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, VIN_rOBXML);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1090,7 +1188,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			if (vin->pdata_size) {
 				// write short commands rPOBX
 				for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-					if (!vin->is_not_ready(vin->cbdata)) break;
+					if (!vin->is_not_ready(vin->cbdata)) {
+						break;
+					}
 					udelay(VINETIC_WAIT_TIMEOUT);
 				}
 				if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1102,7 +1202,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				while (vin->pdata_size) {
 					vin->pdata_size--;
 					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-						if (!vin->is_not_ready(vin->cbdata)) break;
+						if (!vin->is_not_ready(vin->cbdata)) {
+							break;
+						}
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
 					if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1120,7 +1222,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			if (vin->cdata_size) {
 				// write short commands rCOBX
 				for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-					if (!vin->is_not_ready(vin->cbdata)) break;
+					if (!vin->is_not_ready(vin->cbdata)) {
+						break;
+					}
 					udelay(VINETIC_WAIT_TIMEOUT);
 				}
 				if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1132,7 +1236,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				while (vin->cdata_size) {
 					vin->cdata_size--;
 					for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-						if (!vin->is_not_ready(vin->cbdata)) break;
+						if (!vin->is_not_ready(vin->cbdata)) {
+							break;
+						}
 						udelay(VINETIC_WAIT_TIMEOUT);
 					}
 					if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1152,7 +1258,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 		case VINETIC_DISABLE_IRQ:
 			spin_lock_bh(&vin->lock);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1162,7 +1270,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, 0x0801);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1174,7 +1284,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			// write data to vinetic
 			for (cnt = 0; cnt < 32; cnt++) {
 				for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-					if (!vin->is_not_ready(vin->cbdata)) break;
+					if (!vin->is_not_ready(vin->cbdata)) {
+						break;
+					}
 					udelay(VINETIC_WAIT_TIMEOUT);
 				}
 				if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1192,18 +1304,22 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			break;
 		case VINETIC_GET_NOT_READY:
 			not_ready = vin->is_not_ready(vin->cbdata);
-			if (copy_to_user(argp, &not_ready, sizeof(int)))
+			if (copy_to_user(argp, &not_ready, sizeof(int))) {
 				res = -EINVAL;
+			}
 			break;
 		case VINETIC_READ_DIA:
 			phi = vin->read_dia(vin->cbdata);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
+			if (copy_to_user(argp, &phi, sizeof(u_int16_t))) {
 				res = -EINVAL;
+			}
 			break;
 		case VINETIC_REVISION:
 			spin_lock_bh(&vin->lock);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1213,7 +1329,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, 0x8801);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1223,7 +1341,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, 0x8001);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1233,13 +1353,16 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			phi = vin->read_eom(vin->cbdata);
 			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
+			if (copy_to_user(argp, &phi, sizeof(u_int16_t))) {
 				res = -EINVAL;
+			}
 			break;
 		case VINETIC_CHECKSUM:
 			spin_lock_bh(&vin->lock);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1249,7 +1372,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, 0x8801);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1259,7 +1384,9 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			vin->write_nwd(vin->cbdata, 0x8901);
 			for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
-				if (!vin->is_not_ready(vin->cbdata)) break;
+				if (!vin->is_not_ready(vin->cbdata)) {
+					break;
+				}
 				udelay(VINETIC_WAIT_TIMEOUT);
 			}
 			if (wait_count >= VINETIC_WAIT_COUNT) {
@@ -1269,12 +1396,14 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			phi = vin->read_eom(vin->cbdata);
 			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t)))
+			if (copy_to_user(argp, &phi, sizeof(u_int16_t))) {
 				res = -EINVAL;
+			}
 			break;
 		case VINETIC_SET_POLL:
-			if (copy_from_user(&vin->poll, argp, sizeof(int)))
+			if (copy_from_user(&vin->poll, argp, sizeof(int))) {
 				res = -EINVAL;
+			}
 			del_timer_sync(&vin->poll_timer);
 			if (vin->poll) {
 				vin->poll_timer.function = vinetic_poll_proc;
@@ -1336,12 +1465,15 @@ loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
 			res = -EINVAL;
 			goto vinetic_llseek_end;
 	}
-	if (newpos < 0) return -EINVAL;
+	if (newpos < 0) {
+		return -EINVAL;
+	}
 
 	spin_lock_bh(&vin->lock);
 	for (;;) {
-		if (filp->f_pos == 0) break;
-		
+		if (filp->f_pos == 0) {
+			break;
+		}
 		if (filp->f_flags & O_NONBLOCK) {
 			spin_unlock_bh(&vin->lock);
 			res = -EAGAIN;
@@ -1350,6 +1482,11 @@ loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
 		// sleeping
 		spin_unlock_bh(&vin->lock);
 		res = wait_event_interruptible(vin->seek_cbox_waitq, filp->f_pos == 0);
+		spin_lock_bh(&vin->lock);
+		if (vin->status.custom.bits.timeout) {
+			res = -EIO;
+		}
+		spin_unlock_bh(&vin->lock);
 		if (res) {
 			goto vinetic_llseek_end;
 		}
@@ -1429,17 +1566,21 @@ static ssize_t vinetic_rtp_channel_read(struct file *filp, char __user *buff, si
 
 	for (;;) {
 		// successfull return
-		if (rtp->read_slot_count > 0)
+		if (rtp->read_slot_count > 0) {
 			break;
+		}
 
 		spin_unlock_bh(&rtp->lock);
 
-		if (filp->f_flags & O_NONBLOCK)
+		if (filp->f_flags & O_NONBLOCK) {
 			return -EAGAIN;
+		}
 
 		// sleeping
 		res = wait_event_interruptible(rtp->read_slot_count_waitq, rtp->read_slot_count > 0);
-		if (res) return res;
+		if (res) {
+			return res;
+		}
 
 		spin_lock_bh(&rtp->lock);
 	}
@@ -1448,8 +1589,9 @@ static ssize_t vinetic_rtp_channel_read(struct file *filp, char __user *buff, si
 	memcpy(read_slot.data, rtp->read_slot[rtp->read_slot_read].data, read_slot.length);
 	// adjust read position of receiving buffer
 	rtp->read_slot_read++;
-	if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+	if (rtp->read_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT) {
 		rtp->read_slot_read = 0;
+	}
 
 	rtp->read_slot_count--;
 
@@ -1457,8 +1599,9 @@ static ssize_t vinetic_rtp_channel_read(struct file *filp, char __user *buff, si
 
 	// copy to user
 	read_slot.length = min(read_slot.length, count);
-	if (copy_to_user(buff, read_slot.data, read_slot.length))
+	if (copy_to_user(buff, read_slot.data, read_slot.length)) {
 		return -EFAULT;
+	}
 
 	return read_slot.length;
 }
@@ -1481,17 +1624,21 @@ static ssize_t vinetic_rtp_channel_write(struct file *filp, const char __user *b
 
 	for (;;) {
 		// successfull return
-		if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT)
+		if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT) {
 			break;
+		}
 
 		spin_unlock_bh(&rtp->lock);
 
-		if (filp->f_flags & O_NONBLOCK)
+		if (filp->f_flags & O_NONBLOCK) {
 			return -EAGAIN;
+		}
 
 		// sleeping
 		res = wait_event_interruptible(rtp->write_slot_count_waitq, rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT);
-		if (res) return res;
+		if (res) {
+			return res;
+		}
 
 		spin_lock_bh(&rtp->lock);
 	}
@@ -1502,15 +1649,17 @@ static ssize_t vinetic_rtp_channel_write(struct file *filp, const char __user *b
 
 	// adjust write position of transmiting buffer
 	rtp->write_slot_write++;
-	if (rtp->write_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT)
+	if (rtp->write_slot_write >= VINETIC_PACKETSLOT_MAXCOUNT) {
 		rtp->write_slot_write = 0;
+	}
 
 	rtp->write_slot_count++;
 	if (rtp->write_slot_count > VINETIC_PACKETSLOT_MAXCOUNT) {
 		rtp->write_slot_count = VINETIC_PACKETSLOT_MAXCOUNT;
 		rtp->write_slot_read++;
-		if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT)
+		if (rtp->write_slot_read >= VINETIC_PACKETSLOT_MAXCOUNT) {
 			rtp->write_slot_read = 0;
+		}
 	}
 
 	spin_unlock_bh(&rtp->lock);
@@ -1532,11 +1681,13 @@ static unsigned int vinetic_rtp_channel_poll(struct file *filp, struct poll_tabl
 
 	spin_lock_bh(&rtp->lock);
 
-	if (rtp->read_slot_count > 0)
+	if (rtp->read_slot_count > 0) {
 		res |= POLLIN | POLLRDNORM;
+	}
 
-	if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT)
+	if (rtp->write_slot_count < VINETIC_PACKETSLOT_MAXCOUNT) {
 		res |= POLLOUT | POLLWRNORM;
+	}
 
 	spin_unlock_bh(&rtp->lock);
 
@@ -1607,7 +1758,9 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	slot_alloc = 1;
 	
 	// init vinetic private data
-	for (i = 0; i < 8; i++) vin->rtp_channels[i] = NULL;
+	for (i = 0; i < 8; i++) {
+		vin->rtp_channels[i] = NULL;
+	}
 	spin_lock_init(&vin->lock);
 	init_waitqueue_head(&vin->free_cbox_waitq);
 	init_waitqueue_head(&vin->read_cbox_waitq);
@@ -1690,7 +1843,9 @@ vinetic_device_register_error:
 		}
 		mutex_unlock(&vinetic_device_list_lock);
 	}
-	if(vin) kfree(vin);
+	if (vin) {
+		kfree(vin);
+	}
 	return NULL;
 }
 
@@ -1828,7 +1983,9 @@ vinetic_rtp_channel_register_error:
 		}
 		mutex_unlock(&vinetic_device_list_lock);
 	}
-	if(rtp) kfree(rtp);
+	if (rtp) {
+		kfree(rtp);
+	}
 	return NULL;
 }
 
@@ -1836,7 +1993,9 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 {
 	size_t i;
 	
-	if (!rtp) return;
+	if (!rtp) {
+		return;
+	}
 
 	CLASS_DEV_DESTROY(vinetic_class, rtp->devno);
 	cdev_del(&rtp->cdev);
@@ -1903,8 +2062,12 @@ static int __init vinetic_init(void)
 	return 0;
 
 vinetic_init_error:
-	if (vinetic_major_reg) unregister_chrdev_region(MKDEV(vinetic_major, 0), VINETIC_DEVICE_MAXCOUNT);
-	if (vinetic_class) class_destroy(vinetic_class);
+	if (vinetic_major_reg) {
+		unregister_chrdev_region(MKDEV(vinetic_major, 0), VINETIC_DEVICE_MAXCOUNT);
+	}
+	if (vinetic_class) {
+		class_destroy(vinetic_class);
+	}
 	return rc;
 }
 
