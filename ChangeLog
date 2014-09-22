@@ -1,3 +1,5 @@
+2014-09-22
+	1. Added support for gx boards with firmware 14.x or higher.
 2014-07-01
 	1. Fix k5 board support with recent kernels.
 2014-05-20

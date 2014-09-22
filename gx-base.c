@@ -153,6 +153,9 @@ struct gx_board {
 	size_t romsize;
 	u_int32_t sn;
 
+	int ver_maj;
+	int ver_min;
+
 	size_t vinetics_count;
 	struct vinetic *vinetics[2];
 
@@ -313,7 +316,7 @@ static u_int8_t gx_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 	return ioread8(addr);
 }
 
-static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_at_write_old(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
@@ -322,13 +325,35 @@ static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(reg, addr);
 }
 
-static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
+static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+{
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	iowrite8(0x00, addr + 0x3c);
+	iowrite8(0x01, addr + 0x3c);
+	iowrite8(reg, addr + 0x10);
+}
+
+static u_int8_t gx_gsm_mod_at_read_old(uintptr_t cbdata, size_t pos)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	addr += 0x10;
 
 	return ioread8(addr);
+}
+
+static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
+{
+	u_int8_t data;
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	data = ioread8(addr + 0x10);
+
+	iowrite8(0x00, addr + 0x3a);
+	iowrite8(0x01, addr + 0x3a);
+
+	return data;
 }
 
 static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
@@ -567,11 +592,14 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 	private_data->board = brd;
 
 	len = 0;
+
+	len += sprintf(private_data->buff + len, "ROM %s\r\n", &brd->rom[2]);
+
 	for (i = 0; i < brd->channels_count; i++) {
 		if (brd->tty_at_channels[i]) {
 			mod = brd->gsm_modules[i];
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
+			len += sprintf(private_data->buff + len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
 							(unsigned long int)i,
 							polygator_print_gsm_module_type(mod->type),
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
@@ -588,7 +616,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 	}
 	for (j = 0; j < brd->vinetics_count; j++) {
 		if ((vin = brd->vinetics[j])) {
-			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
+			len += sprintf(private_data->buff + len, "VIN%lu %s\r\n",
 							(unsigned long int)j,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 							dev_name(vin->device)
@@ -599,10 +627,10 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 #endif
 							);
 			for (i = 0; i < 4; i++) {
-				if (vin->rtp_channels[j])
-					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
+				if (vin->rtp_channels[i]) {
+					len += sprintf(private_data->buff + len, "VIN%luRTP%lu %s\r\n",
 									(unsigned long int)j,
-								   (unsigned long int)i,
+									(unsigned long int)i,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 									dev_name(vin->rtp_channels[i]->device)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
@@ -611,6 +639,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 									vin->rtp_channels[i]->device->class_id
 #endif
 									);
+				}
 			}
 		}
 	}
@@ -967,6 +996,8 @@ static int __init gx_init(void)
 	size_t i, j, k;
 	struct gx_board *brd;
 	struct vinetic *vin;
+	unsigned char *str;
+	int ver_part = -1;
 	u32 tmpu32;
 	u8 modtype;
 	char devname[VINETIC_DEVNAME_MAXLEN];
@@ -1023,7 +1054,7 @@ static int __init gx_init(void)
 	for (i = 0; i < sizeof(mainboard_rom); i++) {
 		mainboard_rom[i] = ioread8(gx_cs3_base_ptr + MB_CS_ROM_KROSS);
 	}
-	verbose("mainboard: \"%s\"\n", &mainboard_rom[3]);
+	verbose("mainboard: \"%s\"\n", &mainboard_rom[2]);
 	// set MainBoard SIM standalone mode
 	iowrite8(1, gx_cs3_base_ptr + MB_MODE_AUTONOM);
 
@@ -1077,9 +1108,35 @@ static int __init gx_init(void)
 			continue;
 		}
 		for (i = 0; i < sizeof(brd->rom); i++) {
+			iowrite8(i, gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
 			brd->rom[i] = ioread8(gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
 		}
-		verbose("found %s: \"%s\"\n", brd->name, &brd->rom[3]);
+		str = strstr(&brd->rom[2], "ver");
+		brd->ver_maj = -1;
+		brd->ver_min = -1;
+		i = 0;
+		while (*str) {
+			if ((*str == '.') || (i == 3)) {
+				if (ver_part >= 0) {
+					if (brd->ver_maj < 0) {
+						brd->ver_maj = ver_part;
+					} else if (brd->ver_min < 0) {
+						brd->ver_min = ver_part;
+					}
+				}
+			}
+			if (*str == '.') {
+				i = 0;
+				ver_part = 0;
+			} else {
+				if ((*str >= '0') && (*str <= '9')) {
+					i++;
+					ver_part = ver_part * 10 + *str - '0';
+				}
+			}
+			str++;
+		}
+		verbose("found %s: firmware version %d.%d\n", brd->name, brd->ver_maj, brd->ver_min);
 		gx_boards[k] = brd;
 		// set autonom
 		iowrite8(1, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * k));
@@ -1156,8 +1213,13 @@ static int __init gx_init(void)
 			mod->cbdata = (((uintptr_t)gx_cs3_base_ptr) + 0x1000 + 0x0200 * (k + (i / 4)) + 0x40 * (i % 4));
 			mod->set_control = gx_gsm_mod_set_control;
 			mod->get_status = gx_gsm_mod_get_status;
-			mod->at_write = gx_gsm_mod_at_write;
-			mod->at_read = gx_gsm_mod_at_read;
+			if (brd->ver_maj < 14) {
+				mod->at_write = gx_gsm_mod_at_write_old;
+				mod->at_read = gx_gsm_mod_at_read_old;
+			} else {
+				mod->at_write = gx_gsm_mod_at_write;
+				mod->at_read = gx_gsm_mod_at_read;
+			}
 			mod->sim_write = gx_gsm_mod_sim_write;
 			mod->sim_read = gx_gsm_mod_sim_read;
 			mod->imei_write = gx_gsm_mod_imei_write;
