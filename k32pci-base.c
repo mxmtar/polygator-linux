@@ -93,7 +93,7 @@ static int k32pci_tty_at_port_activate(struct tty_port *tport, struct tty_struct
 static void k32pci_tty_at_port_shutdown(struct tty_port *port);
 
 static const struct tty_port_operations k32pci_tty_at_port_ops = {
-	.carrier_raised =k32pci_tty_at_port_carrier_raised,
+	.carrier_raised = k32pci_tty_at_port_carrier_raised,
 	.dtr_rts = k32pci_tty_at_port_dtr_rts,
 	.activate = k32pci_tty_at_port_activate,
 	.shutdown = k32pci_tty_at_port_shutdown,
@@ -329,14 +329,16 @@ static void k32pci_tty_at_poll(unsigned long addr)
 		// select port
 		if (mod->at_port_select) {
 			// auxilary
-			if (status.bits.imei_rdy_rd)
+			if (status.bits.imei_rdy_rd) {
 				break;
+			}
 			// put char to receiving buffer
 			buff[len++] = mod->imei_read(mod->cbdata, mod->pos_on_board);
 		} else {
 			// main
-			if (status.bits.at_rdy_rd)
+			if (status.bits.at_rdy_rd) {
 				break;
+			}
 			// put char to receiving buffer
 			buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
 		}
@@ -359,8 +361,9 @@ static void k32pci_tty_at_poll(unsigned long addr)
 				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
 				mod->at_xmit_tail++;
-				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 					mod->at_xmit_tail = 0;
+				}
 				mod->at_xmit_count--;
 			}
 		} else {
@@ -376,8 +379,9 @@ static void k32pci_tty_at_poll(unsigned long addr)
 					mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
 					mod->at_xmit_tail++;
-					if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+					if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 						mod->at_xmit_tail = 0;
+					}
 					mod->at_xmit_count--;
 				} else {
 					xmit_write_room = 1024;
@@ -389,8 +393,9 @@ static void k32pci_tty_at_poll(unsigned long addr)
 						mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
 						mod->at_xmit_tail++;
-						if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+						if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 							mod->at_xmit_tail = 0;
+						}
 						mod->at_xmit_count--;
 						xmit_write_room--;
 					}
@@ -429,39 +434,38 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 	size_t i,j;
 	size_t len;
 
-	struct k32_board *brd;
+	struct k32_board *board;
 	struct k32_board_private_data *private_data;
 	union k32_gsm_mod_status_reg status;
 	struct k32_gsm_module_data *mod;
 
-	brd = container_of(inode->i_cdev, struct k32_board, cdev);
+	board = container_of(inode->i_cdev, struct k32_board, cdev);
 
 	if (!(private_data = kmalloc(sizeof(struct k32_board_private_data), GFP_KERNEL))) {
 		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct k32_board_private_data));
 		res = -ENOMEM;
 		goto k32pci_board_open_error;
 	}
-	private_data->board = brd;
+	private_data->board = board;
 
 	len = 0;
 	// type
-	len += sprintf(private_data->buff+len, "TYPE=%u\r\n", brd->type & 0x00ff);
+	len += sprintf(private_data->buff + len, "TYPE=%u\r\n", board->type & 0x00ff);
 	// position
-	len += sprintf(private_data->buff+len, "POSITION=%u\r\n", brd->position);
+	len += sprintf(private_data->buff + len, "POSITION=%u\r\n", board->position);
 	// gsm
 	for (i = 0; i < 8; i++) {
-		if (brd->gsm_modules[i]) {
-			mod = brd->gsm_modules[i];
+		if ((mod = board->gsm_modules[i])) {
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
+			len += sprintf(private_data->buff + len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
 							(unsigned long int)i,
 							polygator_print_gsm_module_type(mod->type),
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							brd->tty_at_channels[i]?dev_name(brd->tty_at_channels[i]->device):"unknown",
-							brd->simcard_channels[i]?dev_name(brd->simcard_channels[i]->device):"unknown",
+							board->tty_at_channels[i]?dev_name(board->tty_at_channels[i]->device):"unknown",
+							board->simcard_channels[i]?dev_name(board->simcard_channels[i]->device):"unknown",
 #else
-							brd->tty_at_channels[i]?brd->tty_at_channels[i]->device->class_id:"unknown",
-							brd->simcard_channels[i]?brd->simcard_channels[i]->device->class_id:"unknown",
+							board->tty_at_channels[i]?board->tty_at_channels[i]->device->class_id:"unknown",
+							board->simcard_channels[i]?board->simcard_channels[i]->device->class_id:"unknown",
 #endif
 							(unsigned long int)(i/4),
 							(unsigned long int)(i%4),
@@ -470,28 +474,28 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 	}
 	// vinetic
 	for (i = 0; i < 2; i++) {
-		if (brd->vinetics[i]) {
-			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
+		if (board->vinetics[i]) {
+			len += sprintf(private_data->buff + len, "VIN%lu %s\r\n",
 						   (unsigned long int)i,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-							dev_name(brd->vinetics[i]->device)
+							dev_name(board->vinetics[i]->device)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							dev_name(brd->vinetics[i]->device)
+							dev_name(board->vinetics[i]->device)
 #else
-							brd->vinetics[i]->device->class_id
+							board->vinetics[i]->device->class_id
 #endif
 							);
 			for (j = 0; j < 4; j++) {
-				if (brd->vinetics[i]->rtp_channels[j])
-					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
+				if (board->vinetics[i]->rtp_channels[j])
+					len += sprintf(private_data->buff + len, "VIN%luRTP%lu %s\r\n",
 								(unsigned long int)i,
 								(unsigned long int)j,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-								dev_name(brd->vinetics[i]->rtp_channels[j]->device)
+								dev_name(board->vinetics[i]->rtp_channels[j]->device)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-								dev_name(brd->vinetics[i]->rtp_channels[j]->device)
+								dev_name(board->vinetics[i]->rtp_channels[j]->device)
 #else
-								brd->vinetics[i]->rtp_channels[j]->device->class_id
+								board->vinetics[i]->rtp_channels[j]->device->class_id
 #endif
 								);
 			}
@@ -505,7 +509,9 @@ static int k32pci_board_open(struct inode *inode, struct file *filp)
 	return 0;
 
 k32pci_board_open_error:
-	if (private_data) kfree(private_data);
+	if (private_data) {
+		kfree(private_data);
+	}
 	return res;
 }
 
@@ -637,7 +643,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	size_t i, j;
 	char devname[POLYGATOR_BRDNAME_MAXLEN];
 	struct k32_gsm_module_data *mod;
-	struct k32_board *brd = NULL;
+	struct k32_board *board = NULL;
 	int get_pci_region = 0;
 
 	rc = pci_enable_device(pdev);
@@ -653,12 +659,12 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	get_pci_region = 1;
 
 	// alloc memory for board data
-	if (!(brd = kmalloc(sizeof(struct k32_board), GFP_KERNEL))) {
+	if (!(board = kmalloc(sizeof(struct k32_board), GFP_KERNEL))) {
 		log(KERN_ERR, "can't get memory for struct k32_board\n");
 		rc = -1;
 		goto k32pci_board_probe_error;
 	}
-	memset(brd, 0, sizeof(struct k32_board));
+	memset(board, 0, sizeof(struct k32_board));
 
 	// get starting address
 	addr = pci_resource_start(pdev, 0);
@@ -669,58 +675,62 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	outb(0x00, addr + PG_PCI_OFFSET_RESET);
 
 	// get board type
-	brd->type = 0;
+	board->type = 0;
 	for (i = 0; i < 16; i++) {
-		brd->type <<= 1;
-		brd->type |= inb(addr + PG_PCI_ID_BASE) & 0x01;
+		board->type <<= 1;
+		board->type |= inb(addr + PG_PCI_ID_BASE) & 0x01;
 	}
-	verbose("found PCI board type=%04x\n", brd->type & 0x00ff);
+	verbose("found PCI board type=%04x\n", board->type & 0x00ff);
 
-	if (((brd->type & 0x00ff) != 0x0081) && ((brd->type & 0x00ff) != 0x0082) &&
-			((brd->type & 0x00ff) != 0x0083) && ((brd->type & 0x00ff) != 0x0084) &&
-			((brd->type & 0x00ff) != 0x0085)) {
-		log(KERN_ERR, "PCI board type=%04x unsupported\n", brd->type & 0x00ff);
+	if (((board->type & 0x00ff) != 0x0081) && ((board->type & 0x00ff) != 0x0082) &&
+			((board->type & 0x00ff) != 0x0083) && ((board->type & 0x00ff) != 0x0084) &&
+			((board->type & 0x00ff) != 0x0085)) {
+		log(KERN_ERR, "PCI board type=%04x unsupported\n", board->type & 0x00ff);
 		rc = -1;
 		goto k32pci_board_probe_error;
 	}
 
 	// get board number
-	brd->position = inb(addr + PG_PCI_NUM_BASE) & 3;
+	board->position = inb(addr + PG_PCI_NUM_BASE) & 3;
 
 	// read board rom
-	memset(brd->rom, 0, 256);
-	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
-	brd->romsize = inb(addr + PG_PCI_ROM_BASE);
-	for (i = 0; i < brd->romsize; i++) brd->rom[i] = inb(addr + PG_PCI_ROM_BASE);
-	if (rom) verbose("\"%.*s\"\n", (int)brd->romsize, brd->rom);
-
+	memset(board->rom, 0, 256);
+	board->romsize = inb(addr + PG_PCI_ROM_BASE);
+	board->romsize = inb(addr + PG_PCI_ROM_BASE);
+	for (i = 0; i < board->romsize; i++) {
+		board->rom[i] = inb(addr + PG_PCI_ROM_BASE);
+	}
+	if (rom) {
+		verbose("\"%.*s\"\n", (int)board->romsize, board->rom);
+	}
 	// get board serial number
-	i = brd->romsize - 1;
+	i = board->romsize - 1;
 	pow10 = 1;
-	brd->sn = 0;
+	board->sn = 0;
 	while (i--) {
-		if ((brd->rom[i] < 0x30) || (brd->rom[i] > 0x39))
+		if ((board->rom[i] < 0x30) || (board->rom[i] > 0x39)) {
 			break;
-		brd->sn += (brd->rom[i] - 0x30) * pow10;
+		}
+		board->sn += (board->rom[i] - 0x30) * pow10;
 		pow10 *= 10;
 	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32pci-%u", brd->sn);
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32pci-%u", board->sn);
 #else
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bp%u", brd->sn);
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bp%u", board->sn);
 #endif
-	if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, devname, &brd->cdev, &k32pci_board_fops))) {
+	if (!(board->pg_board =  polygator_board_register(THIS_MODULE, devname, &board->cdev, &k32pci_board_fops))) {
 		rc = -1;
 		goto k32pci_board_probe_error;
 	}
 
 	for (j = 0; j < 2; j++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-%u-vin%lu", brd->sn, (unsigned long int)j);
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-%u-vin%lu", board->sn, (unsigned long int)j);
 #else
-		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vp%u%lu", brd->sn, (unsigned long int)j);
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "vp%u%lu", board->sn, (unsigned long int)j);
 #endif
-		if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, addr,
+		if (!(board->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, addr,
 													(j)?(k32pci_vin_reset_1):(k32pci_vin_reset_0),
 													(j)?(k32pci_vin_is_not_ready_1):(k32pci_vin_is_not_ready_0),
 													(j)?(k32pci_vin_write_nwd_1):(k32pci_vin_write_nwd_0),
@@ -733,11 +743,11 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		}
 		for (i = 0; i < 4; i++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-%u-vin%lu-rtp%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-k32pci-%u-vin%lu-rtp%lu", board->sn, (unsigned long int)j, (unsigned long int)i);
 #else
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "rp%u%lu%lu", brd->sn, (unsigned long int)j, (unsigned long int)i);
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "rp%u%lu%lu", board->sn, (unsigned long int)j, (unsigned long int)i);
 #endif
-			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i)) {
+			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, board->vinetics[j], i)) {
 				rc = -1;
 				goto k32pci_board_probe_error;
 			}
@@ -753,18 +763,18 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		}
 		memset(mod, 0, sizeof(struct k32_gsm_module_data));
 		// select GSM module type
-		if (((brd->type & 0x00ff) == 0x0082) || ((brd->type & 0x00ff) == 0x0083) ||
-				((brd->type & 0x00ff) == 0x0084) || ((brd->type & 0x00ff) == 0x0085)) {
-			if (brd->rom[8] == '*') {
-				if (brd->rom[i] == 'M') {
+		if (((board->type & 0x00ff) == 0x0082) || ((board->type & 0x00ff) == 0x0083) ||
+				((board->type & 0x00ff) == 0x0084) || ((board->type & 0x00ff) == 0x0085)) {
+			if (board->rom[8] == '*') {
+				if (board->rom[i] == 'M') {
 					mod->type = POLYGATOR_MODULE_TYPE_M10;
-				} else if (brd->rom[i] == '9') {
+				} else if (board->rom[i] == '9') {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM900;
-				} else if (brd->rom[i] == 'S'){
+				} else if (board->rom[i] == 'S'){
 					mod->type = POLYGATOR_MODULE_TYPE_SIM300;
-				} else if (brd->rom[i] == 'G') {
+				} else if (board->rom[i] == 'G') {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM5215A2;
-				} else if (brd->rom[i] == 'g') {
+				} else if (board->rom[i] == 'g') {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
 				} else {
 					mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
@@ -776,7 +786,7 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 			mod->type = POLYGATOR_MODULE_TYPE_SIM300;
 		}
 
-		if ((brd->type & 0x00ff) == 0x0085) {
+		if ((board->type & 0x00ff) == 0x0085) {
 			mod->at_no_buf = 0;
 		} else {
 			mod->at_no_buf = 1;
@@ -840,16 +850,16 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		mod->at_port.close_delay = 0;
 		mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
 #endif
-		brd->gsm_modules[i] = mod;
+		board->gsm_modules[i] = mod;
 	}
 
 	// register polygator tty at device
 	for (i = 0; i < 8; i++) {
-		if ((mod = brd->gsm_modules[i])) {
+		if ((mod = board->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k32pci_tty_at_ops))) {
+			if (!(board->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k32pci_tty_at_ops))) {
 #else
-			if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &k32pci_tty_at_ops))) {
+			if (!(board->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &k32pci_tty_at_ops))) {
 #endif
 				log(KERN_ERR, "can't register polygator tty device\n");
 				rc = -1;
@@ -860,9 +870,9 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 
 	// register polygator simcard device
 	for (i = 0; i < 8; i++) {
-		if (brd->gsm_modules[i]) {
-			if (!(brd->simcard_channels[i] = simcard_device_register(THIS_MODULE,
-																		brd->gsm_modules[i],
+		if (board->gsm_modules[i]) {
+			if (!(board->simcard_channels[i] = simcard_device_register(THIS_MODULE,
+																		board->gsm_modules[i],
 																		k32pci_sim_read,
 																		k32pci_sim_write,
 																		k32pci_sim_is_read_ready,
@@ -876,33 +886,41 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		}
 	}
 
-	pci_set_drvdata(pdev, brd);
+	pci_set_drvdata(pdev, board);
 	return 0;
 
 k32pci_board_probe_error:
-	if (brd) {
+	if (board) {
 		for (i = 0; i < 8; i++) {
-			if (brd->simcard_channels[i]) simcard_device_unregister(brd->simcard_channels[i]);
-			if (brd->tty_at_channels[i]) polygator_tty_device_unregister(brd->tty_at_channels[i]);
-			if (brd->gsm_modules[i]) {
-				del_timer_sync(&brd->gsm_modules[i]->at_poll_timer);
-				kfree(brd->gsm_modules[i]);
+			if (board->simcard_channels[i]) {
+				simcard_device_unregister(board->simcard_channels[i]);
+			}
+			if (board->tty_at_channels[i]) {
+				polygator_tty_device_unregister(board->tty_at_channels[i]);
+			}
+			if (board->gsm_modules[i]) {
+				del_timer_sync(&board->gsm_modules[i]->at_poll_timer);
+				kfree(board->gsm_modules[i]);
 			}
 		}
 		for (j = 0; j < 2; j++) {
-			if (brd->vinetics[j]) {
+			if (board->vinetics[j]) {
 				for (i = 0; i < 4; i++) {
-					if (brd->vinetics[j]->rtp_channels[i])
-						vinetic_rtp_channel_unregister(brd->vinetics[j]->rtp_channels[i]);
+					if (board->vinetics[j]->rtp_channels[i]) {
+						vinetic_rtp_channel_unregister(board->vinetics[j]->rtp_channels[i]);
+					}
 				}
-				vinetic_device_unregister(brd->vinetics[j]);
+				vinetic_device_unregister(board->vinetics[j]);
 			}
 		}
-		if (brd->pg_board) polygator_board_unregister(brd->pg_board);
-
-		kfree(brd);
+		if (board->pg_board) {
+			polygator_board_unregister(board->pg_board);
+		}
+		kfree(board);
 	}
-	if (get_pci_region) pci_release_region(pdev, 0);
+	if (get_pci_region) {
+		pci_release_region(pdev, 0);
+	}
 	return rc;
 }
 
@@ -914,27 +932,31 @@ static void __devexit k32pci_board_remove(struct pci_dev *pdev)
 {
 	size_t i, j;
 	
-	struct k32_board *brd = pci_get_drvdata(pdev);
+	struct k32_board *board = pci_get_drvdata(pdev);
 
 	for (i = 0; i < 8; i++) {
-		if (brd->simcard_channels[i]) simcard_device_unregister(brd->simcard_channels[i]);
-		if (brd->tty_at_channels[i]) polygator_tty_device_unregister(brd->tty_at_channels[i]);
-		if (brd->gsm_modules[i]) {
-			del_timer_sync(&brd->gsm_modules[i]->at_poll_timer);
-			kfree(brd->gsm_modules[i]);
+		if (board->simcard_channels[i]) {
+			simcard_device_unregister(board->simcard_channels[i]);
+		}
+		if (board->tty_at_channels[i]) {
+			polygator_tty_device_unregister(board->tty_at_channels[i]);
+		}
+		if (board->gsm_modules[i]) {
+			del_timer_sync(&board->gsm_modules[i]->at_poll_timer);
+			kfree(board->gsm_modules[i]);
 		}
 	}
 
 	for (j = 0; j < 2; j++) {
 		for (i = 0; i < 4; i++) {
-			vinetic_rtp_channel_unregister(brd->vinetics[j]->rtp_channels[i]);
+			vinetic_rtp_channel_unregister(board->vinetics[j]->rtp_channels[i]);
 		}
-		vinetic_device_unregister(brd->vinetics[j]);
+		vinetic_device_unregister(board->vinetics[j]);
 	}
 
-	polygator_board_unregister(brd->pg_board);
+	polygator_board_unregister(board->pg_board);
 
-	kfree(brd);
+	kfree(board);
 	pci_release_region(pdev, 0);
 }
 
@@ -955,8 +977,9 @@ static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
 #else
 	unsigned char *xbuf;
 	
-	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL)))
+	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL))) {
 		return -ENOMEM;
+	}
 
 	spin_lock_bh(&mod->at_lock);
 
@@ -970,8 +993,9 @@ static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
 		add_timer(&mod->at_poll_timer);
 	
 		mod->at_tty = tty;
-	} else
+	} else {
 		kfree(xbuf);
+	}
 
 	spin_unlock_bh(&mod->at_lock);
 
@@ -1019,26 +1043,29 @@ static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	if (mod->at_xmit_count < SERIAL_XMIT_SIZE) {
 		while (1) {
 			if (mod->at_xmit_head == mod->at_xmit_tail) {
-				if (mod->at_xmit_count)
+				if (mod->at_xmit_count) {
 					len = 0;
-				else
+				} else {
 					len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
-			} else if (mod->at_xmit_head > mod->at_xmit_tail)
+				}
+			} else if (mod->at_xmit_head > mod->at_xmit_tail) {
 				len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
-			else
+			} else {
 				len = mod->at_xmit_tail - mod->at_xmit_head;
-
+			}
 			len = min(len, (size_t)count);
-			if (!len)
+			if (!len) {
 				break;
+			}
 #ifdef TTY_PORT
 			memcpy(mod->at_port.xmit_buf + mod->at_xmit_head, bp, len);
 #else
 			memcpy(mod->at_xmit_buf + mod->at_xmit_head, bp, len);
 #endif
 			mod->at_xmit_head += len;
-			if (mod->at_xmit_head == SERIAL_XMIT_SIZE)
+			if (mod->at_xmit_head == SERIAL_XMIT_SIZE) {
 				mod->at_xmit_head = 0;
+			}
 			mod->at_xmit_count += len;
 			bp += len;
 			count -= len;
@@ -1146,8 +1173,10 @@ static int k32pci_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 {
 	struct k32_gsm_module_data *mod = container_of(port, struct k32_gsm_module_data, at_port);
 
-	if (tty_port_alloc_xmit_buf(port) < 0)
+	if (tty_port_alloc_xmit_buf(port) < 0) {
 		return -ENOMEM;
+	}
+
 	mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
 	mod->at_poll_timer.function = k32pci_tty_at_poll;

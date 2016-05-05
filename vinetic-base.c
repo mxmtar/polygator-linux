@@ -633,7 +633,7 @@ vinetic_poll_proc_error:
 	wake_up_interruptible(&vin->free_cbox_waitq);
 	vin->read_cbox_length = 0x100;
 	wake_up_interruptible(&vin->read_cbox_waitq);
-	vin->filp->f_pos = 0;
+// 	vin->filp->f_pos = 0;
 	wake_up_interruptible(&vin->seek_cbox_waitq);
 	vin->status_ready = 1;
 	wake_up_interruptible(&vin->status_waitq);
@@ -648,9 +648,9 @@ static int vinetic_open(struct inode *inode, struct file *filp)
 	filp->private_data = vin;
 
 	spin_lock_bh(&vin->lock);
-	if (!vin->usage) {
-		vin->filp = filp;
-	}
+// 	if (!vin->usage) {
+// 		vin->filp = filp;
+// 	}
 	vin->usage++;
 	spin_unlock_bh(&vin->lock);
 	return 0;
@@ -664,7 +664,7 @@ static int vinetic_release(struct inode *inode, struct file *filp)
 	spin_lock_bh(&vin->lock);
 	usage = --vin->usage;
 	if (!usage) {
-		vin->filp = NULL;
+// 		vin->filp = NULL;
 		vin->poll = 0;
 	}
 	spin_unlock_bh(&vin->lock);
@@ -1445,7 +1445,7 @@ static long vinetic_compat_ioctl(struct file *filp, unsigned int cmd, unsigned l
 }
 #endif
 
-loff_t vinetic_llseek(struct file * filp, loff_t off, int whence)
+loff_t vinetic_llseek(struct file *filp, loff_t off, int whence)
 {
 	loff_t res;
 	loff_t newpos;

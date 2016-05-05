@@ -41,42 +41,35 @@ pg_enable_channel ()
 {
 
 if [ -c $1 ]; then
-
 	sleep ${START_ORDER}
-
 	echo "enable channel" $2
-
-	pg_channel_baudrate $1 $2 ${BAUDRATE}
-	pg_channel_serial_port $1 $2 ${SERIAL_PORT_MAIN}
-	pg_channel_pwr $1 $2 1
-	sleep 3
-
-	TOTAL_COUNT=0
-	while [ $TOTAL_COUNT -lt 4 ]; do
-
-		pg_channel_key $1 $2 1
-		sleep 2
-		pg_channel_key $1 $2 0
-
-		WAIT_COUNT=0
-		while [ $WAIT_COUNT -lt 8 ]; do
+	VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+	if [ "${VIO}" = "0" ]; then
+		pg_channel_baudrate $1 $2 ${BAUDRATE}
+		pg_channel_serial_port $1 $2 ${SERIAL_PORT_MAIN}
+		pg_channel_pwr $1 $2 1
+		sleep 3
+		TOTAL_COUNT=0
+		while [ $TOTAL_COUNT -lt 4 ]; do
+			pg_channel_key $1 $2 1
+			sleep 2
+			pg_channel_key $1 $2 0
+			WAIT_COUNT=0
+			while [ $WAIT_COUNT -lt 8 ]; do
+				VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
+				if [ "${VIO}" = "1" ]; then
+					break
+				fi
+				sleep 1
+				WAIT_COUNT=`expr ${WAIT_COUNT} + 1`
+			done
 			VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
 			if [ "${VIO}" = "1" ]; then
 				break
 			fi
-			sleep 1
-			WAIT_COUNT=`expr ${WAIT_COUNT} + 1`
+			TOTAL_COUNT=`expr ${TOTAL_COUNT} + 1`
 		done
-
-		VIO=`cat $1 | grep $2 | awk -F ' ' '{print $6}' | sed 's/VIO=//g' | sed 's/[\r\n]//g'`
-		if [ "${VIO}" = "1" ]; then
-			break
-		fi
-
-		TOTAL_COUNT=`expr ${TOTAL_COUNT} + 1`
-
-	done
-
+	fi
 else
 	echo "board" $1 "not found"
 fi
@@ -97,7 +90,7 @@ if [ -c $1 ]; then
 		while [ $TOTAL_COUNT -lt 4 ]; do
 
 			pg_channel_key $1 $2 1
-			sleep 2
+			usleep 700000
 			pg_channel_key $1 $2 0
 
 			WAIT_COUNT=0

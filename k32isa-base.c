@@ -116,7 +116,7 @@ static int k32isa_tty_at_port_activate(struct tty_port *tport, struct tty_struct
 static void k32isa_tty_at_port_shutdown(struct tty_port *port);
 
 static const struct tty_port_operations k32isa_tty_at_port_ops = {
-	.carrier_raised =k32isa_tty_at_port_carrier_raised,
+	.carrier_raised = k32isa_tty_at_port_carrier_raised,
 	.dtr_rts = k32isa_tty_at_port_dtr_rts,
 	.activate = k32isa_tty_at_port_activate,
 	.shutdown = k32isa_tty_at_port_shutdown,
@@ -345,14 +345,16 @@ static void k32isa_tty_at_poll(unsigned long addr)
 		// select port
 		if (mod->at_port_select) {
 			// auxilary
-			if (status.bits.imei_rdy_rd)
+			if (status.bits.imei_rdy_rd) {
 				break;
+			}
 			// put char to receiving buffer
 			buff[len++] = mod->imei_read(mod->cbdata, mod->pos_on_board);
 		} else {
 			// main
-			if (status.bits.at_rdy_rd)
+			if (status.bits.at_rdy_rd) {
 				break;
+			}
 			// put char to receiving buffer
 			buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
 		}
@@ -375,8 +377,9 @@ static void k32isa_tty_at_poll(unsigned long addr)
 				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
 				mod->at_xmit_tail++;
-				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 					mod->at_xmit_tail = 0;
+				}
 				mod->at_xmit_count--;
 			}
 		} else {
@@ -390,8 +393,9 @@ static void k32isa_tty_at_poll(unsigned long addr)
 				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
 				mod->at_xmit_tail++;
-				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE)
+				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 					mod->at_xmit_tail = 0;
+				}
 				mod->at_xmit_count--;
 			}
 		}
@@ -426,69 +430,68 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 	size_t i,j;
 	size_t len;
 
-	struct k32_board *brd;
+	struct k32_board *board;
 	struct k32_board_private_data *private_data;
 	struct k32_gsm_module_data *mod;
 	union k32_gsm_mod_status_reg status;
 
-	brd = container_of(inode->i_cdev, struct k32_board, cdev);
+	board = container_of(inode->i_cdev, struct k32_board, cdev);
 
 	if (!(private_data = kmalloc(sizeof(struct k32_board_private_data), GFP_KERNEL))) {
 		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct k32_board_private_data));
 		res = -ENOMEM;
 		goto k32isa_open_error;
 	}
-	private_data->board = brd;
+	private_data->board = board;
 
 	len = 0;
 	// type
-	len += sprintf(private_data->buff+len, "TYPE=%u\r\n", brd->type & 0x00ff);
+	len += sprintf(private_data->buff + len, "TYPE=%u\r\n", board->type & 0x00ff);
 	// position
-	len += sprintf(private_data->buff+len, "POSITION=%u\r\n", brd->position);
+	len += sprintf(private_data->buff + len, "POSITION=%u\r\n", board->position);
 	// gsm
 	for (i = 0; i < 8; i++) {
-		if (brd->gsm_modules[i]) {
-			mod = brd->gsm_modules[i];
+		if ((mod = board->gsm_modules[i])) {
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
-			len += sprintf(private_data->buff+len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
+			len += sprintf(private_data->buff + len, "GSM%lu %s %s %s VIN%luALM%lu VIO=%u\r\n",
 							(unsigned long int)i,
 							polygator_print_gsm_module_type(mod->type),
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							brd->tty_at_channels[i]?dev_name(brd->tty_at_channels[i]->device):"unknown",
-							brd->simcard_channels[i]?dev_name(brd->simcard_channels[i]->device):"unknown",
+							board->tty_at_channels[i] ? dev_name(board->tty_at_channels[i]->device) : "unknown",
+							board->simcard_channels[i] ? dev_name(board->simcard_channels[i]->device) : "unknown",
 #else
-							brd->tty_at_channels[i]?brd->tty_at_channels[i]->device->class_id:"unknown",
-							brd->simcard_channels[i]?brd->simcard_channels[i]->device->class_id:"unknown",
+							board->tty_at_channels[i] ? board->tty_at_channels[i]->device->class_id : "unknown",
+							board->simcard_channels[i] ? board->simcard_channels[i]->device->class_id : "unknown",
 #endif
-							(unsigned long int)(i/4),
-							(unsigned long int)(i%4),
+							(unsigned long int)(i / 4),
+							(unsigned long int)(i % 4),
 							status.bits.vio);
 		}
 	}
 	// vinetic
 	for (i = 0; i < 2; i++) {
-		if (brd->vinetics[i]) {
-			len += sprintf(private_data->buff+len, "VIN%lu %s\r\n",
+		if (board->vinetics[i]) {
+			len += sprintf(private_data->buff + len, "VIN%lu %s\r\n",
 							(unsigned long int)i,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-							dev_name(brd->vinetics[i]->device)
+							dev_name(board->vinetics[i]->device)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							dev_name(brd->vinetics[i]->device)
+							dev_name(board->vinetics[i]->device)
 #else
-							brd->vinetics[i]->device->class_id
+							board->vinetics[i]->device->class_id
 #endif
 							);
 			for (j = 0; j < 4; j++) {
-				if (brd->vinetics[i]->rtp_channels[j])
-					len += sprintf(private_data->buff+len, "VIN%luRTP%lu %s\r\n",
+				if (board->vinetics[i]->rtp_channels[j])
+					len += sprintf(private_data->buff + len, "VIN%luRTP%lu %s\r\n",
 									(unsigned long int)i,
 									(unsigned long int)j,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-									dev_name(brd->vinetics[i]->rtp_channels[j]->device)
+									dev_name(board->vinetics[i]->rtp_channels[j]->device)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-									dev_name(brd->vinetics[i]->rtp_channels[j]->device)
+									dev_name(board->vinetics[i]->rtp_channels[j]->device)
 #else
-									brd->vinetics[i]->rtp_channels[j]->device->class_id
+									board->vinetics[i]->rtp_channels[j]->device->class_id
 #endif
 									);
 			}
@@ -502,7 +505,9 @@ static int k32isa_board_open(struct inode *inode, struct file *filp)
 	return 0;
 
 k32isa_open_error:
-	if (private_data) kfree(private_data);
+	if (private_data) {
+		kfree(private_data);
+	}
 	return res;
 }
 
@@ -632,8 +637,9 @@ static int k32isa_tty_at_open(struct tty_struct *tty, struct file *filp)
 #else
 	unsigned char *xbuf;
 	
-	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL)))
+	if (!(xbuf = kmalloc(SERIAL_XMIT_SIZE, GFP_KERNEL))) {
 		return -ENOMEM;
+	}
 
 	spin_lock_bh(&mod->at_lock);
 
@@ -647,8 +653,9 @@ static int k32isa_tty_at_open(struct tty_struct *tty, struct file *filp)
 		add_timer(&mod->at_poll_timer);
 	
 		mod->at_tty = tty;
-	} else
+	} else {
 		kfree(xbuf);
+	}
 
 	spin_unlock_bh(&mod->at_lock);
 
@@ -696,26 +703,29 @@ static int k32isa_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	if (mod->at_xmit_count < SERIAL_XMIT_SIZE) {
 		while (1) {
 			if (mod->at_xmit_head == mod->at_xmit_tail) {
-				if (mod->at_xmit_count)
+				if (mod->at_xmit_count) {
 					len = 0;
-				else
+				} else {
 					len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
-			} else if (mod->at_xmit_head > mod->at_xmit_tail)
+				}
+			} else if (mod->at_xmit_head > mod->at_xmit_tail) {
 				len = SERIAL_XMIT_SIZE - mod->at_xmit_head;
-			else
+			} else {
 				len = mod->at_xmit_tail - mod->at_xmit_head;
-
+			}
 			len = min(len, (size_t)count);
-			if (!len)
+			if (!len) {
 				break;
+			}
 #ifdef TTY_PORT
 			memcpy(mod->at_port.xmit_buf + mod->at_xmit_head, bp, len);
 #else
 			memcpy(mod->at_xmit_buf + mod->at_xmit_head, bp, len);
 #endif
 			mod->at_xmit_head += len;
-			if (mod->at_xmit_head == SERIAL_XMIT_SIZE)
+			if (mod->at_xmit_head == SERIAL_XMIT_SIZE) {
 				mod->at_xmit_head = 0;
+			}
 			mod->at_xmit_count += len;
 			bp += len;
 			count -= len;
@@ -725,7 +735,7 @@ static int k32isa_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 
 	spin_unlock_bh(&mod->at_lock);
 
-	return res ;
+	return res;
 }
 
 static int k32isa_tty_at_write_room(struct tty_struct *tty)
@@ -824,8 +834,10 @@ static int k32isa_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 {
 	struct k32_gsm_module_data *mod = container_of(port, struct k32_gsm_module_data, at_port);
 
-	if (tty_port_alloc_xmit_buf(port) < 0)
+	if (tty_port_alloc_xmit_buf(port) < 0) {
 		return -ENOMEM;
+	}
+
 	mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
 	mod->at_poll_timer.function = k32isa_tty_at_poll;
@@ -934,12 +946,13 @@ static int __init k32isa_init(void)
 
 	// search Polygator K32 ISA boards
 	// reset all ISA board
-	for (k = 0; k < 4; k++)
-		outb(0xff, PG_ISA_RESET_BASE + k*2);
+	for (k = 0; k < 4; k++) {
+		outb(0xff, PG_ISA_RESET_BASE + k * 2);
+	}
 	mdelay(10);
-	for (k = 0; k < 4; k++)
-		outb(0x00, PG_ISA_RESET_BASE + k*2);
-
+	for (k = 0; k < 4; k++) {
+		outb(0x00, PG_ISA_RESET_BASE + k * 2);
+	}
 	// search boards
 	for (k = 0; k < 4; k++) {
 		// alloc memory for board data
@@ -970,10 +983,14 @@ static int __init k32isa_init(void)
 		k32isa_boards[k]->position = k & 3;
 		// read board rom
 		memset(k32isa_boards[k]->rom, 0, 256);
-		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);
-		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k*4);
-		for (i = 0; i < k32isa_boards[k]->romsize; i++) k32isa_boards[k]->rom[i] = inb(PG_ISA_ROM_BASE + k*4);
-		if (rom) verbose("\"%.*s\"\n", (int)k32isa_boards[k]->romsize, k32isa_boards[k]->rom);
+		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k * 4);
+		k32isa_boards[k]->romsize = inb(PG_ISA_ROM_BASE + k * 4);
+		for (i = 0; i < k32isa_boards[k]->romsize; i++) {
+			k32isa_boards[k]->rom[i] = inb(PG_ISA_ROM_BASE + k*4);
+		}
+		if (rom) {
+			verbose("\"%.*s\"\n", (int)k32isa_boards[k]->romsize, k32isa_boards[k]->rom);
+		}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-k32isa-%lu", (long unsigned int)k);
 #else
@@ -1024,21 +1041,23 @@ static int __init k32isa_init(void)
 			// select GSM module type
 			if ((k32isa_boards[k]->type & 0x00ff) == 0x0009) {
 				if (k32isa_boards[k]->rom[8] == '*') {
-					if (k32isa_boards[k]->rom[i] == 'M')
+					if (k32isa_boards[k]->rom[i] == 'M') {
 						mod->type = POLYGATOR_MODULE_TYPE_M10;
-					else if (k32isa_boards[k]->rom[i] == '9')
+					} else if (k32isa_boards[k]->rom[i] == '9') {
 						mod->type = POLYGATOR_MODULE_TYPE_SIM900;
-					else if (k32isa_boards[k]->rom[i] == 'S')
+					} else if (k32isa_boards[k]->rom[i] == 'S') {
 						mod->type = POLYGATOR_MODULE_TYPE_SIM300;
-					else if (k32isa_boards[k]->rom[i] == 'G')
+					} else if (k32isa_boards[k]->rom[i] == 'G') {
 						mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
-					else
+					} else {
 						mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
-				} else
+					}
+				} else {
 					mod->type = POLYGATOR_MODULE_TYPE_SIM300;
-			} else
+				}
+			} else {
 				mod->type = POLYGATOR_MODULE_TYPE_SIM300;
-
+			}
 			if (mod->type == POLYGATOR_MODULE_TYPE_SIM300) {
 				mod->control.bits.mod_off = 1;		// module inactive
 				mod->control.bits.sim_spd_0 = 0;
@@ -1141,8 +1160,12 @@ k32isa_init_error:
 	for (k = 0; k < 4; k++) {
 		if (k32isa_boards[k]) {
 			for (i = 0; i < 8; i++) {
-				if (k32isa_boards[k]->simcard_channels[i]) simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
-				if (k32isa_boards[k]->tty_at_channels[i]) polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				if (k32isa_boards[k]->simcard_channels[i]) {
+					simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
+				}
+				if (k32isa_boards[k]->tty_at_channels[i]) {
+					polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				}
 				if (k32isa_boards[k]->gsm_modules[i]) {
 					del_timer_sync(&k32isa_boards[k]->gsm_modules[i]->at_poll_timer);
 					kfree(k32isa_boards[k]->gsm_modules[i]);
@@ -1151,27 +1174,43 @@ k32isa_init_error:
 			for (j = 0; j < 2; j++) {
 				if (k32isa_boards[k]->vinetics[j]) {
 					for (i = 0; i < 4; i++) {
-						if (k32isa_boards[k]->vinetics[j]->rtp_channels[i])
+						if (k32isa_boards[k]->vinetics[j]->rtp_channels[i]) {
 							vinetic_rtp_channel_unregister(k32isa_boards[k]->vinetics[j]->rtp_channels[i]);
+						}
 					}
 					vinetic_device_unregister(k32isa_boards[k]->vinetics[j]);
 				}
 			}
-			if (k32isa_boards[k]->pg_board) polygator_board_unregister(k32isa_boards[k]->pg_board);
+			if (k32isa_boards[k]->pg_board) {
+				polygator_board_unregister(k32isa_boards[k]->pg_board);
+			}
 			kfree(k32isa_boards[k]);
 		}
 	}
 
-	if (k32isa_id_ioport_reg) release_region(PG_ISA_ID_BASE, PG_ISA_ID_LENGTH);
-	if (k32isa_at_ioport_reg) release_region(PG_ISA_AT_BASE, PG_ISA_AT_LENGTH);
-	if (k32isa_ctrl_ioport_reg) release_region(PG_ISA_CTRL_BASE, PG_ISA_CTRL_LENGTH);
-	if (k32isa_vs_ioport_reg) release_region(PG_ISA_VS_BASE, PG_ISA_VS_LENGTH);
-	if (k32isa_sim_ioport_reg) release_region(PG_ISA_SIM_BASE, PG_ISA_SIM_LENGTH);
-	if (k32isa_imei_ioport_reg) release_region(PG_ISA_IMEI_BASE, PG_ISA_IMEI_LENGTH);
+	if (k32isa_id_ioport_reg) {
+		release_region(PG_ISA_ID_BASE, PG_ISA_ID_LENGTH);
+	}
+	if (k32isa_at_ioport_reg) {
+		release_region(PG_ISA_AT_BASE, PG_ISA_AT_LENGTH);
+	}
+	if (k32isa_ctrl_ioport_reg) {
+		release_region(PG_ISA_CTRL_BASE, PG_ISA_CTRL_LENGTH);
+	}
+	if (k32isa_vs_ioport_reg) {
+		release_region(PG_ISA_VS_BASE, PG_ISA_VS_LENGTH);
+	}
+	if (k32isa_sim_ioport_reg) {
+		release_region(PG_ISA_SIM_BASE, PG_ISA_SIM_LENGTH);
+	}
+	if (k32isa_imei_ioport_reg) {
+		release_region(PG_ISA_IMEI_BASE, PG_ISA_IMEI_LENGTH);
+	}
 	for (k = 0; k < 4; k++) {
 		for (j = 0; j < 2; j++) {
-			if (k32isa_vd_ioport_reg[k][j])
-				release_region(PG_ISA_VD_BASE + k*64 + j*32, PG_ISA_VD_LENGTH);
+			if (k32isa_vd_ioport_reg[k][j]) {
+				release_region(PG_ISA_VD_BASE + k * 64 + j * 32, PG_ISA_VD_LENGTH);
+			}
 		}
 	}
 
@@ -1186,8 +1225,12 @@ static void __exit k32isa_exit(void)
 	for (k = 0; k < 4; k++) {
 		if (k32isa_boards[k]) {
 			for (i = 0; i < 8; i++) {
-				if (k32isa_boards[k]->simcard_channels[i]) simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
-				if (k32isa_boards[k]->tty_at_channels[i]) polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				if (k32isa_boards[k]->simcard_channels[i]) {
+					simcard_device_unregister(k32isa_boards[k]->simcard_channels[i]);
+				}
+				if (k32isa_boards[k]->tty_at_channels[i]) {
+					polygator_tty_device_unregister(k32isa_boards[k]->tty_at_channels[i]);
+				}
 				if (k32isa_boards[k]->gsm_modules[i]) {
 					del_timer_sync(&k32isa_boards[k]->gsm_modules[i]->at_poll_timer);
 					kfree(k32isa_boards[k]->gsm_modules[i]);

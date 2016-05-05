@@ -32,7 +32,7 @@ struct vinetic {
 	int devno;
 	spinlock_t lock;
 	size_t usage;
-	struct file *filp;
+// 	struct file *filp;
 	struct timer_list poll_timer;
 	int poll;
 
