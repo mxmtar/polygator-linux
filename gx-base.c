@@ -106,10 +106,12 @@ union gx_gsm_mod_control_reg {
 	u_int8_t full;
 } __attribute__((packed));
 
+struct gx_board;
 struct gx_gsm_module_data {
 
 	int type;
 	size_t pos_on_board;
+	struct gx_board *board;
 
 	union gx_gsm_mod_control_reg control;
 
@@ -119,6 +121,8 @@ struct gx_gsm_module_data {
 	u_int8_t (* get_status)(uintptr_t cbdata, size_t pos);
 	void (* at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* at_read)(uintptr_t cbdata, size_t pos);
+	void (* at_write_sim16)(uintptr_t cbdata, size_t pos, u_int8_t reg);
+	u_int16_t (* at_read_sim16)(uintptr_t cbdata, size_t pos);
 	void (* sim_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* sim_read)(uintptr_t cbdata, size_t pos);
 	void (* imei_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
@@ -153,8 +157,10 @@ struct gx_board {
 	size_t romsize;
 	u_int32_t sn;
 
-	int ver_maj;
-	int ver_min;
+	u_int32_t ver_maj;
+	u_int32_t ver_min;
+
+	int sim16;
 
 	size_t vinetics_count;
 	struct vinetic *vinetics[2];
@@ -316,7 +322,7 @@ static u_int8_t gx_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 	return ioread8(addr);
 }
 
-static void gx_gsm_mod_at_write_old(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
@@ -325,16 +331,7 @@ static void gx_gsm_mod_at_write_old(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(reg, addr);
 }
 
-static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
-{
-	void __iomem *addr = (void __iomem *)cbdata;
-
-	iowrite8(0x00, addr + 0x3c);
-	iowrite8(0x01, addr + 0x3c);
-	iowrite8(reg, addr + 0x10);
-}
-
-static u_int8_t gx_gsm_mod_at_read_old(uintptr_t cbdata, size_t pos)
+static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
@@ -343,15 +340,27 @@ static u_int8_t gx_gsm_mod_at_read_old(uintptr_t cbdata, size_t pos)
 	return ioread8(addr);
 }
 
-static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
+static void gx_gsm_mod_at_write_sim16(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
-	u_int8_t data;
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	data = ioread8(addr + 0x10);
+	iowrite8(reg, addr + 0x10);
+	iowrite8(0x00, addr + 0x3c);
+	iowrite8(0x01, addr + 0x3c);
+	iowrite8(0x00, addr + 0x3c);
+}
 
-	iowrite8(0x00, addr + 0x3a);
-	iowrite8(0x01, addr + 0x3a);
+static u_int16_t gx_gsm_mod_at_read_sim16(uintptr_t cbdata, size_t pos)
+{
+	u_int16_t data;
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	data = ioread16(addr + 0x10);
+	if ((data & 0x0200) == 0) {
+		iowrite8(0, addr + 0x3a);
+		iowrite8(1, addr + 0x3a);
+		iowrite8(0, addr + 0x3a);
+	}
 
 	return data;
 }
@@ -464,6 +473,7 @@ static void gx_tty_at_poll(unsigned long addr)
 {
 	char buff[512];
 	size_t len;
+	u_int16_t rd16;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
 	struct tty_struct *tty;
 #endif
@@ -497,11 +507,20 @@ static void gx_tty_at_poll(unsigned long addr)
 			buff[len++] = mod->imei_read(mod->cbdata, mod->pos_on_board);
 		} else {
 			// main
-			if (status.bits.at_rd_empty) {
-				break;
+			if (mod->board->sim16) {
+				rd16 = mod->at_read_sim16(mod->cbdata, mod->pos_on_board);
+				if (rd16 & 0x0200) {
+					break;
+				}
+				// put char to receiving buffer
+				buff[len++] = rd16 & 0xff;
+			} else {
+				if (status.bits.at_rd_empty) {
+					break;
+				}
+				// put char to receiving buffer
+				buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
 			}
-			// put char to receiving buffer
-			buff[len++] = mod->at_read(mod->cbdata, mod->pos_on_board);
 		}
 	}
 #endif
@@ -522,11 +541,11 @@ static void gx_tty_at_poll(unsigned long addr)
 #else
 				mod->imei_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
 #endif
-				mod->at_xmit_tail++;
+				++mod->at_xmit_tail;
 				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 					mod->at_xmit_tail = 0;
 				}
-				mod->at_xmit_count--;
+				--mod->at_xmit_count;
 			}
 		} else {
 			// main
@@ -534,15 +553,23 @@ static void gx_tty_at_poll(unsigned long addr)
 			if (status.bits.at_wr_empty) {
 				// put char to transmitter buffer
 #ifdef TTY_PORT
-				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+				if (mod->board->sim16) {
+					mod->at_write_sim16(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+				} else {
+					mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_port.xmit_buf[mod->at_xmit_tail]);
+				}
 #else
-				mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+				if (mod->board->sim16) {
+					mod->at_write_sim16(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+				} else {
+					mod->at_write(mod->cbdata, mod->pos_on_board, mod->at_xmit_buf[mod->at_xmit_tail]);
+				}
 #endif
-				mod->at_xmit_tail++;
+				++mod->at_xmit_tail;
 				if (mod->at_xmit_tail == SERIAL_XMIT_SIZE) {
 					mod->at_xmit_tail = 0;
 				}
-				mod->at_xmit_count--;
+				--mod->at_xmit_count;
 			}
 		}
 	}
@@ -595,7 +622,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 
 	len += sprintf(private_data->buff + len, "ROM %s\r\n", &brd->rom[2]);
 
-	for (i = 0; i < brd->channels_count; i++) {
+	for (i = 0; i < brd->channels_count; ++i) {
 		if (brd->tty_at_channels[i]) {
 			mod = brd->gsm_modules[i];
 			status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
@@ -614,7 +641,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 							status.bits.status);
 		}
 	}
-	for (j = 0; j < brd->vinetics_count; j++) {
+	for (j = 0; j < brd->vinetics_count; ++j) {
 		if ((vin = brd->vinetics[j])) {
 			len += sprintf(private_data->buff + len, "VIN%lu %s\r\n",
 							(unsigned long int)j,
@@ -626,7 +653,7 @@ static int gx_board_open(struct inode *inode, struct file *filp)
 							vin->device->class_id
 #endif
 							);
-			for (i = 0; i < 4; i++) {
+			for (i = 0; i < 4; ++i) {
 				if (vin->rtp_channels[i]) {
 					len += sprintf(private_data->buff + len, "VIN%luRTP%lu %s\r\n",
 									(unsigned long int)j,
@@ -996,8 +1023,7 @@ static int __init gx_init(void)
 	size_t i, j, k;
 	struct gx_board *brd;
 	struct vinetic *vin;
-	unsigned char *str;
-	int ver_part = -1;
+	unsigned char *str, *dp;
 	u32 tmpu32;
 	u8 modtype;
 	char devname[VINETIC_DEVNAME_MAXLEN];
@@ -1006,7 +1032,7 @@ static int __init gx_init(void)
 
 	verbose("loading ...\n");
 
-	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
+	for (k = 0; k < MAX_GX_BOARD_COUNT; ++k) {
 		gx_boards[k] = NULL;
 	}
 
@@ -1051,7 +1077,7 @@ static int __init gx_init(void)
 	iowrite8(1, gx_cs3_base_ptr + MB_RESET_ROM);
 	mdelay(1);
 	iowrite8(0, gx_cs3_base_ptr + MB_RESET_ROM);
-	for (i = 0; i < sizeof(mainboard_rom); i++) {
+	for (i = 0; i < sizeof(mainboard_rom); ++i) {
 		mainboard_rom[i] = ioread8(gx_cs3_base_ptr + MB_CS_ROM_KROSS);
 	}
 	verbose("mainboard: \"%s\"\n", &mainboard_rom[2]);
@@ -1059,7 +1085,7 @@ static int __init gx_init(void)
 	iowrite8(1, gx_cs3_base_ptr + MB_MODE_AUTONOM);
 
 	// Search for gx boards
-	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
+	for (k = 0; k < MAX_GX_BOARD_COUNT; ++k) {
 		// alloc memory for board data
 		if (!(brd = kmalloc(sizeof(struct gx_board), GFP_KERNEL))) {
 			log(KERN_ERR, "can't get memory for struct gx_board\n");
@@ -1107,36 +1133,21 @@ static int __init gx_init(void)
 			kfree(brd);
 			continue;
 		}
-		for (i = 0; i < sizeof(brd->rom); i++) {
+		for (i = 0; i < sizeof(brd->rom); ++i) {
 			iowrite8(i, gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
 			brd->rom[i] = ioread8(gx_cs3_base_ptr + GX_CS_ROM + (0x0200 * k));
 		}
 		str = strstr(&brd->rom[2], "ver");
-		brd->ver_maj = -1;
-		brd->ver_min = -1;
-		i = 0;
-		while (*str) {
-			if ((*str == '.') || (i == 3)) {
-				if (ver_part >= 0) {
-					if (brd->ver_maj < 0) {
-						brd->ver_maj = ver_part;
-					} else if (brd->ver_min < 0) {
-						brd->ver_min = ver_part;
-					}
-				}
-			}
-			if (*str == '.') {
-				i = 0;
-				ver_part = 0;
-			} else {
-				if ((*str >= '0') && (*str <= '9')) {
-					i++;
-					ver_part = ver_part * 10 + *str - '0';
-				}
-			}
-			str++;
+		dp = devname;
+		while ((*str) && (*str != 0x20)) {
+			*dp++ = *str++;
 		}
-		verbose("found %s: firmware version %d.%d\n", brd->name, brd->ver_maj, brd->ver_min);
+		*dp = '\0';
+		sscanf(devname, "ver.%u.%u", &brd->ver_maj, &brd->ver_min);
+		verbose("found %s: firmware version %u.%u\n", brd->name, brd->ver_maj, brd->ver_min);
+		if (strstr(&brd->rom[2], "sim16")) {
+			brd->sim16 = 1;
+		}
 		gx_boards[k] = brd;
 		// set autonom
 		iowrite8(1, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * k));
@@ -1149,7 +1160,7 @@ static int __init gx_init(void)
 			iowrite8(0, gx_cs3_base_ptr + GX_SIP_ONLY + (0x0200 * (k + 1)));
 		}
 		// vinetics
-		for (j = 0; j < brd->vinetics_count; j++) {
+		for (j = 0; j < brd->vinetics_count; ++j) {
 			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu", brd->name, (unsigned long int)j);
 			if (!(brd->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, (0x0200 * (k + j)),
 																gx_vinetic_reset,
@@ -1162,7 +1173,7 @@ static int __init gx_init(void)
 				rc = -1;
 				goto gx_init_error;
 			}
-			for (i = 0; i < 4; i++) {
+			for (i = 0; i < 4; ++i) {
 				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "%s-vin%lu-rtp%lu", brd->name, (unsigned long int)j, (unsigned long int)i);
 				if (!(vinetic_rtp_channel_register(THIS_MODULE, devname, brd->vinetics[j], i))) {
 					rc = -1;
@@ -1173,7 +1184,7 @@ static int __init gx_init(void)
 		// get board GSM module type
 		modtype = ioread8(gx_cs3_base_ptr + GX_CS_PRESENCE + (0x0200 * k));
 		// set AT command channels
-		for (i = 0; i < brd->channels_count; i++) {
+		for (i = 0; i < brd->channels_count; ++i) {
 			if (!(mod= kmalloc(sizeof(struct gx_gsm_module_data), GFP_KERNEL))) {
 				log(KERN_ERR, "can't get memory for struct gx_gsm_module_data\n");
 				rc = -1;
@@ -1210,16 +1221,14 @@ static int __init gx_init(void)
 			mod->control.bits.at_baudrate = 2;
 
 			mod->pos_on_board = i;
+			mod->board = brd;
 			mod->cbdata = (((uintptr_t)gx_cs3_base_ptr) + 0x1000 + 0x0200 * (k + (i / 4)) + 0x40 * (i % 4));
 			mod->set_control = gx_gsm_mod_set_control;
 			mod->get_status = gx_gsm_mod_get_status;
-			if (brd->ver_maj < 14) {
-				mod->at_write = gx_gsm_mod_at_write_old;
-				mod->at_read = gx_gsm_mod_at_read_old;
-			} else {
-				mod->at_write = gx_gsm_mod_at_write;
-				mod->at_read = gx_gsm_mod_at_read;
-			}
+			mod->at_write = gx_gsm_mod_at_write;
+			mod->at_read = gx_gsm_mod_at_read;
+			mod->at_write_sim16 = gx_gsm_mod_at_write_sim16;
+			mod->at_read_sim16 = gx_gsm_mod_at_read_sim16;
 			mod->sim_write = gx_gsm_mod_sim_write;
 			mod->sim_read = gx_gsm_mod_sim_read;
 			mod->imei_write = gx_gsm_mod_imei_write;
@@ -1238,7 +1247,7 @@ static int __init gx_init(void)
 			brd->gsm_modules[i] = mod;
 		}
 		// register polygator tty at device
-		for (i = 0; i < brd->channels_count; i++) {
+		for (i = 0; i < brd->channels_count; ++i) {
 			if ((mod = brd->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 				if (!(brd->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, brd->gsm_modules[i], &mod->at_port, &gx_tty_at_ops))) {
@@ -1252,7 +1261,7 @@ static int __init gx_init(void)
 			}
 		}
 		// register polygator simcard device
-		for (i = 0; i < brd->channels_count; i++) {
+		for (i = 0; i < brd->channels_count; ++i) {
 			if (brd->gsm_modules[i]) {
 				if (!(brd->simcard_channels[i] = simcard_device_register(THIS_MODULE,
 																		brd->gsm_modules[i],
@@ -1275,7 +1284,7 @@ static int __init gx_init(void)
 	gx_boards[3] = gx_boards[2];
 	gx_boards[2] = brd;
 	// register board
-	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
+	for (k = 0; k < MAX_GX_BOARD_COUNT; ++k) {
 		if ((brd = gx_boards[k])) {
 			if (!(brd->pg_board =  polygator_board_register(THIS_MODULE, brd->name, &brd->cdev, &gx_board_fops))) {
 				rc = -1;
@@ -1288,10 +1297,10 @@ static int __init gx_init(void)
 
 gx_init_error:
 	// boards
-	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
+	for (k = 0; k < MAX_GX_BOARD_COUNT; ++k) {
 		if ((brd = gx_boards[k])) {
 			// channels
-			for (i = 0; i < brd->channels_count; i++) {
+			for (i = 0; i < brd->channels_count; ++i) {
 				if (brd->simcard_channels[i]) {
 					simcard_device_unregister(brd->simcard_channels[i]);
 				}
@@ -1304,10 +1313,10 @@ gx_init_error:
 				}
 			}
 			// vinetics
-			for (j = 0; j < brd->vinetics_count; j++) {
+			for (j = 0; j < brd->vinetics_count; ++j) {
 				if ((vin = brd->vinetics[j])) {
 					// rtp_channels
-					for (i = 0; i < 4; i++) {
+					for (i = 0; i < 4; ++i) {
 						vinetic_rtp_channel_unregister(vin->rtp_channels[i]);
 					}
 					vinetic_device_unregister(vin);
@@ -1336,10 +1345,10 @@ static void __exit gx_exit(void)
 	struct vinetic *vin;
 
 	// boards
-	for (k = 0; k < MAX_GX_BOARD_COUNT; k++) {
+	for (k = 0; k < MAX_GX_BOARD_COUNT; ++k) {
 		if ((brd = gx_boards[k])) {
 			// channels
-			for (i = 0; i < brd->channels_count; i++) {
+			for (i = 0; i < brd->channels_count; ++i) {
 				if (brd->simcard_channels[i]) {
 					simcard_device_unregister(brd->simcard_channels[i]);
 				}
@@ -1352,10 +1361,10 @@ static void __exit gx_exit(void)
 				}
 			}
 			// vinetics
-			for (j = 0; j < brd->vinetics_count; j++) {
+			for (j = 0; j < brd->vinetics_count; ++j) {
 				if ((vin = brd->vinetics[j])) {
 					// rtp_channels
-					for (i = 0; i < 4; i++) {
+					for (i = 0; i < 4; ++i) {
 						vinetic_rtp_channel_unregister(vin->rtp_channels[i]);
 					}
 					vinetic_device_unregister(vin);

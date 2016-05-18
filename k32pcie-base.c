@@ -407,7 +407,7 @@ static void k32pcie_tty_at_poll(unsigned long addr)
 		} else {
 			// main
 			rd16 = mod->at_read16(mod->cbdata, mod->pos_on_board);
-			if ((rd16 & 0x0200) || (rd16 == 0x0000)) {
+			if (rd16 & 0x0200) {
 				break;
 			}
 			// put char to receiving buffer
@@ -693,6 +693,21 @@ static ssize_t k32pcie_board_write(struct file *filp, const char __user *buff, s
 		} else {
 			res = -ENODEV;
 		}
+	} else if (sscanf(cmd, "GSM%u TESTPOINT", &chan) == 1) {
+		if ((chan >= 0) && (chan <= 7)) {
+			if (chan < 4) {
+				iowrite8(chan % 4, private_data->board->iomem_base + (private_data->board->position * 0x4000) + 0x0000 + 0x11400);
+			} else {
+				iowrite8(chan % 4, private_data->board->iomem_base + (private_data->board->position * 0x4000) + 0x2000 + 0x11400);
+			}
+			res = len;
+		} else {
+			res = -ENODEV;
+		}
+	} else if (sscanf(cmd, "SIMBANK MODE=%u", &value) == 1) {
+		iowrite8(value, private_data->board->iomem_base + (private_data->board->position * 0x4000) + 0x0000 + 0x11900);
+		iowrite8(value, private_data->board->iomem_base + (private_data->board->position * 0x4000) + 0x2000 + 0x11900);
+		res = len;
 	} else {
 		res = -ENOMSG;
 	}
