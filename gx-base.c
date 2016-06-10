@@ -152,10 +152,10 @@ struct gx_board {
 	char name[POLYGATOR_BRDNAME_MAXLEN];
 
 	u_int32_t type;
+	u_int32_t pos;
 
 	u_int8_t rom[256];
 	size_t romsize;
-	u_int32_t sn;
 
 	u_int32_t ver_maj;
 	u_int32_t ver_min;
@@ -326,18 +326,23 @@ static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	addr += 0x10;
-
-	iowrite8(reg, addr);
+	iowrite8(reg, addr + 0x10);
+	iowrite8(0, addr + 0x3c);
+	iowrite8(1, addr + 0x3c);
+	iowrite8(0, addr + 0x3c);
 }
 
 static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
+	u_int8_t data;
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	addr += 0x10;
+	data =  ioread8(addr + 0x10);
+	iowrite8(0, addr + 0x3a);
+	iowrite8(1, addr + 0x3a);
+	iowrite8(0, addr + 0x3a);
 
-	return ioread8(addr);
+	return data;
 }
 
 static void gx_gsm_mod_at_write_sim16(uintptr_t cbdata, size_t pos, u_int8_t reg)
@@ -345,9 +350,9 @@ static void gx_gsm_mod_at_write_sim16(uintptr_t cbdata, size_t pos, u_int8_t reg
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	iowrite8(reg, addr + 0x10);
-	iowrite8(0x00, addr + 0x3c);
-	iowrite8(0x01, addr + 0x3c);
-	iowrite8(0x00, addr + 0x3c);
+	iowrite8(0, addr + 0x3c);
+	iowrite8(1, addr + 0x3c);
+	iowrite8(0, addr + 0x3c);
 }
 
 static u_int16_t gx_gsm_mod_at_read_sim16(uintptr_t cbdata, size_t pos)
@@ -369,36 +374,37 @@ static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	addr += 0x20;
-
-	iowrite8(reg, addr);
+	iowrite8(reg, addr + 0x20);
+	iowrite8(0, addr + 0x38);
+	iowrite8(1, addr + 0x38);
+	iowrite8(0, addr + 0x38);
 }
 
 static u_int8_t gx_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
+	u_int8_t data;
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	addr += 0x20;
+	data =  ioread8(addr + 0x20);
+	iowrite8(0, addr + 0x28);
+	iowrite8(1, addr + 0x28);
+	iowrite8(0, addr + 0x28);
 
-	return ioread8(addr);
+	return data;
 }
 
 static void gx_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	addr += 0x30;
-
-	iowrite8(reg, addr);
+	iowrite8(reg, addr + 0x30);
 }
 
 static u_int8_t gx_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
-	addr += 0x30;
-
-	return ioread8(addr);
+	return ioread8(addr + 0x30);
 }
 
 static u_int8_t gx_sim_read(void *data)
@@ -725,6 +731,7 @@ static ssize_t gx_board_write(struct file *filp, const char __user *buff, size_t
 	u_int32_t key_state;
 	u_int32_t baudrate;
 	u_int32_t serial;
+	u_int32_t value;
 	struct gx_gsm_module_data *mod;
 	struct gx_board_private_data *private_data = filp->private_data;
 
@@ -776,6 +783,12 @@ static ssize_t gx_board_write(struct file *filp, const char __user *buff, size_t
 		} else {
 			res = -ENODEV;
 		}
+	} else if (sscanf(cmd, "SIMBANK MODE=%u", &value) == 1) {
+		iowrite8(value, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * private_data->board->pos));
+		if (private_data->board->type == BOARD_TYPE_G8) {
+			iowrite8(value, gx_cs3_base_ptr + GX_MODE_AUTONOM + (0x0200 * (private_data->board->pos + 1)));
+		}
+		res = len;
 	} else {
 		res = -ENOMSG;
 	}
@@ -1093,6 +1106,7 @@ static int __init gx_init(void)
 			goto gx_init_error;
 		}
 		memset(brd, 0, sizeof(struct gx_board));
+		brd->pos = k;
 		// reset gx board
 		iowrite8(0, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * k));
 		iowrite8(0, gx_cs3_base_ptr + GX_RESET_BOARD + (0x0200 * (k + 1)));
