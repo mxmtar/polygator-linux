@@ -428,7 +428,7 @@ static int gx_sim_is_read_ready(void *data)
 
 	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 
-	return status.bits.sim_rd_empty;
+	return !status.bits.sim_rd_empty;
 }
 
 static int gx_sim_is_write_ready(void *data)
