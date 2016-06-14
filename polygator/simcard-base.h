@@ -50,6 +50,7 @@ struct simcard_device {
 	int (* is_write_ready)(void *data);
 	int (* is_reset_request)(void *data);
 	void (* set_speed)(void *data, int speed);
+	void (* do_after_reset)(void *data);
 
 	union simcard_data_status read_status;
 	union simcard_data_status write_status;
@@ -74,7 +75,8 @@ struct simcard_device *simcard_device_register(struct module *owner,
 												int (* is_read_ready)(void *data),
 												int (* is_write_ready)(void *data),
 												int (* is_reset_request)(void *data),
-												void (* set_speed)(void *data, int speed));
+												void (* set_speed)(void *data, int speed),
+												void (* do_after_reset)(void *data));
 void simcard_device_unregister(struct simcard_device *sim);
 
 #endif //__SIMCARD_BASE_H__

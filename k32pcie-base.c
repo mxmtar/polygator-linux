@@ -241,9 +241,9 @@ static u_int8_t k32pcie_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	reg = ioread8(addr + 0x100);
-	iowrite8(0, addr + 0x2c0); // 0x3a0
-	iowrite8(1, addr + 0x2c0); // 0x3a0
-	iowrite8(0, addr + 0x2c0); // 0x3a0
+	iowrite8(0, addr + 0x2c0);
+	iowrite8(1, addr + 0x2c0);
+	iowrite8(0, addr + 0x2c0);
 	return reg;
 }
 
@@ -254,9 +254,9 @@ static u_int16_t k32pcie_gsm_mod_at_read16(uintptr_t cbdata, size_t pos)
 
 	reg = ioread16(addr + 0x100);
 	if ((reg & 0x0200) == 0) {
-		iowrite8(0, addr + 0x2c0); // 0x3a0
-		iowrite8(1, addr + 0x2c0); // 0x3a0
-		iowrite8(0, addr + 0x2c0); // 0x3a0
+		iowrite8(0, addr + 0x2c0);
+		iowrite8(1, addr + 0x2c0);
+		iowrite8(0, addr + 0x2c0);
 	}
 	return reg;
 }
@@ -281,6 +281,15 @@ static u_int8_t k32pcie_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 	iowrite8(1, addr + 0x280);
 	iowrite8(0, addr + 0x280);
 	return reg;
+}
+
+static void k32pcie_gsm_mod_sim_do_after_reset(uintptr_t cbdata, size_t pos)
+{
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	iowrite8(0x10, addr + 0x340);
+	iowrite8(0x00, addr + 0x340);
+	iowrite8(0x10, addr + 0x340);
 }
 
 static void k32pcie_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
@@ -324,7 +333,7 @@ static int k32pcie_sim_is_write_ready(void *data)
 
 	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 
-	return /*status.bits_e.sim_rdy_wr*/1;
+	return status.bits_e.sim_rdy_wr;
 }
 
 static int k32pcie_sim_is_reset_request(void *data)
@@ -334,7 +343,7 @@ static int k32pcie_sim_is_reset_request(void *data)
 
 	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 
-	return /*status.bits_e.sim_rst_req*/1;
+	return status.bits_e.sim_rst_req;
 }
 
 static void k32pcie_sim_set_speed(void *data, int speed)
@@ -361,6 +370,13 @@ static void k32pcie_sim_set_speed(void *data, int speed)
 	}
 
 	mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+}
+
+static void k32pcie_sim_do_after_reset(void *data)
+{
+	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
+
+	mod->sim_do_after_reset(mod->cbdata, mod->pos_on_board);
 }
 
 static void k32pcie_tty_at_poll(unsigned long addr)
@@ -910,6 +926,7 @@ static int __devinit k32pcie_board_probe(struct pci_dev *pdev, const struct pci_
 		mod->at_read16 = k32pcie_gsm_mod_at_read16;
 		mod->sim_write = k32pcie_gsm_mod_sim_write;
 		mod->sim_read = k32pcie_gsm_mod_sim_read;
+		mod->sim_do_after_reset = k32pcie_gsm_mod_sim_do_after_reset;
 		mod->imei_write = k32pcie_gsm_mod_imei_write;
 		mod->imei_read = k32pcie_gsm_mod_imei_read;
 
@@ -951,7 +968,8 @@ static int __devinit k32pcie_board_probe(struct pci_dev *pdev, const struct pci_
 																		k32pcie_sim_is_read_ready,
 																		k32pcie_sim_is_write_ready,
 																		k32pcie_sim_is_reset_request,
-																		k32pcie_sim_set_speed))) {
+																		k32pcie_sim_set_speed,
+																		k32pcie_sim_do_after_reset))) {
 				log(KERN_ERR, "can't register polygator simcard device\n");
 				rc = -1;
 				goto k32pcie_board_probe_error;

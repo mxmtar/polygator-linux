@@ -273,7 +273,7 @@ static int k32isa_sim_is_read_ready(void *data)
 
 	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 
-	return status.bits.sim_rdy_rd;
+	return !status.bits.sim_rdy_rd;
 }
 
 static int k32isa_sim_is_write_ready(void *data)
@@ -324,6 +324,10 @@ static void k32isa_sim_set_speed(void *data, int speed)
 	}
 
 	mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+}
+
+static void k32isa_sim_do_after_reset(void *data)
+{
 }
 
 static void k32isa_tty_at_poll(unsigned long addr)
@@ -1144,7 +1148,8 @@ static int __init k32isa_init(void)
 																						k32isa_sim_is_read_ready,
 																						k32isa_sim_is_write_ready,
 																						k32isa_sim_is_reset_request,
-																						k32isa_sim_set_speed))) {
+																						k32isa_sim_set_speed,
+																						k32isa_sim_do_after_reset))) {
 					log(KERN_ERR, "can't register polygator simcard device\n");
 					rc = -1;
 					goto k32isa_init_error;

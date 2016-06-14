@@ -256,7 +256,7 @@ static int k32pci_sim_is_read_ready(void *data)
 
 	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 
-	return status.bits.sim_rdy_rd;
+	return !status.bits.sim_rdy_rd;
 }
 
 static int k32pci_sim_is_write_ready(void *data)
@@ -307,6 +307,10 @@ static void k32pci_sim_set_speed(void *data, int speed)
 	}
 
 	mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+}
+
+static void k32pci_sim_do_after_reset(void *data)
+{
 }
 
 static void k32pci_tty_at_poll(unsigned long addr)
@@ -878,7 +882,8 @@ static int __devinit k32pci_board_probe(struct pci_dev *pdev, const struct pci_d
 																		k32pci_sim_is_read_ready,
 																		k32pci_sim_is_write_ready,
 																		k32pci_sim_is_reset_request,
-																		k32pci_sim_set_speed))) {
+																		k32pci_sim_set_speed,
+																		k32pci_sim_do_after_reset))) {
 				log(KERN_ERR, "can't register polygator simcard device\n");
 				rc = -1;
 				goto k32pci_board_probe_error;

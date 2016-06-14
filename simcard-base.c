@@ -96,16 +96,20 @@ static void simcard_poll_proc(unsigned long addr)
 		sim->read_status.bits.reset = 1;
 		// clear data status bit
 		sim->read_status.bits.data = 0;
+		// do after reset action
+		if (reset) {
+			sim->do_after_reset(sim->data);
+		}
 	}
 	sim->reset_state = reset;
 
 	// read
-	if (reset && !sim->is_read_ready(sim->data)) {
+	if (reset && sim->is_read_ready(sim->data)) {
 		// reset simcard data container
 		sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
 		sim->command.header.length = 0;
 		// store data
-		while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (!sim->is_read_ready(sim->data))) {
+		while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (sim->is_read_ready(sim->data))) {
 			sim->command.container.data[sim->command.header.length++] = sim->read(sim->data);
 		}
 		// set data status bit
@@ -335,7 +339,8 @@ struct simcard_device *simcard_device_register(struct module *owner,
 							int (* is_read_ready)(void *data),
 							int (* is_write_ready)(void *data),
 							int (* is_reset_request)(void *data),
-							void (* set_speed)(void *data, int speed))
+							void (* set_speed)(void *data, int speed),
+							void (* do_after_reset)(void *data))
 {
 	struct simcard_device *sim;
 	size_t i;
@@ -413,6 +418,12 @@ struct simcard_device *simcard_device_register(struct module *owner,
 		goto simcard_device_register_error;
 	}
 	sim->set_speed = set_speed;
+
+	if (!do_after_reset) {
+		log(KERN_ERR, "do_after_reset callback not present\n");
+		goto simcard_device_register_error;
+	}
+	sim->do_after_reset = do_after_reset;
 
 	// Add char device to system
 	cdev_init(&sim->cdev, &simcard_fops);

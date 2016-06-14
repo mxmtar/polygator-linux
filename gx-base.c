@@ -125,6 +125,7 @@ struct gx_gsm_module_data {
 	u_int16_t (* at_read_sim16)(uintptr_t cbdata, size_t pos);
 	void (* sim_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* sim_read)(uintptr_t cbdata, size_t pos);
+	void (* sim_do_after_reset)(uintptr_t cbdata, size_t pos);
 	void (* imei_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* imei_read)(uintptr_t cbdata, size_t pos);
 
@@ -393,6 +394,15 @@ static u_int8_t gx_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 	return data;
 }
 
+static void gx_gsm_mod_sim_do_after_reset(uintptr_t cbdata, size_t pos)
+{
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	iowrite8(0x10, addr + 0x34);
+	iowrite8(0x00, addr + 0x34);
+	iowrite8(0x10, addr + 0x34);
+}
+
 static void gx_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -428,7 +438,7 @@ static int gx_sim_is_read_ready(void *data)
 
 	status.full = mod->get_status(mod->cbdata, mod->pos_on_board);
 
-	return !status.bits.sim_rd_empty;
+	return status.bits.sim_rd_empty;
 }
 
 static int gx_sim_is_write_ready(void *data)
@@ -473,6 +483,13 @@ static void gx_sim_set_speed(void *data, int speed)
 	}
 
 	mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+}
+
+static void gx_sim_do_after_reset(void *data)
+{
+	struct gx_gsm_module_data *mod = (struct gx_gsm_module_data *)data;
+
+	mod->sim_do_after_reset(mod->cbdata, mod->pos_on_board);
 }
 
 static void gx_tty_at_poll(unsigned long addr)
@@ -1245,6 +1262,7 @@ static int __init gx_init(void)
 			mod->at_read_sim16 = gx_gsm_mod_at_read_sim16;
 			mod->sim_write = gx_gsm_mod_sim_write;
 			mod->sim_read = gx_gsm_mod_sim_read;
+			mod->sim_do_after_reset = gx_gsm_mod_sim_do_after_reset;
 			mod->imei_write = gx_gsm_mod_imei_write;
 			mod->imei_read = gx_gsm_mod_imei_read;
 
@@ -1284,7 +1302,8 @@ static int __init gx_init(void)
 																		gx_sim_is_read_ready,
 																		gx_sim_is_write_ready,
 																		gx_sim_is_reset_request,
-																		gx_sim_set_speed))) {
+																		gx_sim_set_speed,
+																		gx_sim_do_after_reset))) {
 					log(KERN_ERR, "can't register polygator simcard device\n");
 					rc = -1;
 					goto gx_init_error;

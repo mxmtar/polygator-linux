@@ -29,7 +29,10 @@ union k32_gsm_mod_status_reg {
 		u_int8_t at_rdy_rd:1;
 		u_int8_t at_rdy_wr:1;
 		u_int8_t sim_rdy_rd:1;
-		u_int8_t gap:4;
+		u_int8_t sim_rdy_wr:1;
+		u_int8_t sim_rst_req:1;
+		u_int8_t imei_rdy_rd:1;
+		u_int8_t imei_rdy_wr:1;
 	} __attribute__((packed)) bits_e;
 	u_int8_t full;
 } __attribute__((packed));
@@ -70,6 +73,7 @@ struct k32_gsm_module_data {
 	u_int16_t (* at_read16)(uintptr_t cbdata, size_t pos);
 	void (* sim_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* sim_read)(uintptr_t cbdata, size_t pos);
+	void (* sim_do_after_reset)(uintptr_t cbdata, size_t pos);
 	void (* imei_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
 	u_int8_t (* imei_read)(uintptr_t cbdata, size_t pos);
 
