@@ -84,13 +84,14 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else
 
-obj-m := polygator.o vinetic.o simcard.o k32pci.o k32isa.o k32pcie.o
+obj-m := polygator.o vinetic.o simcard.o k32pci.o k32isa.o k32pcie.o k32pci2.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 simcard-objs := simcard-base.o
 k32pci-objs := k32pci-base.o
 k32isa-objs := k32isa-base.o
 k32pcie-objs := k32pcie-base.o
+k32pci2-objs := k32pci2-base.o
 
 KERNEL_VERSION := `uname -r`
 KERNEL_SRC_DIR := /lib/modules/$(KERNEL_VERSION)/build
@@ -140,7 +141,7 @@ install_pgctl:
 	$(INSTALL) -m 755 pgtty $(DESTDIR)/usr/bin/pgtty
 
 install_asterisk_owner_udev_rules:
-	$(INSTALL) -m 644 98-polygator-asterisk.rules "$(DESTDIR)/etc/udev/rules.d"
+	$(INSTALL) -m 644 polygator-asterisk-udev.rules "$(DESTDIR)/etc/udev/rules.d/polygator-asterisk.rules"
 
 uninstall: uninstall_modules uninstall_headers uninstall_sysvinit uninstall_pgctl uninstall_asterisk_owner_udev_rules
 
@@ -167,7 +168,7 @@ uninstall_pgctl:
 	rm -fv $(DESTDIR)/usr/bin/pgtty
 
 uninstall_asterisk_owner_udev_rules:
-	rm -fv $(DESTDIR)/etc/udev/rules.d/98-polygator-asterisk.rules
+	rm -fv $(DESTDIR)/etc/udev/rules.d/polygator-asterisk.rules
 
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean
