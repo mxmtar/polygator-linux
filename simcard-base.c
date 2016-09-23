@@ -494,7 +494,6 @@ static int __init simcard_init(void)
 		log(KERN_ERR, "register chrdev region error=%d\n", rc);
 		goto simcard_init_error;
 	}
-	debug("simcard major=%d\n", simcard_major);
 	simcard_major_reg = 1;
 
 	verbose("loaded successfull\n");

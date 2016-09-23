@@ -2055,7 +2055,6 @@ static int __init vinetic_init(void)
 		log(KERN_ERR, "register chrdev region error=%d\n", rc);
 		goto vinetic_init_error;
 	}
-	debug("vinetic major=%d\n", vinetic_major);
 	vinetic_major_reg = 1;
 
 	verbose("loaded successfull\n");

@@ -283,6 +283,7 @@ char *polygator_print_gsm_module_type(int type)
 		case POLYGATOR_MODULE_TYPE_M10: return "M10";
 		case POLYGATOR_MODULE_TYPE_SIM5215: return "SIM5215";
 		case POLYGATOR_MODULE_TYPE_SIM5215A2: return "SIM5215A2";
+		case POLYGATOR_MODULE_TYPE_M95: return "M95";
 		default: return "UNKNOWN";
 	}
 }
@@ -487,7 +488,6 @@ static int __init polygator_init(void)
 		log(KERN_ERR, "register chrdev region error=%d\n", rc);
 		goto polygator_init_error;
 	}
-	debug("polygator subsystem major=%d\n", polygator_subsystem_major);
 	polygator_subsystem_major_reg = 1;
 
 	// Add subsystem device
@@ -541,7 +541,6 @@ static int __init polygator_init(void)
 		polygator_tty_device_driver = NULL;
 		goto polygator_init_error;
 	}
-	debug("polygator tty major=%d\n", polygator_tty_device_driver->major);
 
 	verbose("loaded successfull\n");
 	return 0;

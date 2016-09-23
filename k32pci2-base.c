@@ -43,7 +43,11 @@ MODULE_LICENSE("GPL");
 
 static int rom = 0;
 module_param(rom, int, 0);
-MODULE_PARM_DESC(tty_major, "Print board's ROM");
+MODULE_PARM_DESC(rom, "Print board's ROM");
+
+static int read = 1;
+module_param(read, int, 0);
+MODULE_PARM_DESC(read, "Read PCI-E style 1 / OLD style 0");
 
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci2-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
@@ -86,7 +90,7 @@ static const struct tty_port_operations k32pci2_tty_at_port_ops = {
 };
 #endif
 static struct pci_device_id k32pci2_board_id_table[] = {
-	{ PCI_DEVICE(0xdead, 0xbeef), .driver_data = 1, },
+	{ PCI_DEVICE(0xdead, 0xbee0), .driver_data = 1, },
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, k32pci2_board_id_table);
@@ -135,7 +139,15 @@ static u_int16_t k32pci2_vin_read_nwd_0(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
-	value = ioread16(addr + 0x1100 + 0x000 + 0x04);
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x000 + 0x04*/0x11000 + 0x0000 + 0x080) & 0xffff, addr + 0x000 + 0x1170);
+		udelay(1);
+		value = ioread16(addr + 0x000 + 0x1100);
+	} else {
+		value = ioread16(addr + 0x1100 + 0x000 + 0x04);
+	}
+
 	return value;
 }
 
@@ -143,7 +155,15 @@ static u_int16_t k32pci2_vin_read_nwd_1(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
-	value = ioread16(addr + 0x1100 + 0x200 + 0x04);
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x200 + 0x04*/0x11000 + 0x2000 + 0x080) & 0xffff, addr + 0x200 + 0x1170);
+		udelay(1);
+		value = ioread16(addr + 0x200 + 0x1100);
+	} else {
+		value = ioread16(addr + 0x1100 + 0x200 + 0x04);
+	}
+
 	return value;
 }
 
@@ -151,7 +171,15 @@ static u_int16_t k32pci2_vin_read_eom_0(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
-	value = ioread16(addr + 0x1100 + 0x000 + 0x08);
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x000 + 0x08*/0x11000 + 0x0000 + 0x0c0) & 0xffff, addr + 0x000 + 0x1170);
+		udelay(1);
+		value = ioread16(addr + 0x000 + 0x1100);
+	} else {
+		value = ioread16(addr + 0x1100 + 0x000 + 0x08);
+	}
+
 	return value;
 }
 
@@ -159,7 +187,15 @@ static u_int16_t k32pci2_vin_read_eom_1(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
-	value = ioread16(addr + 0x1100 + 0x200 + 0x08);
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x200 + 0x08*/0x11000 + 0x2000 + 0x0c0) & 0xffff, addr + 0x200 + 0x1170);
+		udelay(1);
+		value = ioread16(addr + 0x200 + 0x1100);
+	} else {
+		value = ioread16(addr + 0x1100 + 0x200 + 0x08);
+	}
+
 	return value;
 }
 #if 0
@@ -185,18 +221,32 @@ static size_t k32pci2_vin_is_not_ready_1(uintptr_t cbdata)
 #else
 static size_t k32pci2_vin_is_not_ready_0(uintptr_t cbdata)
 {
-	void __iomem *addr = (void __iomem *)cbdata;
 	union vin_reg_ir reg_ir;
-	reg_ir.full = ioread16(addr + 0x1100 + 0x000 + 0x18);
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x000 + 0x18*//*0x1100 + 0x000 + 0x18*/0x11000 + 0x0000 + 0x300) & 0xffff, addr + 0x000 + 0x1170);
+		udelay(1);
+		reg_ir.full = ioread16(addr + 0x000 + 0x1100);
+	} else {
+		reg_ir.full = ioread16(addr + 0x1100 + 0x000 + 0x18);
+	}
 
 	return reg_ir.bits.rdyq;
 }
 
 static size_t k32pci2_vin_is_not_ready_1(uintptr_t cbdata)
 {
-	void __iomem *addr = (void __iomem *)cbdata;
 	union vin_reg_ir reg_ir;
-	reg_ir.full = ioread16(addr + 0x1100 + 0x200 + 0x18);
+	void __iomem *addr = (void __iomem *)cbdata;
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x200 + 0x18*/0x11000 + 0x2000 + 0x300) & 0xffff, addr + 0x200 + 0x1170);
+		udelay(1);
+		reg_ir.full = ioread16(addr + 0x200 + 0x1100);
+	} else {
+		reg_ir.full = ioread16(addr + 0x1100 + 0x200 + 0x18);
+	}
 
 	return reg_ir.bits.rdyq;
 }
@@ -205,7 +255,15 @@ static u_int16_t k32pci2_vin_read_dia_0(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
-	value = ioread16(addr + 0x1100 + 0x000 + 0x18);
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x000 + 0x18*/0x11000 + 0x0000 + 0x300) & 0xffff, addr + 0x000 + 0x1170);
+		udelay(1);
+		value = ioread16(addr + 0x000 + 0x1100);
+	} else {
+		value = ioread16(addr + 0x1100 + 0x000 + 0x18);
+	}
+
 	return value;
 }
 
@@ -213,7 +271,15 @@ static u_int16_t k32pci2_vin_read_dia_1(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
-	value = ioread16(addr + 0x1100 + 0x200 + 0x18);
+
+	if (read) {
+		iowrite16((cbdata + /*0x1100 + 0x200 + 0x18*/0x11000 + 0x2000 + 0x300) & 0xffff, addr + 0x200 + 0x1170);
+		udelay(1);
+		value = ioread16(addr + 0x200 + 0x1100);
+	} else {
+		value = ioread16(addr + 0x1100 + 0x200 + 0x18);
+	}
+
 	return value;
 }
 
@@ -891,6 +957,8 @@ static int __devinit k32pci2_board_probe(struct pci_dev *pdev, const struct pci_
 				mod->type = POLYGATOR_MODULE_TYPE_SIM5215A2;
 			} else if (board->rom[i] == 'g') {
 				mod->type = POLYGATOR_MODULE_TYPE_SIM5215;
+			} else if (board->rom[i] == 0x95) {
+				mod->type = POLYGATOR_MODULE_TYPE_M95;
 			} else {
 				mod->type = POLYGATOR_MODULE_TYPE_UNKNOWN;
 			}
@@ -914,6 +982,11 @@ static int __devinit k32pci2_board_probe(struct pci_dev *pdev, const struct pci_
 			mod->control.bits_e.sim_spd = 0;	// sim data rate default 9600
 			mod->control.bits_e.com_spd = 3;	// at baud rate default 115200
 		} else if ((mod->type == POLYGATOR_MODULE_TYPE_SIM5215) || (mod->type == POLYGATOR_MODULE_TYPE_SIM5215A2)) {
+			mod->control.bits_e.pwr = 1;		// power suply disabled
+			mod->control.bits_e.key = 1;		// module key inactive
+			mod->control.bits_e.sim_spd = 0;	// sim data rate default 9600
+			mod->control.bits_e.com_spd = 3;	// at baud rate default 115200
+		} else if (mod->type == POLYGATOR_MODULE_TYPE_M95) {
 			mod->control.bits_e.pwr = 1;		// power suply disabled
 			mod->control.bits_e.key = 1;		// module key inactive
 			mod->control.bits_e.sim_spd = 0;	// sim data rate default 9600
@@ -1070,7 +1143,6 @@ static void __devexit k32pci2_board_remove(struct pci_dev *pdev)
 	}
 
 	kfree(board);
-	pci_release_region(pdev, 1);
 }
 
 static struct pci_driver k32pci2_driver = {

@@ -43,7 +43,7 @@ MODULE_LICENSE("GPL");
 
 static int rom = 0;
 module_param(rom, int, 0);
-MODULE_PARM_DESC(tty_major, "Print board's ROM");
+MODULE_PARM_DESC(rom, "Print board's ROM");
 
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "k32pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
