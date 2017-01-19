@@ -71,27 +71,24 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else ifeq ($(TARGET_DEVICE), pc)
 
-obj-m := polygator.o vinetic.o simcard.o k32pci.o k32isa.o k32pcie.o
+obj-m := polygator.o vinetic.o simcard.o k32isa.o pgpci.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 simcard-objs := simcard-base.o
-k32pci-objs := k32pci-base.o
 k32isa-objs := k32isa-base.o
-k32pcie-objs := k32pcie-base.o
+pgpci-objs := pgpci-base.o
 
 KERNEL_SRC_DIR := $(KERNEL_SRC)
 KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else
 
-obj-m := polygator.o vinetic.o simcard.o k32pci.o k32isa.o k32pcie.o k32pci2.o
+obj-m := polygator.o vinetic.o simcard.o k32isa.o pgpci.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 simcard-objs := simcard-base.o
-k32pci-objs := k32pci-base.o
 k32isa-objs := k32isa-base.o
-k32pcie-objs := k32pcie-base.o
-k32pci2-objs := k32pci2-base.o
+pgpci-objs := pg-pci-base.o
 
 KERNEL_VERSION := `uname -r`
 KERNEL_SRC_DIR := /lib/modules/$(KERNEL_VERSION)/build

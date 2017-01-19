@@ -1,3 +1,7 @@
+2017-01-19
+	1. On the way to polygator-linux-2.0.
+	2. Device file read information switched to JSON format.
+	3. Single PCI, PCIe driver.
 2014-09-22
 	1. Added support for gx boards with firmware 14.x or higher.
 2014-07-01

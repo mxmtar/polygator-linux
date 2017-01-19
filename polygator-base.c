@@ -206,16 +206,18 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 		res = -ENOMEM;
 		goto polygator_subsystem_open_error;
 	}
-// 	memset(private_data, 0, sizeof(struct subsystem_private_data));
+	memset(private_data, 0, sizeof(struct subsystem_private_data));
 
 	mutex_lock(&polygator_board_list_lock);
 	len = 0;
+	len += sprintf(private_data->buff + len, "{\r\n");
+	len += sprintf(private_data->buff + len, "\r\n\t\"boards\": [");
 	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if (polygator_board_list[i]) {
-			len += sprintf(private_data->buff+len, "%s %s\r\n", polygator_board_list[i]->cdev->owner->name,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-							dev_name(polygator_board_list[i]->device)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+			len += sprintf(private_data->buff + len, "%s\r\n\t\t{\r\n\t\t\t\"driver\": \"%s\",\r\n\t\t\t\"path\": \"%s\"\r\n\t\t}",
+							i ? "," : "",
+							polygator_board_list[i]->cdev->owner->name,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 							dev_name(polygator_board_list[i]->device)
 #else
 							polygator_board_list[i]->device->class_id
@@ -223,6 +225,8 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 						  );
 		}
 	}
+	len += sprintf(private_data->buff + len, "\r\n\t]");
+	len += sprintf(private_data->buff + len, "\r\n}\r\n");
 	mutex_unlock(&polygator_board_list_lock);
 
 	private_data->length = len;
@@ -272,7 +276,7 @@ static struct file_operations polygator_subsystem_fops = {
 	.owner			= THIS_MODULE,
 	.open			= polygator_subsystem_open,
 	.release		= polygator_subsystem_release,
-	.read		= polygator_subsystem_read,
+	.read			= polygator_subsystem_read,
 };
 
 char *polygator_print_gsm_module_type(int type)
@@ -384,9 +388,9 @@ void polygator_board_unregister(struct polygator_board *brd)
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_port *port, struct tty_operations *tty_ops)
+struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_port *port, struct tty_operations *tty_ops)
 #else
-struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_operations *tty_ops)
+struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_operations *tty_ops)
 #endif
 {
 	size_t i;
@@ -417,9 +421,9 @@ struct polygator_tty_device *polygator_tty_device_register(struct module *owner,
 
 	// register device on sysfs
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-	ptd->device = tty_port_register_device(port, polygator_tty_device_driver, ptd->tty_minor, NULL);
+	ptd->device = tty_port_register_device(port, polygator_tty_device_driver, ptd->tty_minor, device);
 #else
-	ptd->device = tty_register_device(polygator_tty_device_driver, ptd->tty_minor, NULL);
+	ptd->device = tty_register_device(polygator_tty_device_driver, ptd->tty_minor, device);
 #endif
 	if (IS_ERR(ptd->device)) {
 		log(KERN_ERR, "can't register tty device\n");
@@ -514,22 +518,18 @@ static int __init polygator_init(void)
 
 	polygator_tty_device_driver->owner = THIS_MODULE;
 	polygator_tty_device_driver->driver_name = "polygator";
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	polygator_tty_device_driver->name = "polygator!ttyPG";
-#else
 	polygator_tty_device_driver->name = "ttyPG";
-#endif
 	polygator_tty_device_driver->major = polygator_tty_major;
 	polygator_tty_device_driver->minor_start = 0;
 	polygator_tty_device_driver->type = TTY_DRIVER_TYPE_SERIAL;
 	polygator_tty_device_driver->subtype = SERIAL_TYPE_NORMAL;
 	polygator_tty_device_driver->init_termios = tty_std_termios;
 	polygator_tty_device_driver->init_termios.c_iflag &= ~ICRNL;
-	polygator_tty_device_driver->init_termios.c_cflag = B9600 | CS8 | HUPCL | CLOCAL | CREAD;
+	polygator_tty_device_driver->init_termios.c_cflag = B115200 | CS8 | HUPCL | CLOCAL | CREAD;
 	polygator_tty_device_driver->init_termios.c_lflag &= ~ECHO;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	polygator_tty_device_driver->init_termios.c_ispeed = 9600;
-	polygator_tty_device_driver->init_termios.c_ospeed = 9600;
+	polygator_tty_device_driver->init_termios.c_ispeed = 152000;
+	polygator_tty_device_driver->init_termios.c_ospeed = 152000;
 #endif
 	polygator_tty_device_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
 	tty_set_operations(polygator_tty_device_driver, &polygator_tty_device_ops);

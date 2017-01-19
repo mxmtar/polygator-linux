@@ -1127,9 +1127,9 @@ static int __init k32isa_init(void)
 		for (i = 0; i < 8; i++) {
 			if ((mod = k32isa_boards[k]->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-				if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &mod->at_port, &k32isa_tty_at_ops))) {
+				if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(NULL, mod, &mod->at_port, &k32isa_tty_at_ops))) {
 #else
-				if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(THIS_MODULE, mod, &k32isa_tty_at_ops))) {
+				if (!(k32isa_boards[k]->tty_at_channels[i] = polygator_tty_device_register(NULL, mod, &k32isa_tty_at_ops))) {
 #endif
 					log(KERN_ERR, "can't register polygator tty device\n");
 					rc = -1;

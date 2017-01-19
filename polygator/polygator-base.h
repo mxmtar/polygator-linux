@@ -64,9 +64,9 @@ void polygator_board_unregister(struct polygator_board *brd);
 char *polygator_print_gsm_module_type(int type);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_port *port, struct tty_operations *tty_ops);
+struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_port *port, struct tty_operations *tty_ops);
 #else
-struct polygator_tty_device *polygator_tty_device_register(struct module *owner, void *data, struct tty_operations *tty_ops);
+struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_operations *tty_ops);
 #endif
 void polygator_tty_device_unregister(struct polygator_tty_device *ptd);
 
