@@ -58,7 +58,7 @@ struct polygator_tty_device {
 	void *data;
 };
 
-struct polygator_board *polygator_board_register(struct module *owner, char *name, struct cdev *cdef, struct file_operations *fops);
+struct polygator_board *polygator_board_register(struct device *device, struct module *owner, char *name, struct cdev *cdef, struct file_operations *fops);
 void polygator_board_unregister(struct polygator_board *brd);
 
 char *polygator_print_gsm_module_type(int type);
@@ -69,6 +69,9 @@ struct polygator_tty_device *polygator_tty_device_register(struct device *device
 struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_operations *tty_ops);
 #endif
 void polygator_tty_device_unregister(struct polygator_tty_device *ptd);
+
+int polygator_power_on_schedule(void (* callback)(void *data), void *data);
+void polygator_power_on_cancel(int id);
 
 #endif //__KERNEL__
 

@@ -1,6 +1,3 @@
-/******************************************************************************/
-/* pg-pci-base.c                                                              */
-/******************************************************************************/
 
 #include <linux/kobject.h>
 #include <linux/fs.h>
@@ -42,8 +39,8 @@ MODULE_DESCRIPTION("Linux module for Polygator Gateway PCI boards");
 MODULE_LICENSE("GPL");
 
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
-#define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pg-pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
-#define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pg-pci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+#define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pgpci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+#define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pgpci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
 union radio_module_control_reg {
 	struct {
@@ -98,15 +95,18 @@ union radio_module_uart_rx_status_reg {
 	u_int32_t full;
 } __attribute__((packed));
 
-struct pg_pci_board;
+struct pgpci_board;
 
 struct radio_module_data {
 
 	u_int32_t type;
 
-	struct pg_pci_board *board;
+	struct pgpci_board *board;
 	size_t position;
 
+	spinlock_t lock;
+
+	int power_on_id;
 	union radio_module_control_reg control_data;
 	union radio_module_uart_control_reg uart_control_data;
 	u_int32_t uart_btu_data;
@@ -134,7 +134,7 @@ union board_control_reg {
 	u_int32_t full;
 } __attribute__((packed));
 
-struct pg_pci_board {
+struct pgpci_board {
 
 	struct polygator_board *pg_board;
 	struct cdev cdev;
@@ -159,9 +159,9 @@ struct pg_pci_board {
 	union radio_module_status_reg radio_module_status[8];
 };
 
-struct pg_pci_board_private_data {
-	struct pg_pci_board *board;
-	char buff[0x0C00];
+struct pgpci_board_private_data {
+	struct pgpci_board *board;
+	char buff[10000];
 	size_t length;
 };
 
@@ -201,11 +201,11 @@ static const struct tty_port_operations k32pci_tty_at_port_ops = {
 	.shutdown = k32pci_tty_at_port_shutdown,
 };
 #endif
-static struct pci_device_id pg_pci_board_id_table[] = {
+static struct pci_device_id pgpci_board_id_table[] = {
 	{ PCI_DEVICE(0xdead, 0xbede), .driver_data = 1, },
 	{ 0, },
 };
-MODULE_DEVICE_TABLE(pci, pg_pci_board_id_table);
+MODULE_DEVICE_TABLE(pci, pgpci_board_id_table);
 
 static void k32pci_vin_reset_0(uintptr_t cbdata)
 {
@@ -327,7 +327,19 @@ static u_int16_t k32pci_vin_read_dia_1(uintptr_t cbdata)
 	return value;
 }
 
-static void k32pci_uart_poll(unsigned long addr)
+static void pgpci_power_on(void *data)
+{
+	struct radio_module_data *mod = (struct radio_module_data *)data;
+	struct pgpci_board *board = mod->board;
+
+	spin_lock(&mod->lock);
+	mod->power_on_id = -1;
+	mod->control_data.bits.power_supply = 1;
+	iowrite32(mod->control_data.full, board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
+	spin_unlock(&mod->lock);
+}
+
+static void pgpci_uart_poll(unsigned long addr)
 {
 	size_t i, len, chunk;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
@@ -336,7 +348,7 @@ static void k32pci_uart_poll(unsigned long addr)
 	union radio_module_uart_rx_status_reg rx_status;
 	
 	struct radio_module_data *mod = (struct radio_module_data *)addr;
-	struct pg_pci_board *board = mod->board;
+	struct pgpci_board *board = mod->board;
 
 	spin_lock(&mod->at_lock);
 
@@ -400,22 +412,22 @@ static void k32pci_uart_poll(unsigned long addr)
 	mod_timer(&mod->uart_poll_timer, jiffies + 1);
 }
 
-static int pg_pci_board_open(struct inode *inode, struct file *filp)
+static int pgpci_board_open(struct inode *inode, struct file *filp)
 {
 	ssize_t res;
 	size_t i, j;
 	size_t len;
 
-	struct pg_pci_board *board;
-	struct pg_pci_board_private_data *private_data;
+	struct pgpci_board *board;
+	struct pgpci_board_private_data *private_data;
 	struct radio_module_data *mod;
 
-	board = container_of(inode->i_cdev, struct pg_pci_board, cdev);
+	board = container_of(inode->i_cdev, struct pgpci_board, cdev);
 
-	if (!(private_data = kmalloc(sizeof(struct pg_pci_board_private_data), GFP_KERNEL))) {
-		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct pg_pci_board_private_data));
+	if (!(private_data = kmalloc(sizeof(struct pgpci_board_private_data), GFP_KERNEL))) {
+		log(KERN_ERR, "can't get memory=%lu bytes\n", (unsigned long int)sizeof(struct pgpci_board_private_data));
 		res = -ENOMEM;
-		goto pg_pci_board_open_error;
+		goto pgpci_board_open_error;
 	}
 	private_data->board = board;
 
@@ -433,7 +445,7 @@ static int pg_pci_board_open(struct inode *inode, struct file *filp)
 	// position
 	len += sprintf(private_data->buff + len, "\r\n\t\"position\": %u,", board->position);
 	// radio channels
-	len += sprintf(private_data->buff + len, "\r\n\t\"channel\": [");
+	len += sprintf(private_data->buff + len, "\r\n\t\"channels\": [");
 	for (i = 0; i < 8; ++i) {
 		if ((mod = board->gsm_modules[i])) {
 			len += sprintf(private_data->buff + len, "%s\r\n\t\t{\
@@ -506,26 +518,26 @@ static int pg_pci_board_open(struct inode *inode, struct file *filp)
 
 	return 0;
 
-pg_pci_board_open_error:
+pgpci_board_open_error:
 	if (private_data) {
 		kfree(private_data);
 	}
 	return res;
 }
 
-static int pg_pci_board_release(struct inode *inode, struct file *filp)
+static int pgpci_board_release(struct inode *inode, struct file *filp)
 {
-	struct pg_pci_board_private_data *private_data = filp->private_data;
+	struct pgpci_board_private_data *private_data = filp->private_data;
 
 	kfree(private_data);
 	return 0;
 }
 
-static ssize_t pg_pci_board_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
+static ssize_t pgpci_board_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
 {
 	size_t len;
 	ssize_t res;
-	struct pg_pci_board_private_data *private_data = filp->private_data;
+	struct pgpci_board_private_data *private_data = filp->private_data;
 
 	res = (private_data->length > filp->f_pos)?(private_data->length - filp->f_pos):(0);
 
@@ -534,16 +546,16 @@ static ssize_t pg_pci_board_read(struct file *filp, char __user *buff, size_t co
 		len = min(count, len);
 		if (copy_to_user(buff, private_data->buff + filp->f_pos, len)) {
 			res = -EINVAL;
-			goto pg_pci_board_read_end;
+			goto pgpci_board_read_end;
 		}
 		*offp = filp->f_pos + len;
 	}
 
-pg_pci_board_read_end:
+pgpci_board_read_end:
 	return res;
 }
 
-static ssize_t pg_pci_board_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
+static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
 {
 	ssize_t res;
 	char cmd[256];
@@ -553,8 +565,8 @@ static ssize_t pg_pci_board_write(struct file *filp, const char __user *buff, si
 	u_int32_t chan;
 	u_int32_t value;
 	struct radio_module_data *mod;
-	struct pg_pci_board_private_data *private_data = filp->private_data;
-	struct pg_pci_board *board = private_data->board;
+	struct pgpci_board_private_data *private_data = filp->private_data;
+	struct pgpci_board *board = private_data->board;
 
 	memset(cmd, 0, sizeof(cmd));
 	len = sizeof(cmd) - 1;
@@ -562,23 +574,47 @@ static ssize_t pg_pci_board_write(struct file *filp, const char __user *buff, si
 
 	if (copy_from_user(cmd, buff, len)) {
 		res = -EINVAL;
-		goto pg_pci_board_write_end;
+		goto pgpci_board_write_end;
 	}
 
 	if (sscanf(cmd, "channel[%u].power_supply(%u)", &chan, &value) == 2) {
 		if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
 			mod = board->gsm_modules[chan];
-			mod->control_data.bits.power_supply = value;
-			iowrite32(mod->control_data.full, board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
-			res = len;
+			spin_lock_bh(&mod->lock);
+			if (value) {
+				if (mod->control_data.bits.power_supply == 0) {
+					if (mod->power_on_id == -1) {
+						res = polygator_power_on_schedule(pgpci_power_on, mod);
+						if (res >= 0) {
+							mod->power_on_id = res;
+							res = len;
+						}
+					} else {
+						res = -EAGAIN;
+					}
+				} else {
+					res = len;
+				}
+			} else {
+				if (mod->power_on_id != -1) {
+					polygator_power_on_cancel(mod->power_on_id);
+					mod->power_on_id = -1;
+				}
+				mod->control_data.bits.power_supply = 0;
+				iowrite32(mod->control_data.full, board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
+				res = len;
+			}
+			spin_unlock_bh(&mod->lock);
 		} else {
-			res = - ENODEV;
+			res = -ENODEV;
 		}
 	} else if (sscanf(cmd, "channel[%u].power_key(%u)", &chan, &value) == 2) {
 		if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
 			mod = board->gsm_modules[chan];
+			spin_lock_bh(&mod->lock);
 			mod->control_data.bits.power_key = value;
 			iowrite32(mod->control_data.full, board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
+			spin_unlock_bh(&mod->lock);
 			res = len;
 		} else {
 			res = -ENODEV;
@@ -659,53 +695,53 @@ static ssize_t pg_pci_board_write(struct file *filp, const char __user *buff, si
 		res = -ENOMSG;
 	}
 
-pg_pci_board_write_end:
+pgpci_board_write_end:
 	return res;
 }
 
-static struct file_operations pg_pci_board_fops = {
+static struct file_operations pgpci_board_fops = {
 	.owner   = THIS_MODULE,
-	.open    = pg_pci_board_open,
-	.release = pg_pci_board_release,
-	.read    = pg_pci_board_read,
-	.write   = pg_pci_board_write,
+	.open    = pgpci_board_open,
+	.release = pgpci_board_release,
+	.read    = pgpci_board_read,
+	.write   = pgpci_board_write,
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
-static int pg_pci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 #else
-static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 #endif
 {
 	int rc = -1;
 	size_t i, j;
 	char devname[POLYGATOR_BRDNAME_MAXLEN];
 	struct radio_module_data *mod;
-	struct pg_pci_board *board = NULL;
+	struct pgpci_board *board = NULL;
 
 	// alloc memory for board data
-	if (!(board = kmalloc(sizeof(struct pg_pci_board), GFP_KERNEL))) {
-		log(KERN_ERR, "can't get memory for struct pg_pci_board\n");
-		goto pg_pci_board_probe_error;
+	if (!(board = kmalloc(sizeof(struct pgpci_board), GFP_KERNEL))) {
+		log(KERN_ERR, "can't get memory for struct pgpci_board\n");
+		goto pgpci_board_probe_error;
 	}
-	memset(board, 0, sizeof(struct pg_pci_board));
+	memset(board, 0, sizeof(struct pgpci_board));
 
 	rc = pci_enable_device(pdev);
 	if (rc) {
 		dev_err(&pdev->dev, "can't enable pci device\n");
-		goto pg_pci_board_probe_error;
+		goto pgpci_board_probe_error;
 	}
 
-	rc = pci_request_region(pdev, 0, "pg-pci");
+	rc = pci_request_region(pdev, 0, "pgpci");
 	if (rc) {
 		dev_err(&pdev->dev, "can't request I/O region\n");
-		goto pg_pci_board_probe_error;
+		goto pgpci_board_probe_error;
 	}
 	board->iomem_req = 1;
 	if (!(board->iomem_base = pci_iomap(pdev, 0, pci_resource_end(pdev, 0) - pci_resource_start(pdev, 0) + 1))) {
 		dev_err(&pdev->dev, "can't request i/o memory region\n");
 		rc = -ENOMEM;
-		goto pg_pci_board_probe_error;
+		goto pgpci_board_probe_error;
 	}
 	board->xw_version = ioread32(board->iomem_base + 0x00000);
 	board->serial_number = ioread32(board->iomem_base + 0x00020);
@@ -725,37 +761,21 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	iowrite32(board->control_data.full, board->iomem_base + 0x00080);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	if (board->serial_number != 0xffffffff) {
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-pg-pci-%u-%u", board->serial_number, board->position);
-	} else {
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-pg-pci-%u", board->position);
-	}
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-pgpci-%02x%02x%x", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
 #else
-	if (board->serial_number != 0xffffffff) {
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "b%u%u", board->serial_number, board->position);
-	} else {
-		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "b%u", board->position);
-	}
+	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bp%02x%02x%x", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
 #endif
 
-	if (!(board->pg_board = polygator_board_register(THIS_MODULE, devname, &board->cdev, &pg_pci_board_fops))) {
+	if (!(board->pg_board = polygator_board_register(&pdev->dev, THIS_MODULE, devname, &board->cdev, &pgpci_board_fops))) {
 		rc = -1;
-		goto pg_pci_board_probe_error;
+		goto pgpci_board_probe_error;
 	}
 
 	for (j = 0; j < 2; ++j) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-		if (board->serial_number != 0xffffffff) {
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pg-pci-%u-%u-vin%lu", board->serial_number, board->position, (unsigned long int)j);
-		} else {
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pg-pci-%u-vin%lu", board->position, (unsigned long int)j);
-		}
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j);
 #else
-		if (board->serial_number != 0xffffffff) {
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "v%u%u%lu", board->serial_number, board->position, (unsigned long int)j);
-		} else {
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "v%u%lu", board->position, (unsigned long int)j);
-		}
+		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "v%02x%02x%x%lu", board->serial_number, board->position, (unsigned long int)j);
 #endif
 		if (!(board->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, ((uintptr_t)board->iomem_base) + (board->position * 0x4000),
 													(j)?(k32pci_vin_reset_1):(k32pci_vin_reset_0),
@@ -766,25 +786,17 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 													(j)?(k32pci_vin_read_eom_1):(k32pci_vin_read_eom_0),
 													(j)?(k32pci_vin_read_dia_1):(k32pci_vin_read_dia_0)))) {
 			rc = -1;
-			goto pg_pci_board_probe_error;
+			goto pgpci_board_probe_error;
 		}
 		for (i = 0; i < 4; ++i) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-			if (board->serial_number != 0xffffffff) {
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pg-pci-%u-%u-vin%lu-rtp%lu", board->serial_number, board->position, (unsigned long int)j, (unsigned long int)i);
-			} else {
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pg-pci-%u-vin%lu-rtp%lu", board->position, (unsigned long int)j, (unsigned long int)i);
-			}
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu-rtp%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j, (unsigned long int)i);
 #else
-			if (board->serial_number != 0xffffffff) {
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "r%u%u%lu%lu", board->serial_number, board->position, (unsigned long int)j, (unsigned long int)i);
-			} else {
-				snprintf(devname, VINETIC_DEVNAME_MAXLEN, "r%u%lu%lu", board->position, (unsigned long int)j, (unsigned long int)i);
-			}
+			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "r%02x%02x%x%lu%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j, (unsigned long int)i);
 #endif
 			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, board->vinetics[j], i)) {
 				rc = -1;
-				goto pg_pci_board_probe_error;
+				goto pgpci_board_probe_error;
 			}
 		}
 	}
@@ -794,7 +806,7 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		if (!(mod = kmalloc(sizeof(struct radio_module_data), GFP_KERNEL))) {
 			log(KERN_ERR, "can't get memory for struct radio_module_data\n");
 			rc = -1;
-			goto pg_pci_board_probe_error;
+			goto pgpci_board_probe_error;
 		}
 		memset(mod, 0, sizeof(struct radio_module_data));
 
@@ -811,11 +823,11 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 		mod->board = board;
 		mod->position = i;
 
+		spin_lock_init(&mod->lock);
+
 		// init radio module control register
+		mod->power_on_id = -1;
 		mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
-		mod->control_data.bits.power_key = 0;
-		mod->control_data.bits.reset = 0;
-		iowrite32(mod->control_data.full, board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
 
 		// init radio module uart control register
 		mod->uart_btu_data = 2560 - 1; // 57600
@@ -844,7 +856,7 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 	}
 
 	// register polygator tty at device
-	for (i = 0; i < 8; ++i) {
+	for (i = 0; i < 1; ++i) {
 		if ((mod = board->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 			if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &k32pci_tty_at_ops))) {
@@ -853,7 +865,7 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 #endif
 				log(KERN_ERR, "can't register polygator tty device\n");
 				rc = -1;
-				goto pg_pci_board_probe_error;
+				goto pgpci_board_probe_error;
 			}
 		}
 	}
@@ -869,7 +881,7 @@ static int __devinit pg_pci_board_probe(struct pci_dev *pdev, const struct pci_d
 
 	return 0;
 
-pg_pci_board_probe_error:
+pgpci_board_probe_error:
 
 	if (board) {
 		for (i = 0; i < 8; ++i) {
@@ -909,14 +921,14 @@ pg_pci_board_probe_error:
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
-static void pg_pci_board_remove(struct pci_dev *pdev)
+static void pgpci_board_remove(struct pci_dev *pdev)
 #else
-static void __devexit pg_pci_board_remove(struct pci_dev *pdev)
+static void __devexit pgpci_board_remove(struct pci_dev *pdev)
 #endif
 {
 	size_t i, j;
 
-	struct pg_pci_board *board = pci_get_drvdata(pdev);
+	struct pgpci_board *board = pci_get_drvdata(pdev);
 
 	for (i = 0; i < 8; ++i) {
 		if (board->simcard_channels[i]) {
@@ -954,11 +966,11 @@ static void __devexit pg_pci_board_remove(struct pci_dev *pdev)
 	kfree(board);
 }
 
-static struct pci_driver pg_pci_driver = {
-	.name = "pg-pci",
-	.id_table = pg_pci_board_id_table,
-	.probe = pg_pci_board_probe,
-	.remove = pg_pci_board_remove,
+static struct pci_driver pgpci_driver = {
+	.name = "pgpci",
+	.id_table = pgpci_board_id_table,
+	.probe = pgpci_board_probe,
+	.remove = pgpci_board_remove,
 };
 
 static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
@@ -971,7 +983,7 @@ static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
 #else
 	spin_lock_bh(&mod->at_lock);
 	if (!mod->at_count++) {
-		mod->uart_poll_timer.function = k32pci_uart_poll;
+		mod->uart_poll_timer.function = pgpci_uart_poll;
 		mod->uart_poll_timer.data = (unsigned long)mod;
 		mod->uart_poll_timer.expires = jiffies + 1;
 		add_timer(&mod->uart_poll_timer);
@@ -1006,7 +1018,7 @@ static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	size_t i, len, chunk;
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
-	struct pg_pci_board *board = mod->board;
+	struct pgpci_board *board = mod->board;
 
 	spin_lock_bh(&mod->at_lock);
 
@@ -1104,7 +1116,7 @@ static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 	speed_t baudrate;
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
-	struct pg_pci_board *board = mod->board;
+	struct pgpci_board *board = mod->board;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 	struct ktermios *termios = &tty->termios;
 #else
@@ -1177,7 +1189,7 @@ static void k32pci_tty_at_flush_buffer(struct tty_struct *tty)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
-	struct pg_pci_board *board = mod->board;
+	struct pgpci_board *board = mod->board;
 
 	spin_lock_bh(&mod->at_lock);
 	mod->uart_tx_status.full = 0;
@@ -1212,7 +1224,7 @@ static int k32pci_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 {
 	struct radio_module_data *mod = container_of(port, struct radio_module_data, at_port);
 
-	mod->uart_poll_timer.function = k32pci_uart_poll;
+	mod->uart_poll_timer.function = pgpci_uart_poll;
 	mod->uart_poll_timer.data = (unsigned long)mod;
 	mod->uart_poll_timer.expires = jiffies + 1;
 	add_timer(&mod->uart_poll_timer);
@@ -1227,36 +1239,32 @@ static void k32pci_tty_at_port_shutdown(struct tty_port *port)
 	del_timer_sync(&mod->uart_poll_timer);
 }
 #endif
-static int __init pg_pci_init(void)
+static int __init pgpci_init(void)
 {
 	int rc;
 
 	verbose("loading ...\n");
 
 	// Register PCI driver
-	if ((rc = pci_register_driver(&pg_pci_driver)) < 0) {
+	if ((rc = pci_register_driver(&pgpci_driver)) < 0) {
 		log(KERN_ERR, "can't register pci driver\n");
-		goto pg_pci_init_error;
+		goto pgpci_init_error;
 	}
 
 	verbose("loaded successfull\n");
 	return 0;
 
-pg_pci_init_error:
+pgpci_init_error:
 	return rc;
 }
 
-static void __exit pg_pci_exit(void)
+static void __exit pgpci_exit(void)
 {
 	// Unregister PCI driver
-	pci_unregister_driver(&pg_pci_driver);
+	pci_unregister_driver(&pgpci_driver);
 
 	verbose("stopped\n");
 }
 
-module_init(pg_pci_init);
-module_exit(pg_pci_exit);
-
-/******************************************************************************/
-/* end of pg-pci-base.c                                                       */
-/******************************************************************************/
+module_init(pgpci_init);
+module_exit(pgpci_exit);

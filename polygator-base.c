@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/random.h>
 #include <linux/slab.h>
 // #include <linux/spinlock.h>
 #include <linux/types.h>
@@ -45,6 +46,9 @@ EXPORT_SYMBOL(polygator_board_unregister);
 
 EXPORT_SYMBOL(polygator_tty_device_register);
 EXPORT_SYMBOL(polygator_tty_device_unregister);
+
+EXPORT_SYMBOL(polygator_power_on_schedule);
+EXPORT_SYMBOL(polygator_power_on_cancel);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
 	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, NULL, "%s", _name)
@@ -89,6 +93,16 @@ static struct cdev polygator_subsystem_cdev;
 
 static struct polygator_board *polygator_board_list[POLYGATOR_BOARD_MAXCOUNT];
 static DEFINE_MUTEX(polygator_board_list_lock);
+
+struct polygator_power_on_entry {
+	int id;
+	void (* callback)(void *data);
+	void *data;
+	struct list_head list;
+};
+static LIST_HEAD(polygator_power_on_list);
+static spinlock_t polygator_power_on_list_lock;
+static struct timer_list polygator_power_on_timer;
 
 static struct tty_driver *polygator_tty_device_driver = NULL;
 
@@ -210,7 +224,8 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 
 	mutex_lock(&polygator_board_list_lock);
 	len = 0;
-	len += sprintf(private_data->buff + len, "{\r\n");
+	len += sprintf(private_data->buff + len, "{");
+	len += sprintf(private_data->buff + len, "\r\n\t\"version\": \"%s\",", POLYGATOR_LINUX_VERSION);
 	len += sprintf(private_data->buff + len, "\r\n\t\"boards\": [");
 	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if (polygator_board_list[i]) {
@@ -292,7 +307,7 @@ char *polygator_print_gsm_module_type(int type)
 	}
 }
 
-struct polygator_board *polygator_board_register(struct module *owner, char *name, struct cdev *cdev, struct file_operations *fops)
+struct polygator_board *polygator_board_register(struct device *device, struct module *owner, char *name, struct cdev *cdev, struct file_operations *fops)
 {
 	size_t i;
 	char brdname[POLYGATOR_BRDNAME_MAXLEN];
@@ -341,7 +356,7 @@ struct polygator_board *polygator_board_register(struct module *owner, char *nam
 		goto polygator_board_register_error;
 	}
 	snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "polygator!%s", name);
-	if (!(brd->device = CLASS_DEV_CREATE(polygator_class, devno, NULL, brdname))) {
+	if (!(brd->device = CLASS_DEV_CREATE(polygator_class, devno, device, brdname))) {
 		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
 		goto polygator_board_register_error;
 	}
@@ -457,6 +472,109 @@ void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
 	}
 }
 
+static void polygator_power_on_worker(unsigned long addr)
+{
+	int id = 0;
+	struct polygator_power_on_entry *entry = NULL, *iter;
+
+	spin_lock(&polygator_power_on_list_lock);
+
+	list_for_each_entry (iter, &polygator_power_on_list, list) {
+		id = max(id, iter->id);
+	}
+
+	list_for_each_entry (iter, &polygator_power_on_list, list) {
+		if (iter->id == id) {
+			entry = iter;
+			break;
+		}
+	}
+
+	if (entry) {
+		list_del(&entry->list);
+		mod_timer(&polygator_power_on_timer, jiffies + HZ);
+	}
+
+
+	spin_unlock(&polygator_power_on_list_lock);
+
+	// call power on function
+	if (entry) {
+		entry->callback(entry->data);
+		kfree(entry);
+	}
+}
+
+int polygator_power_on_schedule(void (* callback)(void *data), void *data)
+{
+	int id;
+	int done;
+	struct polygator_power_on_entry *entry;
+
+	do {
+		done = 0;
+		id = get_random_int() & 0x7fffffff;
+		spin_lock_bh(&polygator_power_on_list_lock);
+		list_for_each_entry (entry, &polygator_power_on_list, list) {
+			if (entry->id == id) {
+				done = 1;
+				break;
+			}
+		}
+		spin_unlock_bh(&polygator_power_on_list_lock);
+	} while (done);
+
+	if (!(entry = kmalloc(sizeof(struct polygator_power_on_entry), GFP_KERNEL))) {
+		log(KERN_ERR, "can't alloc memory=%lu bytes\n", (unsigned long int)sizeof(struct polygator_power_on_entry));
+		id = -ENOMEM;
+		goto polygator_power_on_schedule_end;
+	}
+	entry->id = id;
+	entry->callback = callback;
+	entry->data = data;
+
+	spin_lock_bh(&polygator_power_on_list_lock);
+
+	list_add_tail(&entry->list, &polygator_power_on_list);
+
+	if (!timer_pending(&polygator_power_on_timer)) {
+		mod_timer(&polygator_power_on_timer, jiffies + 1);
+	}
+
+	spin_unlock_bh(&polygator_power_on_list_lock);
+
+polygator_power_on_schedule_end:
+	return id;
+}
+
+void polygator_power_on_cancel(int id)
+{
+	struct polygator_power_on_entry *entry = NULL, *iter;
+
+	spin_lock_bh(&polygator_power_on_list_lock);
+
+	list_for_each_entry (iter, &polygator_power_on_list, list) {
+		if (iter->id == id) {
+			entry = iter;
+			break;
+		}
+	}
+
+	if (entry) {
+		list_del(&entry->list);
+	}
+
+	if (list_empty(&polygator_power_on_list)) {
+		del_timer_sync(&polygator_power_on_timer);
+	}
+
+	spin_unlock_bh(&polygator_power_on_list_lock);
+
+	if (entry) {
+		kfree(entry);
+	}
+}
+
 static int __init polygator_init(void)
 {
 	size_t i;
@@ -542,6 +660,13 @@ static int __init polygator_init(void)
 		goto polygator_init_error;
 	}
 
+	// init power on functionality
+	spin_lock_init(&polygator_power_on_list_lock);
+	init_timer(&polygator_power_on_timer);
+	polygator_power_on_timer.function = polygator_power_on_worker;
+	polygator_power_on_timer.data = 0;
+	polygator_power_on_timer.expires = jiffies + 1;
+
 	verbose("loaded successfull\n");
 	return 0;
 
@@ -564,6 +689,9 @@ polygator_init_error:
 
 static void __exit polygator_exit(void)
 {
+	// destroy power on functionality
+	del_timer_sync(&polygator_power_on_timer);
+
 	// Unregister polygator tty driver
 	tty_unregister_driver(polygator_tty_device_driver);
 	put_tty_driver(polygator_tty_device_driver);

@@ -1000,7 +1000,7 @@ static int __init k32isa_init(void)
 #else
 		snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bi%lu", (long unsigned int)k);
 #endif
-		if (!(k32isa_boards[k]->pg_board =  polygator_board_register(THIS_MODULE, devname, &k32isa_boards[k]->cdev, &k32isa_board_fops))) {
+		if (!(k32isa_boards[k]->pg_board =  polygator_board_register(NULL, THIS_MODULE, devname, &k32isa_boards[k]->cdev, &k32isa_board_fops))) {
 			rc = -1;
 			goto k32isa_init_error;
 		}

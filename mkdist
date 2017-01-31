@@ -24,7 +24,13 @@ rm -rf polygator-linux-${VERSION}
 git archive --format=tar.gz --prefix=polygator-linux-${VERSION}/ ${TAG} > polygator-linux-${VERSION}.tar.gz
 
 tar -xzf polygator-linux-${VERSION}.tar.gz
+rm -f polygator-linux-${VERSION}/polygator/.gitignore
+rm -f polygator-linux-${VERSION}/.gitignore
+rm -f polygator-linux-${VERSION}/.version
+rm -f polygator-linux-${VERSION}/mkdist
+rm -f polygator-linux-${VERSION}/mkverhdr
 cp polygator/version.h polygator-linux-${VERSION}/polygator/version.h
+git log > polygator-linux-${VERSION}/ChangeLog
 tar -czf polygator-linux-${VERSION}.tar.gz polygator-linux-${VERSION}
 
 rm -rf polygator-linux-${VERSION}

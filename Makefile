@@ -88,7 +88,7 @@ polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 simcard-objs := simcard-base.o
 k32isa-objs := k32isa-base.o
-pgpci-objs := pg-pci-base.o
+pgpci-objs := pgpci-base.o
 
 KERNEL_VERSION := `uname -r`
 KERNEL_SRC_DIR := /lib/modules/$(KERNEL_VERSION)/build
@@ -137,10 +137,10 @@ install_pgctl:
 	$(INSTALL) -m 755 pgsncfg $(DESTDIR)/usr/bin/pgsncfg
 	$(INSTALL) -m 755 pgtty $(DESTDIR)/usr/bin/pgtty
 
-install_asterisk_owner_udev_rules:
-	$(INSTALL) -m 644 polygator-asterisk-udev.rules "$(DESTDIR)/etc/udev/rules.d/polygator-asterisk.rules"
+install_udev_rules:
+	$(INSTALL) -m 644 polygator-udev.rules "$(DESTDIR)/etc/udev/rules.d/polygator.rules"
 
-uninstall: uninstall_modules uninstall_headers uninstall_sysvinit uninstall_pgctl uninstall_asterisk_owner_udev_rules
+uninstall: uninstall_modules uninstall_headers uninstall_sysvinit uninstall_pgctl uninstall_udev_rules
 
 uninstall_modules:
 	rm -rvf "$(DESTDIR)/lib/modules/$(KERNEL_VERSION)/$(KERNEL_MOD_DIR)"
@@ -164,8 +164,8 @@ uninstall_pgctl:
 	rm -fv $(DESTDIR)/usr/bin/pgsncfg
 	rm -fv $(DESTDIR)/usr/bin/pgtty
 
-uninstall_asterisk_owner_udev_rules:
-	rm -fv $(DESTDIR)/etc/udev/rules.d/polygator-asterisk.rules
+uninstall_udev_rules:
+	rm -fv $(DESTDIR)/etc/udev/rules.d/polygator.rules
 
 clean:
 	@make -C $(KERNEL_SRC_DIR) M=$(PWD) clean
