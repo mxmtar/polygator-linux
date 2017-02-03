@@ -646,8 +646,8 @@ static int __init polygator_init(void)
 	polygator_tty_device_driver->init_termios.c_cflag = B115200 | CS8 | HUPCL | CLOCAL | CREAD;
 	polygator_tty_device_driver->init_termios.c_lflag &= ~ECHO;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	polygator_tty_device_driver->init_termios.c_ispeed = 152000;
-	polygator_tty_device_driver->init_termios.c_ospeed = 152000;
+	polygator_tty_device_driver->init_termios.c_ispeed = 115200;
+	polygator_tty_device_driver->init_termios.c_ospeed = 115200;
 #endif
 	polygator_tty_device_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
 	tty_set_operations(polygator_tty_device_driver, &polygator_tty_device_ops);

@@ -3,6 +3,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/delay.h>
+#include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -41,6 +42,8 @@ MODULE_LICENSE("GPL");
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pgpci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pgpci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+
+#define PGPCI_UART_CLOCK 36864000 * 4
 
 union radio_module_control_reg {
 	struct {
@@ -141,6 +144,8 @@ struct pgpci_board {
 
 	int iomem_req;
 	void __iomem *iomem_base;
+	u8 irq_line;
+	u8 irq_pin;
 
 	u_int32_t xw_version;
 	u_int32_t serial_number;
@@ -412,6 +417,27 @@ static void pgpci_uart_poll(unsigned long addr)
 	mod_timer(&mod->uart_poll_timer, jiffies + 1);
 }
 
+
+static irqreturn_t pgpci_board_interrupt(int irq, void *data)
+{
+	irqreturn_t res = IRQ_NONE;
+
+	return res;
+}
+
+static inline u_int32_t pgpci_baudrate_to_btu(speed_t baudrate)
+{
+	u_int32_t btu, rem;
+
+	btu = PGPCI_UART_CLOCK / baudrate;
+	rem = PGPCI_UART_CLOCK % baudrate;
+	if (rem < (baudrate >> 1)) {
+		btu -= 1;
+	}
+
+	return btu;
+}
+
 static int pgpci_board_open(struct inode *inode, struct file *filp)
 {
 	ssize_t res;
@@ -622,36 +648,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
 	} else if (sscanf(cmd, "channel[%u].uart.baudrate(%u)", &chan, &value) == 2) {
 		if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
 			mod = board->gsm_modules[chan];
-			switch (value) {
-				case      75: mod->uart_btu_data = 1966080 - 1; break;
-				case     150: mod->uart_btu_data =  983040 - 1; break;
-				case     300: mod->uart_btu_data =  491520 - 1; break;
-				case     600: mod->uart_btu_data =  245760 - 1; break;
-				case    1200: mod->uart_btu_data =  122880 - 1; break;
-				case    2400: mod->uart_btu_data =   61440 - 1; break;
-				case    4800: mod->uart_btu_data =   30720 - 1; break;
-				case    9600: mod->uart_btu_data =   15360 - 1; break;
-				case   14400: mod->uart_btu_data =   10240 - 1; break;
-				case   19200: mod->uart_btu_data =    7680 - 1; break;
-				case   28800: mod->uart_btu_data =    5120 - 1; break;
-				case   38400: mod->uart_btu_data =    3840 - 1; break;
-				case   57600: mod->uart_btu_data =    2560 - 1; break;
-				case  115200: mod->uart_btu_data =    1280 - 1; break;
-				case  230400: mod->uart_btu_data =     640 - 1; break;
-				case  460800: mod->uart_btu_data =     320 - 1; break;
-				case  500000: mod->uart_btu_data =     295 - 1; break;
-				case  576000: mod->uart_btu_data =     256 - 1; break;
-				case  921600: mod->uart_btu_data =     160 - 1; break;
-				case 1000000: mod->uart_btu_data =     147 - 1; break;
-				case 1152000: mod->uart_btu_data =     126 - 1; break;
-				case 1500000: mod->uart_btu_data =      98 - 1; break;
-				case 2000000: mod->uart_btu_data =      74 - 1; break;
-				case 2500000: mod->uart_btu_data =      59 - 1; break;
-				case 3000000: mod->uart_btu_data =      49 - 1; break;
-				case 3500000: mod->uart_btu_data =      42 - 1; break;
-				case 4000000: mod->uart_btu_data =      37 - 1; break;
-				default:      mod->uart_btu_data =    2560 - 1; break;
-			}
+			mod->uart_btu_data = pgpci_baudrate_to_btu(value);
 			iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
 			mod->uart_control_data.bits.reset = 1;
 			iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
@@ -715,6 +712,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 {
 	int rc = -1;
 	size_t i, j;
+	int pci_irq_requested = 0;
 	char devname[POLYGATOR_BRDNAME_MAXLEN];
 	struct radio_module_data *mod;
 	struct pgpci_board *board = NULL;
@@ -830,7 +828,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 		mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
 
 		// init radio module uart control register
-		mod->uart_btu_data = 2560 - 1; // 57600
+		mod->uart_btu_data = pgpci_baudrate_to_btu(115200);
 		iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
 		mod->uart_control_data.bits.reset = 1;
 		mod->uart_control_data.bits.csize = 3;
@@ -856,7 +854,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 	}
 
 	// register polygator tty at device
-	for (i = 0; i < 1; ++i) {
+	for (i = 0; i < 8; ++i) {
 		if ((mod = board->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 			if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &k32pci_tty_at_ops))) {
@@ -877,6 +875,30 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 	board->control_data.bits.reset = 0;
 	iowrite32(board->control_data.full, board->iomem_base + 0x00080);
 
+	// set interrupt handler
+	if (!(rc = pci_read_config_byte(pdev, PCI_INTERRUPT_PIN, &board->irq_pin))) {
+		if (board->irq_pin) {
+			if (!(rc = pci_read_config_byte(pdev, PCI_INTERRUPT_LINE, &board->irq_line))) {
+				if ((rc = request_irq(pdev->irq, pgpci_board_interrupt, IRQF_SHARED, "pgpci", board))) {
+					log(KERN_ERR, "%s: Unable to request IRQ %d (error %d)\n", "pgpci", pdev->irq, rc);
+					goto pgpci_board_probe_error;
+				} else {
+					pci_irq_requested = 1;
+				}
+			} else {
+				dev_err(&pdev->dev, "pci_read_config_byte(pdev, PCI_INTERRUPT_LINE, &board->irq_pin) error=%d\n", rc);
+				goto pgpci_board_probe_error;
+			}
+		} else {
+			log(KERN_ERR, "PG PCI board must drive at least one interrupt pin\n");
+			rc = -1;
+			goto pgpci_board_probe_error;
+		}
+	} else {
+		dev_err(&pdev->dev, "pci_read_config_byte(pdev, PCI_INTERRUPT_PIN, &board->irq_pin) error=%d\n", rc);
+		goto pgpci_board_probe_error;
+	}
+
 	pci_set_drvdata(pdev, board);
 
 	return 0;
@@ -884,6 +906,9 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 pgpci_board_probe_error:
 
 	if (board) {
+		if (pci_irq_requested) {
+			free_irq(pdev->irq, board);
+		}
 		for (i = 0; i < 8; ++i) {
 			if (board->simcard_channels[i]) {
 				simcard_device_unregister(board->simcard_channels[i]);
@@ -929,6 +954,8 @@ static void __devexit pgpci_board_remove(struct pci_dev *pdev)
 	size_t i, j;
 
 	struct pgpci_board *board = pci_get_drvdata(pdev);
+
+	free_irq(pdev->irq, board);
 
 	for (i = 0; i < 8; ++i) {
 		if (board->simcard_channels[i]) {
@@ -1127,36 +1154,7 @@ static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 
 	spin_lock_bh(&mod->at_lock);
 
-	switch (baudrate) {
-		case      75: mod->uart_btu_data = 1966080 - 1; break;
-		case     150: mod->uart_btu_data =  983040 - 1; break;
-		case     300: mod->uart_btu_data =  491520 - 1; break;
-		case     600: mod->uart_btu_data =  245760 - 1; break;
-		case    1200: mod->uart_btu_data =  122880 - 1; break;
-		case    2400: mod->uart_btu_data =   61440 - 1; break;
-		case    4800: mod->uart_btu_data =   30720 - 1; break;
-		case    9600: mod->uart_btu_data =   15360 - 1; break;
-		case   14400: mod->uart_btu_data =   10240 - 1; break;
-		case   19200: mod->uart_btu_data =    7680 - 1; break;
-		case   28800: mod->uart_btu_data =    5120 - 1; break;
-		case   38400: mod->uart_btu_data =    3840 - 1; break;
-		case   57600: mod->uart_btu_data =    2560 - 1; break;
-		case  115200: mod->uart_btu_data =    1280 - 1; break;
-		case  230400: mod->uart_btu_data =     640 - 1; break;
-		case  460800: mod->uart_btu_data =     320 - 1; break;
-		case  500000: mod->uart_btu_data =     295 - 1; break;
-		case  576000: mod->uart_btu_data =     256 - 1; break;
-		case  921600: mod->uart_btu_data =     160 - 1; break;
-		case 1000000: mod->uart_btu_data =     147 - 1; break;
-		case 1152000: mod->uart_btu_data =     126 - 1; break;
-		case 1500000: mod->uart_btu_data =      98 - 1; break;
-		case 2000000: mod->uart_btu_data =      74 - 1; break;
-		case 2500000: mod->uart_btu_data =      59 - 1; break;
-		case 3000000: mod->uart_btu_data =      49 - 1; break;
-		case 3500000: mod->uart_btu_data =      42 - 1; break;
-		case 4000000: mod->uart_btu_data =      37 - 1; break;
-		default:      mod->uart_btu_data =    2560 - 1; break;
-	}
+	mod->uart_btu_data = pgpci_baudrate_to_btu(baudrate);
 	if ((termios->c_cflag & CSIZE) == CS8) {
 		mod->uart_control_data.bits.csize = 3;
 	} else if ((termios->c_cflag & CSIZE) == CS7) {
