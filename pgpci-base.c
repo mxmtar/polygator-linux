@@ -98,6 +98,14 @@ union radio_module_uart_rx_status_reg {
 	u_int32_t full;
 } __attribute__((packed));
 
+union radio_module_smart_card_status_reg {
+    struct {
+        u_int32_t reset:1;
+        u_int32_t reserved:31;
+    } __attribute__((packed)) bits;
+    u_int32_t full;
+} __attribute__((packed));
+
 struct pgpci_board;
 
 struct radio_module_data {
@@ -330,6 +338,18 @@ static u_int16_t k32pci_vin_read_dia_1(uintptr_t cbdata)
 	udelay(1);
 	value = ioread16(addr + 0x2000 + 0x11000);
 	return value;
+}
+
+
+static int pgpci_sim_is_reset_requested(void *data)
+{
+    union radio_module_smart_card_status_reg status;
+    struct radio_module_data *mod = (struct radio_module_data *)data;
+    struct pgpci_board *board = mod->board;
+
+    status.full = ioread32(board->iomem_base + 0x002a0 + ((mod->position & 7) << 2));
+
+    return !status.bits.reset;
 }
 
 static void pgpci_power_on(void *data)
@@ -818,55 +838,68 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 			continue;
 		}
 
-		mod->board = board;
-		mod->position = i;
+        mod->board = board;
+        mod->position = i;
 
-		spin_lock_init(&mod->lock);
+        spin_lock_init(&mod->lock);
 
-		// init radio module control register
-		mod->power_on_id = -1;
-		mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
+        // init radio module control register
+        mod->power_on_id = -1;
+        mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
 
-		// init radio module uart control register
-		mod->uart_btu_data = pgpci_baudrate_to_btu(115200);
-		iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
-		mod->uart_control_data.bits.reset = 1;
-		mod->uart_control_data.bits.csize = 3;
-		mod->uart_control_data.bits.cstopb = 0;
-		mod->uart_control_data.bits.cread = 1;
-		mod->uart_control_data.bits.parenb = 0;
-		mod->uart_control_data.bits.parodd = 0;
-		mod->uart_control_data.bits.loopback = 0;
-		iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((i & 7) << 2));
-		mod->uart_control_data.bits.reset = 0;
-		iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((i & 7) << 2));
+        // init radio module uart control register
+        mod->uart_btu_data = pgpci_baudrate_to_btu(115200);
+        iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
+        mod->uart_control_data.bits.reset = 1;
+        mod->uart_control_data.bits.csize = 3;
+        mod->uart_control_data.bits.cstopb = 0;
+        mod->uart_control_data.bits.cread = 1;
+        mod->uart_control_data.bits.parenb = 0;
+        mod->uart_control_data.bits.parodd = 0;
+        mod->uart_control_data.bits.loopback = 0;
+        iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((i & 7) << 2));
+        mod->uart_control_data.bits.reset = 0;
+        iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((i & 7) << 2));
 
-		init_timer(&mod->uart_poll_timer);
+        init_timer(&mod->uart_poll_timer);
 
-		spin_lock_init(&mod->at_lock);
+        spin_lock_init(&mod->at_lock);
 #ifdef TTY_PORT
-		tty_port_init(&mod->at_port);
-		mod->at_port.ops = &k32pci_tty_at_port_ops;
-		mod->at_port.close_delay = 0;
-		mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
+        tty_port_init(&mod->at_port);
+        mod->at_port.ops = &k32pci_tty_at_port_ops;
+        mod->at_port.close_delay = 0;
+        mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
 #endif
-		board->gsm_modules[i] = mod;
-	}
+        board->gsm_modules[i] = mod;
+    }
 
-	// register polygator tty at device
-	for (i = 0; i < 8; ++i) {
-		if ((mod = board->gsm_modules[i])) {
+    // register polygator tty at device
+    for (i = 0; i < 8; ++i) {
+        if ((mod = board->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
-			if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &k32pci_tty_at_ops))) {
+            if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &k32pci_tty_at_ops))) {
 #else
-			if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &k32pci_tty_at_ops))) {
+            if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &k32pci_tty_at_ops))) {
 #endif
-				log(KERN_ERR, "can't register polygator tty device\n");
-				rc = -1;
-				goto pgpci_board_probe_error;
-			}
-		}
-	}
+                log(KERN_ERR, "can't register polygator tty device\n");
+                rc = -1;
+                goto pgpci_board_probe_error;
+            }
+        }
+    }
+
+    // register polygator simcard device
+    for (i = 0; i < 8; ++i) {
+        if (board->gsm_modules[i]) {
+            if (!(board->simcard_channels[i] = simcard_device_register2(THIS_MODULE, mod))) {
+                log(KERN_ERR, "can't register polygator simcard device\n");
+                rc = -1;
+                goto pgpci_board_probe_error;
+            } else {
+                simcard_device_set_is_reset_requested(board->simcard_channels[i], pgpci_sim_is_reset_requested);
+            }
+        }
+    }
 
 	// reset board
 	board->control_data.bits.reset = 1;
