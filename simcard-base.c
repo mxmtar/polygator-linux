@@ -80,7 +80,7 @@ static void simcard_poll_proc(unsigned long addr)
 
     // reset
     if (sim->is_reset_requested) {
-        reset = sim->is_reset_requested(sim->data);
+        reset = sim->is_reset_requested(sim->cbdata);
     }
     if (reset != sim->reset_state) {
         // fill simcard reset container
@@ -94,22 +94,34 @@ static void simcard_poll_proc(unsigned long addr)
         sim->read_status.bits.data = 0;
         // do after reset action
         if (reset && sim->do_after_reset) {
-            sim->do_after_reset(sim->data);
+            sim->do_after_reset(sim->cbdata);
         }
     }
     sim->reset_state = reset;
 
     // read
-    if (reset && sim->is_read_ready && sim->is_read_ready(sim->data)) {
-        // reset simcard data container
-        sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
-        sim->command.header.length = 0;
-        // store data
-        while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (sim->is_read_ready(sim->data))) {
-            sim->command.container.data[sim->command.header.length++] = sim->read(sim->data);
+    if (sim->api == 2) {
+        if (reset && sim->read2) {
+            sim->command.header.length = sim->read2(sim->cbdata, sim->command.container.data, sizeof(sim->command.container.data));
+            if (sim->command.header.length) {
+                // set simcard data container type
+                sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
+                // set data status bit
+                sim->read_status.bits.data = 1;
+            }
         }
-        // set data status bit
-        sim->read_status.bits.data = 1;
+    } else if (sim->api == 1) {
+        if (reset && sim->is_read_ready && sim->is_read_ready(sim->cbdata)) {
+            // reset simcard data container
+            sim->command.header.type = SIMCARD_CONTAINER_TYPE_DATA;
+            sim->command.header.length = 0;
+            // store data
+            while ((sim->command.header.length < SIMCARD_MAX_DATA_LENGTH) && (sim->is_read_ready(sim->cbdata))) {
+                sim->command.container.data[sim->command.header.length++] = sim->read(sim->cbdata);
+            }
+            // set data status bit
+            sim->read_status.bits.data = 1;
+        }
     }
 
     if (sim->read_status.full) {
@@ -252,7 +264,7 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
 
     for (;;) {
         if ((sim->api == 2) && (sim->get_write_room)) {
-            sim->write_room = sim->get_write_room(sim->data);
+            sim->write_room = sim->get_write_room(sim->cbdata);
         }
         if (sim->write_room) {
             break;
@@ -277,7 +289,7 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
                 if (sim->write2) {
                     length = data.header.length;
                     length = min(length, sim->write_room);
-                    res = sim->write2(sim->data, data.container.data, length);
+                    res = sim->write2(sim->cbdata, data.container.data, length);
                     if (res > 0) {
                         res += sizeof(struct simcard_data_header);
                     }
@@ -285,8 +297,8 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
             } else if (sim->api == 1) {
                 i = 0;
                 while (data.header.length) {
-                    if (sim->is_write_ready(sim->data)) {
-                        sim->write(sim->data, data.container.data[i++]);
+                    if (sim->is_write_ready(sim->cbdata)) {
+                        sim->write(sim->cbdata, data.container.data[i++]);
                         data.header.length--;
                     }
                 }
@@ -296,7 +308,7 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
             }
             break;
         case SIMCARD_CONTAINER_TYPE_SPEED:
-            sim->set_speed(sim->data, data.container.speed);
+            sim->set_speed(sim->cbdata, data.container.speed);
             res = length;
             break;
         default:
@@ -344,14 +356,14 @@ static struct file_operations simcard_fops = {
 };
 
 struct simcard_device *simcard_device_register(struct module *owner,
-                            void *data,
-                            u_int8_t (* read)(void *data),
-                            void (* write)(void *data, u_int8_t value),
-                            int (* is_read_ready)(void *data),
-                            int (* is_write_ready)(void *data),
-                            int (* is_reset_requested)(void *data),
-                            void (* set_speed)(void *data, int speed),
-                            void (* do_after_reset)(void *data))
+                            void *cbdata,
+                            uint8_t (* read)(void *cbdata),
+                            void (* write)(void *cbdata, uint8_t value),
+                            int (* is_read_ready)(void *cbdata),
+                            int (* is_write_ready)(void *cbdata),
+                            int (* is_reset_requested)(void *cbdata),
+                            void (* set_speed)(void *cbdata, int speed),
+                            void (* do_after_reset)(void *cbdata))
 {
     struct simcard_device *sim;
     size_t i;
@@ -391,8 +403,8 @@ struct simcard_device *simcard_device_register(struct module *owner,
     init_timer(&sim->poll_timer);
     sim->poll = 0;
 
-    // set data
-    sim->data = data;
+    // set callback data pointer
+    sim->cbdata = cbdata;
 
     if (!read) {
         log(KERN_ERR, "reset callback not present\n");
@@ -468,7 +480,7 @@ simcard_device_register_error:
 EXPORT_SYMBOL(simcard_device_register);
 
 struct simcard_device *simcard_device_register2(struct module *owner,
-                                                void *data)
+                                                void *cbdata)
 {
     struct simcard_device *sim;
     size_t i;
@@ -508,8 +520,8 @@ struct simcard_device *simcard_device_register2(struct module *owner,
     init_timer(&sim->poll_timer);
     sim->poll = 0;
 
-    // set data
-    sim->data = data;
+    // set callback data pointer
+    sim->cbdata = cbdata;
 
     // Add char device to system
     cdev_init(&sim->cdev, &simcard_fops);
@@ -542,12 +554,6 @@ simcard_device_register_error:
 }
 EXPORT_SYMBOL(simcard_device_register2);
 
-void simcard_device_set_is_reset_requested(struct simcard_device *sim, int (* is_reset_requested)(void *sim))
-{
-    sim->is_reset_requested = is_reset_requested;
-}
-EXPORT_SYMBOL(simcard_device_set_is_reset_requested);
-
 void simcard_device_unregister(struct simcard_device *sim)
 {
     CLASS_DEV_DESTROY(simcard_class, sim->devno);
@@ -560,6 +566,30 @@ void simcard_device_unregister(struct simcard_device *sim)
     kfree(sim);
 }
 EXPORT_SYMBOL(simcard_device_unregister);
+
+void simcard_device_set_is_reset_requested(struct simcard_device *sim, int (* is_reset_requested)(void *cbdata))
+{
+    sim->is_reset_requested = is_reset_requested;
+}
+EXPORT_SYMBOL(simcard_device_set_is_reset_requested);
+
+void simcard_device_set_get_write_room(struct simcard_device *sim, size_t (* get_write_room)(void *cbdata))
+{
+    sim->get_write_room = get_write_room;
+}
+EXPORT_SYMBOL(simcard_device_set_get_write_room);
+
+void simcard_device_set_write2(struct simcard_device *sim, size_t (* write2)(void *cbdata, uint8_t *data, size_t length))
+{
+    sim->write2 = write2;
+}
+EXPORT_SYMBOL(simcard_device_set_write2);
+
+void simcard_device_set_read2(struct simcard_device *sim, size_t (* read2)(void *cbdata, uint8_t *data, size_t length))
+{
+    sim->read2 = read2;
+}
+EXPORT_SYMBOL(simcard_device_set_read2);
 
 static int __init simcard_init(void)
 {

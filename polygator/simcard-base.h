@@ -40,18 +40,19 @@ struct simcard_device {
     wait_queue_head_t read_waitq;
     wait_queue_head_t write_waitq;
 
-    void *data;
+    void *cbdata;
 
-    u_int8_t (* read)(void *sim);
-    void (* write)(void *sim, u_int8_t value);
-    int (* is_read_ready)(void *sim);
-    int (* is_write_ready)(void *sim);
-    int (* is_reset_requested)(void *sim);
-    void (* set_speed)(void *sim, int speed);
-    void (* do_after_reset)(void *sim);
+    uint8_t (* read)(void *cbdata);
+    void (* write)(void *cbdata, uint8_t value);
+    int (* is_read_ready)(void *cbdata);
+    int (* is_write_ready)(void *cbdata);
+    int (* is_reset_requested)(void *cbdata);
+    void (* set_speed)(void *cbdata, int speed);
+    void (* do_after_reset)(void *cbdata);
 
-    size_t (* get_write_room)(void *sim);
-    ssize_t (* write2)(void *sim, u_int8_t *data, size_t length);
+    size_t (* get_write_room)(void *cbdata);
+    size_t (* write2)(void *cbdata, uint8_t *data, size_t length);
+    size_t (* read2)(void *cbdata, uint8_t *data, size_t length);
 
     union simcard_data_status read_status;
 
@@ -71,20 +72,23 @@ struct simcard_device {
 };
 
 struct simcard_device *simcard_device_register(struct module *owner,
-                                                void *sim,
-												u_int8_t (* read)(void *sim),
-												void (* write)(void *sim, u_int8_t value),
-												int (* is_read_ready)(void *sim),
-												int (* is_write_ready)(void *sim),
-												int (* is_reset_request)(void *sim),
-												void (* set_speed)(void *sim, int speed),
-												void (* do_after_reset)(void *sim));
+                                                void *cbdata,
+												u_int8_t (* read)(void *cbdata),
+												void (* write)(void *cbdata, u_int8_t value),
+												int (* is_read_ready)(void *cbdata),
+												int (* is_write_ready)(void *cbdata),
+												int (* is_reset_request)(void *cbdata),
+												void (* set_speed)(void *cbdata, int speed),
+												void (* do_after_reset)(void *cbdata));
 
 struct simcard_device *simcard_device_register2(struct module *owner,
-                                                void *sim);
+                                                void *cbdata);
 
 void simcard_device_unregister(struct simcard_device *sim);
 
-void simcard_device_set_is_reset_requested(struct simcard_device *sim, int (* is_reset_requested)(void *sim));
+void simcard_device_set_is_reset_requested(struct simcard_device *sim, int (* is_reset_requested)(void *cbdata));
+void simcard_device_set_get_write_room(struct simcard_device *sim, size_t (* get_write_room)(void *cbdata));
+void simcard_device_set_write2(struct simcard_device *sim, size_t (* write2)(void *cbdata, uint8_t *data, size_t length));
+void simcard_device_set_read2(struct simcard_device *sim, size_t (* read2)(void *cbdata, uint8_t *data, size_t length));
 
 #endif //__SIMCARD_BASE_H__

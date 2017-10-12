@@ -45,6 +45,14 @@ MODULE_LICENSE("GPL");
 
 #define PGPCI_UART_CLOCK 36864000 * 4
 
+union board_control_reg {
+    struct {
+        u_int32_t reset:1;
+        u_int32_t reserved:31;
+    } __attribute__((packed)) bits;
+    u_int32_t full;
+} __attribute__((packed));
+
 union radio_module_control_reg {
 	struct {
 		u_int32_t power_supply:1;
@@ -69,6 +77,18 @@ union radio_module_uart_control_reg {
 	u_int32_t full;
 } __attribute__((packed));
 
+union radio_module_smart_card_control_reg {
+    struct {
+        uint32_t reset:1;
+        uint32_t enable:1;
+        uint32_t inverse:1;
+        uint32_t etu:11;
+        uint32_t egt:8;
+        uint32_t reserved:10;
+    } __attribute__((packed)) bits;
+    uint32_t full;
+} __attribute__((packed));
+
 union radio_module_status_reg {
 	struct {
 		u_int32_t status:1;
@@ -78,30 +98,50 @@ union radio_module_status_reg {
 } __attribute__((packed));
 
 union radio_module_uart_tx_status_reg {
-	struct {
-		u_int32_t wp:11;
-		u_int32_t rp:11;
-		u_int32_t fl:1;
-		u_int32_t reserved:9;
-	} __attribute__((packed)) bits;
-	u_int32_t full;
+    struct {
+        u_int32_t wp:11;
+        u_int32_t rp:11;
+        u_int32_t fl:1;
+        u_int32_t reserved:9;
+    } __attribute__((packed)) bits;
+    u_int32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_rx_status_reg {
-	struct {
-		u_int32_t wp:11;
-		u_int32_t rp:11;
-		u_int32_t fl:1;
-		u_int32_t reserved:8;
-		u_int32_t valid:1;
-	} __attribute__((packed)) bits;
-	u_int32_t full;
+    struct {
+        u_int32_t wp:11;
+        u_int32_t rp:11;
+        u_int32_t fl:1;
+        u_int32_t reserved:8;
+        u_int32_t valid:1;
+    } __attribute__((packed)) bits;
+    u_int32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_status_reg {
     struct {
         u_int32_t reset:1;
         u_int32_t reserved:31;
+    } __attribute__((packed)) bits;
+    u_int32_t full;
+} __attribute__((packed));
+
+union radio_module_smart_card_tx_status_reg {
+    struct {
+        u_int32_t wp:8;
+        u_int32_t rp:8;
+        u_int32_t fl:1;
+        u_int32_t reserved:15;
+    } __attribute__((packed)) bits;
+    u_int32_t full;
+} __attribute__((packed));
+
+union radio_module_smart_card_rx_status_reg {
+    struct {
+        u_int32_t wp:9;
+        u_int32_t rp:9;
+        u_int32_t fl:1;
+        u_int32_t reserved:13;
     } __attribute__((packed)) bits;
     u_int32_t full;
 } __attribute__((packed));
@@ -115,13 +155,14 @@ struct radio_module_data {
 	struct pgpci_board *board;
 	size_t position;
 
-	spinlock_t lock;
+    spinlock_t lock;
 
-	int power_on_id;
-	union radio_module_control_reg control_data;
-	union radio_module_uart_control_reg uart_control_data;
-	u_int32_t uart_btu_data;
-	union radio_module_uart_tx_status_reg uart_tx_status;
+    int power_on_id;
+    union radio_module_control_reg control_data;
+    union radio_module_uart_control_reg uart_control_data;
+    uint32_t uart_btu_data;
+    union radio_module_smart_card_control_reg smart_card_control_data;
+    union radio_module_uart_tx_status_reg uart_tx_status;
 
 	// uart section
 	int at_port_select;
@@ -137,14 +178,6 @@ struct radio_module_data {
 	u_int8_t uart_rx_buf[2048];
 };
 
-union board_control_reg {
-	struct {
-		u_int32_t reset:1;
-		u_int32_t reserved:31;
-	} __attribute__((packed)) bits;
-	u_int32_t full;
-} __attribute__((packed));
-
 struct pgpci_board {
 
 	struct polygator_board *pg_board;
@@ -155,9 +188,9 @@ struct pgpci_board {
 	u8 irq_line;
 	u8 irq_pin;
 
-	u_int32_t xw_version;
-	u_int32_t serial_number;
-	u_int32_t position;
+	uint32_t xw_version;
+	uint32_t serial_number;
+	uint32_t position;
 
 	union board_control_reg control_data;
 
@@ -341,10 +374,10 @@ static u_int16_t k32pci_vin_read_dia_1(uintptr_t cbdata)
 }
 
 
-static int pgpci_sim_is_reset_requested(void *data)
+static int pgpci_sim_is_reset_requested(void *cbdata)
 {
     union radio_module_smart_card_status_reg status;
-    struct radio_module_data *mod = (struct radio_module_data *)data;
+    struct radio_module_data *mod = (struct radio_module_data *)cbdata;
     struct pgpci_board *board = mod->board;
 
     status.full = ioread32(board->iomem_base + 0x002a0 + ((mod->position & 7) << 2));
@@ -352,9 +385,112 @@ static int pgpci_sim_is_reset_requested(void *data)
     return !status.bits.reset;
 }
 
-static void pgpci_power_on(void *data)
+static size_t pgpci_sim_get_write_room(void *cbdata)
 {
-	struct radio_module_data *mod = (struct radio_module_data *)data;
+    union radio_module_smart_card_tx_status_reg smart_card_tx_status;
+    struct radio_module_data *mod = (struct radio_module_data *)cbdata;
+    struct pgpci_board *board = mod->board;
+    size_t res = 0;
+
+    smart_card_tx_status.full = ioread32(board->iomem_base + 0x002c0 + ((mod->position & 7) << 2));
+
+    if (smart_card_tx_status.bits.fl) {
+        res = 0;
+    } else {
+        if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
+            res = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+        } else if (smart_card_tx_status.bits.wp > smart_card_tx_status.bits.rp) {
+            res = 256 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+        } else {
+            res = 256;
+        }
+    }
+
+    return res;
+}
+
+static size_t pgpci_sim_write(void *cbdata, uint8_t *data, size_t length)
+{
+    union radio_module_smart_card_tx_status_reg smart_card_tx_status;
+    struct radio_module_data *mod = (struct radio_module_data *)cbdata;
+    struct pgpci_board *board = mod->board;
+    size_t i, chunk;
+
+    smart_card_tx_status.full = ioread32(board->iomem_base + 0x002c0 + ((mod->position & 7) << 2));
+
+    if (smart_card_tx_status.bits.fl) {
+        chunk = 0;
+    } else {
+        if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
+            chunk = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+        } else if (smart_card_tx_status.bits.wp > smart_card_tx_status.bits.rp) {
+            chunk = 256 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+        } else {
+            chunk = 256;
+        }
+    }
+    length = min(length, chunk);
+
+    i = 0;
+    while (i < length) {
+        if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
+            chunk = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+        } else {
+            chunk = 256 - smart_card_tx_status.bits.wp;
+        }
+        chunk = min(chunk, length - i);
+        memcpy_toio(board->iomem_base + 0x88000 + ((mod->position & 7) << 16) + smart_card_tx_status.bits.wp, data + i, chunk);
+        smart_card_tx_status.bits.wp += chunk;
+        i += chunk;
+    }
+
+    return length;
+}
+
+static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
+{
+    union radio_module_smart_card_rx_status_reg smart_card_rx_status;
+    struct radio_module_data *mod = (struct radio_module_data *)cbdata;
+    struct pgpci_board *board = mod->board;
+    size_t res, i, chunk;
+
+    smart_card_rx_status.full = ioread32(board->iomem_base + 0x002e0 + ((mod->position & 7) << 2));
+
+    if (smart_card_rx_status.bits.fl) {
+        res = 512;
+    } else if (smart_card_rx_status.bits.wp > smart_card_rx_status.bits.rp) {
+        res = smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
+    } else if (smart_card_rx_status.bits.wp < smart_card_rx_status.bits.rp) {
+        res = 512 + smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
+    } else  {
+        res = 0;
+    }
+
+    res = min(res, length);
+
+    // read received data
+    if (res) {
+        i = 0;
+        while (i < res) {
+            if ((smart_card_rx_status.bits.fl) || (smart_card_rx_status.bits.wp < smart_card_rx_status.bits.rp)) {
+                chunk = 512 - smart_card_rx_status.bits.rp;
+            } else {
+                chunk = smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
+            }
+            chunk = min(chunk, res - i);
+            memcpy_fromio(data + i, board->iomem_base + 0x8c000 + ((mod->position & 7) << 16) + smart_card_rx_status.bits.rp, chunk);
+            smart_card_rx_status.bits.rp += chunk;
+            i += chunk;
+        }
+        iowrite32(smart_card_rx_status.full, board->iomem_base + 0x002e0 + ((mod->position & 7) << 2));
+    }
+
+    return res;
+}
+
+static void pgpci_power_on(void *cbdata)
+{
+	struct radio_module_data *mod = (struct radio_module_data *)cbdata;
 	struct pgpci_board *board = mod->board;
 
 	spin_lock(&mod->lock);
@@ -445,9 +581,9 @@ static irqreturn_t pgpci_board_interrupt(int irq, void *data)
 	return res;
 }
 
-static inline u_int32_t pgpci_baudrate_to_btu(speed_t baudrate)
+static inline uint32_t pgpci_baudrate_to_btu(speed_t baudrate)
 {
-	u_int32_t btu, rem;
+	uint32_t btu, rem;
 
 	btu = PGPCI_UART_CLOCK / baudrate;
 	rem = PGPCI_UART_CLOCK % baudrate;
@@ -688,6 +824,15 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
 		} else {
 			res = -ENODEV;
 		}
+    } else if (sscanf(cmd, "channel[%u].smart_card.enable(%u)", &chan, &value) == 2) {
+        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+            mod = board->gsm_modules[chan];
+            mod->smart_card_control_data.bits.enable = value;
+            iowrite32(mod->smart_card_control_data.full, board->iomem_base + 0x00160 + ((mod->position & 7) << 2));
+            res = len;
+        } else {
+            res = -ENODEV;
+        }
 	} else if (sscanf(cmd, "channel[%u].testpoint(%u)", &chan, &value) == 2) {
 		if ((chan >= 0) && (chan <= 7)) {
 			iowrite32((((chan & 0xff) << 8) + (value & 0xff)), board->iomem_base + 0x000e0);
@@ -845,11 +990,11 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 
         // init radio module control register
         mod->power_on_id = -1;
-        mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((mod->position & 7) << 2));
+        mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((i & 7) << 2));
 
         // init radio module uart control register
         mod->uart_btu_data = pgpci_baudrate_to_btu(115200);
-        iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
+        iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((i & 7) << 2));
         mod->uart_control_data.bits.reset = 1;
         mod->uart_control_data.bits.csize = 3;
         mod->uart_control_data.bits.cstopb = 0;
@@ -890,23 +1035,33 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 
     // register polygator simcard device
     for (i = 0; i < 8; ++i) {
-        if (board->gsm_modules[i]) {
+        if ((mod = board->gsm_modules[i])) {
             if (!(board->simcard_channels[i] = simcard_device_register2(THIS_MODULE, mod))) {
                 log(KERN_ERR, "can't register polygator simcard device\n");
                 rc = -1;
                 goto pgpci_board_probe_error;
             } else {
                 simcard_device_set_is_reset_requested(board->simcard_channels[i], pgpci_sim_is_reset_requested);
+                simcard_device_set_get_write_room(board->simcard_channels[i], pgpci_sim_get_write_room);
+                simcard_device_set_write2(board->simcard_channels[i], pgpci_sim_write);
+                simcard_device_set_read2(board->simcard_channels[i], pgpci_sim_read);
+                // init smart card control register
+                mod->smart_card_control_data.bits.reset = 0;
+                mod->smart_card_control_data.bits.enable = 0;
+                mod->smart_card_control_data.bits.inverse = 0;
+                mod->smart_card_control_data.bits.etu = 371;
+                mod->smart_card_control_data.bits.egt = 0;
+                iowrite32(mod->smart_card_control_data.full, board->iomem_base + 0x00160 + ((i & 7) << 2));
             }
         }
     }
 
-	// reset board
-	board->control_data.bits.reset = 1;
-	iowrite32(board->control_data.full, board->iomem_base + 0x00080);
-	udelay(1);
-	board->control_data.bits.reset = 0;
-	iowrite32(board->control_data.full, board->iomem_base + 0x00080);
+    // reset board
+    board->control_data.bits.reset = 1;
+    iowrite32(board->control_data.full, board->iomem_base + 0x00080);
+    udelay(1);
+    board->control_data.bits.reset = 0;
+    iowrite32(board->control_data.full, board->iomem_base + 0x00080);
 
 	// set interrupt handler
 	if (!(rc = pci_read_config_byte(pdev, PCI_INTERRUPT_PIN, &board->irq_pin))) {
