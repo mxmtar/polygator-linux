@@ -488,6 +488,29 @@ static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
     return res;
 }
 
+static void pgpci_sim_set_etu_count(void *cbdata, uint32_t etu)
+{
+    struct radio_module_data *mod = (struct radio_module_data *)cbdata;
+    struct pgpci_board *board = mod->board;
+
+    switch (etu) {
+        case 0x94:
+            mod->smart_card_control_data.bits.etu = 63;
+            break;
+        case 0x95:
+            mod->smart_card_control_data.bits.etu = 31;
+            break;
+        case 0x96:
+            mod->smart_card_control_data.bits.etu = 15;
+            break;
+        default:
+            mod->smart_card_control_data.bits.etu = 371;
+            break;
+    }
+
+    iowrite32(mod->smart_card_control_data.full, board->iomem_base + 0x00160 + ((mod->position & 7) << 2));
+}
+
 static void pgpci_power_on(void *cbdata)
 {
 	struct radio_module_data *mod = (struct radio_module_data *)cbdata;
@@ -1045,6 +1068,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
                 simcard_device_set_get_write_room(board->simcard_channels[i], pgpci_sim_get_write_room);
                 simcard_device_set_write2(board->simcard_channels[i], pgpci_sim_write);
                 simcard_device_set_read2(board->simcard_channels[i], pgpci_sim_read);
+                simcard_device_set_etu_count(board->simcard_channels[i], pgpci_sim_set_etu_count);
                 // init smart card control register
                 mod->smart_card_control_data.bits.reset = 0;
                 mod->smart_card_control_data.bits.enable = 0;

@@ -308,7 +308,11 @@ static ssize_t simcard_write(struct file *filp, const char __user *buff, size_t 
             }
             break;
         case SIMCARD_CONTAINER_TYPE_SPEED:
-            sim->set_speed(sim->cbdata, data.container.speed);
+            if (sim->set_etu_count) {
+                sim->set_etu_count(sim->cbdata, data.container.speed);
+            } else if (sim->set_speed) {
+                sim->set_speed(sim->cbdata, data.container.speed);
+            }
             res = length;
             break;
         default:
@@ -590,6 +594,12 @@ void simcard_device_set_read2(struct simcard_device *sim, size_t (* read2)(void 
     sim->read2 = read2;
 }
 EXPORT_SYMBOL(simcard_device_set_read2);
+
+void simcard_device_set_etu_count(struct simcard_device *sim, void (* set_etu_count)(void *cbdata, uint32_t etu))
+{
+    sim->set_etu_count = set_etu_count;
+}
+EXPORT_SYMBOL(simcard_device_set_etu_count);
 
 static int __init simcard_init(void)
 {

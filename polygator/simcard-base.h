@@ -53,6 +53,7 @@ struct simcard_device {
     size_t (* get_write_room)(void *cbdata);
     size_t (* write2)(void *cbdata, uint8_t *data, size_t length);
     size_t (* read2)(void *cbdata, uint8_t *data, size_t length);
+    void (* set_etu_count)(void *cbdata, uint32_t etu);
 
     union simcard_data_status read_status;
 
@@ -90,5 +91,6 @@ void simcard_device_set_is_reset_requested(struct simcard_device *sim, int (* is
 void simcard_device_set_get_write_room(struct simcard_device *sim, size_t (* get_write_room)(void *cbdata));
 void simcard_device_set_write2(struct simcard_device *sim, size_t (* write2)(void *cbdata, uint8_t *data, size_t length));
 void simcard_device_set_read2(struct simcard_device *sim, size_t (* read2)(void *cbdata, uint8_t *data, size_t length));
+void simcard_device_set_etu_count(struct simcard_device *sim, void (* set_etu_count)(void *cbdata, uint32_t etu));
 
 #endif //__SIMCARD_BASE_H__
