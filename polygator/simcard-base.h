@@ -61,8 +61,8 @@ struct simcard_device {
 
     size_t write_room;
 
-    struct simcard_data command;
-    struct simcard_data reset;
+    uint8_t sim_data[SIMCARD_MAX_DATA_LENGTH];
+    size_t sim_data_length;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
     struct device *device;

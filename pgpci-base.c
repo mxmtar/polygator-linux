@@ -382,7 +382,7 @@ static int pgpci_sim_is_reset_requested(void *cbdata)
 
     status.full = ioread32(board->iomem_base + 0x002a0 + ((mod->position & 7) << 2));
 
-    return !status.bits.reset;
+    return status.bits.reset;
 }
 
 static size_t pgpci_sim_get_write_room(void *cbdata)
