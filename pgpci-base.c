@@ -128,20 +128,20 @@ union radio_module_smart_card_status_reg {
 
 union radio_module_smart_card_tx_status_reg {
     struct {
-        u_int32_t wp:8;
-        u_int32_t rp:8;
+        u_int32_t wp:9;
+        u_int32_t rp:9;
         u_int32_t fl:1;
-        u_int32_t reserved:15;
+        u_int32_t reserved:13;
     } __attribute__((packed)) bits;
     u_int32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_rx_status_reg {
     struct {
-        u_int32_t wp:9;
-        u_int32_t rp:9;
+        u_int32_t wp:8;
+        u_int32_t rp:8;
         u_int32_t fl:1;
-        u_int32_t reserved:13;
+        u_int32_t reserved:15;
     } __attribute__((packed)) bits;
     u_int32_t full;
 } __attribute__((packed));
@@ -400,9 +400,9 @@ static size_t pgpci_sim_get_write_room(void *cbdata)
         if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
             res = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else if (smart_card_tx_status.bits.wp > smart_card_tx_status.bits.rp) {
-            res = 256 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+            res = 512 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else {
-            res = 256;
+            res = 512;
         }
     }
 
@@ -424,9 +424,9 @@ static size_t pgpci_sim_write(void *cbdata, uint8_t *data, size_t length)
         if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
             chunk = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else if (smart_card_tx_status.bits.wp > smart_card_tx_status.bits.rp) {
-            chunk = 256 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+            chunk = 512 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else {
-            chunk = 256;
+            chunk = 512;
         }
     }
     length = min(length, chunk);
@@ -436,7 +436,7 @@ static size_t pgpci_sim_write(void *cbdata, uint8_t *data, size_t length)
         if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
             chunk = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else {
-            chunk = 256 - smart_card_tx_status.bits.wp;
+            chunk = 512 - smart_card_tx_status.bits.wp;
         }
         chunk = min(chunk, length - i);
         memcpy_toio(board->iomem_base + 0x88000 + ((mod->position & 7) << 16) + smart_card_tx_status.bits.wp, data + i, chunk);
@@ -457,11 +457,11 @@ static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
     smart_card_rx_status.full = ioread32(board->iomem_base + 0x002e0 + ((mod->position & 7) << 2));
 
     if (smart_card_rx_status.bits.fl) {
-        res = 512;
+        res = 256;
     } else if (smart_card_rx_status.bits.wp > smart_card_rx_status.bits.rp) {
         res = smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
     } else if (smart_card_rx_status.bits.wp < smart_card_rx_status.bits.rp) {
-        res = 512 + smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
+        res = 256 + smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
     } else  {
         res = 0;
     }
@@ -473,7 +473,7 @@ static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
         i = 0;
         while (i < res) {
             if ((smart_card_rx_status.bits.fl) || (smart_card_rx_status.bits.wp < smart_card_rx_status.bits.rp)) {
-                chunk = 512 - smart_card_rx_status.bits.rp;
+                chunk = 256 - smart_card_rx_status.bits.rp;
             } else {
                 chunk = smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
             }
