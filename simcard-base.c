@@ -73,52 +73,50 @@ static DEFINE_MUTEX(simcard_device_list_lock);
 
 static void simcard_poll_proc(unsigned long addr)
 {
+    uint8_t buf[256];
+    size_t len = 0;
     int reset = 0;
     struct simcard_device *sim = (struct simcard_device *)addr;
 
     spin_lock(&sim->lock);
 
-    sim->read_status.full = 0;
-
     // reset
     if (sim->is_reset_requested) {
         reset = sim->is_reset_requested(sim->cbdata);
     }
-    if (reset != sim->reset_state) {
+    if (reset != sim->reset) {
         // set reset status bit
-        sim->read_status.bits.reset = 1;
+        sim->reset_toggled = true;
         // do after reset action
         if (reset && sim->do_after_reset) {
             sim->do_after_reset(sim->cbdata);
         }
     } else {
-        // read
         if (reset) {
             if (sim->api == 2) {
+                // read
                 if (sim->read2) {
-                    sim->sim_data_length += sim->read2(sim->cbdata, sim->sim_data + sim->sim_data_length, sizeof(sim->sim_data) - sim->sim_data_length);
-                    if (sim->sim_data_length) {
-                        // set data status bit
-                        sim->read_status.bits.data = 1;
-                    }
+                    len = sim->read2(sim->cbdata, buf, sizeof(buf));
                 }
             } else if (sim->api == 1) {
+                // read
                 if (sim->is_read_ready && sim->is_read_ready(sim->cbdata)) {
-                    // store data
-                    sim->sim_data_length = 0;
-                    while ((sim->sim_data_length < sizeof(sim->sim_data)) && (sim->is_read_ready(sim->cbdata))) {
-                        sim->sim_data[sim->sim_data_length++] = sim->read(sim->cbdata);
+                    while ((len < sizeof(buf)) && (sim->is_read_ready(sim->cbdata))) {
+                        buf[len++] = sim->read(sim->cbdata);
                     }
-                    // set data status bit
-                    sim->read_status.bits.data = 1;
                 }
             }
         }
     }
 
-    sim->reset_state = reset;
+    sim->reset = reset;
 
-    if (sim->read_status.full || sim->sim_data_length) {
+    if (len) {
+        memcpy(sim->read_data + sim->read_data_length, buf, min(len, sizeof(sim->read_data) - sim->read_data_length));
+        sim->read_data_length  += min(len, sizeof(sim->read_data) - sim->read_data_length);
+    }
+
+    if (sim->reset_toggled || sim->read_data_length) {
         wake_up_interruptible(&sim->read_waitq);
         wake_up_interruptible(&sim->poll_waitq);
     }
@@ -141,8 +139,7 @@ static int simcard_open(struct inode *inode, struct file *filp)
     spin_lock_bh(&sim->lock);
     usage = sim->usage++;
     if (!usage) {
-        sim->read_status.full = 0;
-        sim->sim_data_length = 0;
+        sim->read_data_length = 0;
         sim->write_room = 512;
         sim->poll = 1;
     }
@@ -190,7 +187,7 @@ static ssize_t simcard_read(struct file *filp, char __user *buff, size_t count, 
     spin_lock_bh(&sim->lock);
 
     for (;;) {
-        if (sim->read_status.full || sim->sim_data_length) {
+        if (sim->reset_toggled || sim->read_data_length) {
             break;
         }
 
@@ -201,28 +198,26 @@ static ssize_t simcard_read(struct file *filp, char __user *buff, size_t count, 
         }
         // sleeping
         spin_unlock_bh(&sim->lock);
-        if ((res = wait_event_interruptible(sim->read_waitq, (sim->read_status.full || sim->sim_data_length)))) {
+        if ((res = wait_event_interruptible(sim->read_waitq, (sim->reset_toggled || sim->read_data_length)))) {
             goto simcard_read_end;
         }
         spin_lock_bh(&sim->lock);
     }
 
     // select body type
-    if (sim->read_status.bits.reset) {
+    if (sim->reset_toggled) {
         data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
         data.header.length = sizeof(data.body.reset);
         length = sizeof(data.header) + data.header.length;
-        data.body.reset = sim->reset_state;
-        sim->read_status.full = 0;
-    } else if (sim->sim_data_length) {
+        data.body.reset = sim->reset;
+        sim->reset_toggled = false;
+    } else if (sim->read_data_length) {
         data.header.type = SIMCARD_CONTAINER_TYPE_DATA;
-        data.header.length = sim->sim_data_length;
+        data.header.length = sim->read_data_length;
         length = sizeof(data.header) + data.header.length;
-        memcpy(data.body.data, sim->sim_data, sim->sim_data_length);
-        sim->sim_data_length = 0;
-        sim->read_status.full = 0;
+        memcpy(data.body.data, sim->read_data, sim->read_data_length);
+        sim->read_data_length = 0;
     } else {
-        sim->read_status.full = 0;
         spin_unlock_bh(&sim->lock);
         res = -EAGAIN;
         goto simcard_read_end;
@@ -337,11 +332,11 @@ static unsigned int simcard_poll(struct file *filp, struct poll_table_struct *wa
 
     spin_lock_bh(&sim->lock);
 
-    if (sim->read_status.full) {
+    if (sim->reset_toggled || sim->read_data_length) {
         res |= POLLIN | POLLRDNORM;
     }
 
-    if (sim->write_room) {
+    if (sim->write_room == 512) {
         res |= POLLOUT | POLLWRNORM;
     }
 

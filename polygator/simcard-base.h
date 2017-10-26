@@ -15,16 +15,6 @@
 #define SIMCARD_DEVICE_MAXCOUNT 256
 #define SIMCARD_DEVNAME_MAXLEN 256
 
-union simcard_data_status {
-    struct {
-        u_int32_t data:1;
-        u_int32_t reset:1;
-        u_int32_t speed:1;
-        u_int32_t reserved:29;
-    }  __attribute__((packed)) bits;
-    u_int32_t full;
-} __attribute__((packed));
-
 struct simcard_device {
     int devno;
     spinlock_t lock;
@@ -55,14 +45,14 @@ struct simcard_device {
     size_t (* read2)(void *cbdata, uint8_t *data, size_t length);
     void (* set_etu_count)(void *cbdata, uint32_t etu);
 
-    union simcard_data_status read_status;
 
-    int reset_state;
+    int reset;
+    bool reset_toggled;
 
     size_t write_room;
 
-    uint8_t sim_data[SIMCARD_MAX_DATA_LENGTH];
-    size_t sim_data_length;
+    uint8_t read_data[256];
+    size_t read_data_length;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
     struct device *device;
