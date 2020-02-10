@@ -1,7 +1,3 @@
-/******************************************************************************/
-/* vinetic-base.c                                                             */
-/******************************************************************************/
-
 #include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
@@ -90,7 +86,7 @@ struct vinetic_device {
 static struct vinetic_device vinetic_device_list[VINETIC_DEVICE_MAXCOUNT];
 static DEFINE_MUTEX(vinetic_device_list_lock);
 
-static void vinetic_poll_proc(unsigned long addr)
+static void vinetic_poll_proc(struct timer_list *timer)
 {
 	union vin_cmd cmd;
 
@@ -111,8 +107,8 @@ static void vinetic_poll_proc(unsigned long addr)
 
 	u_int16_t *datap;
 
-	struct vinetic_rtp_channel *rtp;
-	struct vinetic *vin = (struct vinetic *)addr;
+    struct vinetic_rtp_channel *rtp;
+    struct vinetic *vin = container_of(timer, struct vinetic, poll_timer);
 
 	// lock vinetic
 	spin_lock(&vin->lock);
@@ -1400,18 +1396,15 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 				res = -EINVAL;
 			}
 			break;
-		case VINETIC_SET_POLL:
-			if (copy_from_user(&vin->poll, argp, sizeof(int))) {
-				res = -EINVAL;
-			}
-			del_timer_sync(&vin->poll_timer);
-			if (vin->poll) {
-				vin->poll_timer.function = vinetic_poll_proc;
-				vin->poll_timer.data = (unsigned long)vin;
-				vin->poll_timer.expires = jiffies + 1;
-				add_timer(&vin->poll_timer);
-			}
-			break;
+        case VINETIC_SET_POLL:
+        if (copy_from_user(&vin->poll, argp, sizeof(int))) {
+            res = -EINVAL;
+        }
+        del_timer_sync(&vin->poll_timer);
+        if (vin->poll) {
+            mod_timer(&vin->poll_timer, jiffies + 1);
+        }
+        break;
 		case VINETIC_RESET_STATUS:
 			spin_lock_bh(&vin->lock);
 			vin->status_ready = 1;
@@ -1766,7 +1759,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	init_waitqueue_head(&vin->read_cbox_waitq);
 	init_waitqueue_head(&vin->seek_cbox_waitq);
 	init_waitqueue_head(&vin->status_waitq);
-	init_timer(&vin->poll_timer);
+    timer_setup(&vin->poll_timer, vinetic_poll_proc, 0);
 	vin->poll = 0;
 
 	vin->cbdata = cbdata;
@@ -2082,7 +2075,3 @@ static void __exit vinetic_exit(void)
 
 module_init(vinetic_init);
 module_exit(vinetic_exit);
-
-/******************************************************************************/
-/* end of vinetic-base.c                                                      */
-/******************************************************************************/

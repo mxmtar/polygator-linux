@@ -1,7 +1,3 @@
-/******************************************************************************/
-/* k32isa-base.c                                                              */
-/******************************************************************************/
-
 #include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
@@ -330,7 +326,7 @@ static void k32isa_sim_do_after_reset(void *data)
 {
 }
 
-static void k32isa_tty_at_poll(unsigned long addr)
+static void k32isa_tty_at_poll(struct timer_list *timer)
 {
 	char buff[512];
 	size_t len;
@@ -338,7 +334,7 @@ static void k32isa_tty_at_poll(unsigned long addr)
 	struct tty_struct *tty;
 #endif
 	union k32_gsm_mod_status_reg status;
-	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)addr;
+	struct k32_gsm_module_data *mod = container_of(timer, struct k32_gsm_module_data, at_poll_timer);
 
 	len = 0;
 
@@ -645,25 +641,22 @@ static int k32isa_tty_at_open(struct tty_struct *tty, struct file *filp)
 		return -ENOMEM;
 	}
 
-	spin_lock_bh(&mod->at_lock);
+    spin_lock_bh(&mod->at_lock);
 
-	if (!mod->at_count++) {
-		mod->at_xmit_buf = xbuf;
-		mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
+    if (!mod->at_count++) {
+        mod->at_xmit_buf = xbuf;
+        mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
-		mod->at_poll_timer.function = k32isa_tty_at_poll;
-		mod->at_poll_timer.data = (unsigned long)mod;
-		mod->at_poll_timer.expires = jiffies + 1;
-		add_timer(&mod->at_poll_timer);
-	
-		mod->at_tty = tty;
-	} else {
-		kfree(xbuf);
-	}
+        mod_timer(&mod->at_poll_timer, jiffies + 1);
 
-	spin_unlock_bh(&mod->at_lock);
+        mod->at_tty = tty;
+    } else {
+        kfree(xbuf);
+    }
 
-	return 0;
+    spin_unlock_bh(&mod->at_lock);
+
+    return 0;
 #endif
 }
 
@@ -842,14 +835,11 @@ static int k32isa_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 		return -ENOMEM;
 	}
 
-	mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
+    mod->at_xmit_count = mod->at_xmit_head = mod->at_xmit_tail = 0;
 
-	mod->at_poll_timer.function = k32isa_tty_at_poll;
-	mod->at_poll_timer.data = (unsigned long)mod;
-	mod->at_poll_timer.expires = jiffies + 1;
-	add_timer(&mod->at_poll_timer);
+    mod_timer(&mod->at_poll_timer, jiffies + 1);
 
-	return 0;
+    return 0;
 }
 
 static void k32isa_tty_at_port_shutdown(struct tty_port *port)
@@ -1110,10 +1100,10 @@ static int __init k32isa_init(void)
 			mod->imei_write = k32isa_gsm_mod_imei_write;
 			mod->imei_read = k32isa_gsm_mod_imei_read;
 
-// 			mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
-			init_timer(&mod->at_poll_timer);
+            //mod->set_control(mod->cbdata, mod->pos_on_board, mod->control.full);
+            timer_setup(&mod->at_poll_timer, k32isa_tty_at_poll, 0);
 
-			spin_lock_init(&mod->at_lock);
+            spin_lock_init(&mod->at_lock);
 #ifdef TTY_PORT
 			tty_port_init(&mod->at_port);
 			mod->at_port.ops = &k32isa_tty_at_port_ops;
@@ -1270,7 +1260,3 @@ static void __exit k32isa_exit(void)
 
 module_init(k32isa_init);
 module_exit(k32isa_exit);
-
-/******************************************************************************/
-/* end of k32isa-base.c                                                       */
-/******************************************************************************/
