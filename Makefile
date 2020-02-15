@@ -83,11 +83,10 @@ KERNEL_STG_DIR := $(INSTALL_MOD_PATH)
 
 else
 
-obj-m := polygator.o vinetic.o simcard.o k32isa.o pgpci.o
+obj-m := polygator.o vinetic.o simcard.o pgpci.o
 polygator-objs := polygator-base.o
 vinetic-objs := vinetic-base.o
 simcard-objs := simcard-base.o
-k32isa-objs := k32isa-base.o
 pgpci-objs := pgpci-base.o
 
 KERNEL_VERSION := `uname -r`
