@@ -165,7 +165,7 @@ struct radio_module_data {
 	int at_no_buf;
 	struct tty_port at_port;
 	struct timer_list uart_poll_timer;
-	u_int8_t uart_rx_buf[2048];
+	uint8_t uart_rx_buf[2048];
 };
 
 struct pgpci_board {
@@ -255,33 +255,33 @@ static void pgpci_vin_reset_1(uintptr_t cbdata)
 	iowrite8(1, addr + 0x2000 + 0x11c00);
 }
 
-static void pgpci_vin_write_nwd_0(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_nwd_0(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x0000  + 0x080);
 }
 
-static void pgpci_vin_write_nwd_1(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_nwd_1(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x2000 + 0x080);
 }
 
-static void pgpci_vin_write_eom_0(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_eom_0(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x0000 + 0x0c0);
 }
 
-static void pgpci_vin_write_eom_1(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_eom_1(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x2000 + 0x0c0);
 }
 
-static u_int16_t pgpci_vin_read_nwd_0(uintptr_t cbdata)
+static uint16_t pgpci_vin_read_nwd_0(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x0000 + 0x080) & 0xffff, addr + 0x0000 + 0x11700);
 	udelay(1);
@@ -289,9 +289,9 @@ static u_int16_t pgpci_vin_read_nwd_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t pgpci_vin_read_nwd_1(uintptr_t cbdata)
+static uint16_t pgpci_vin_read_nwd_1(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x2000 + 0x080) & 0xffff, addr + 0x2000 + 0x11700);
 	udelay(1);
@@ -299,9 +299,9 @@ static u_int16_t pgpci_vin_read_nwd_1(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t pgpci_vin_read_eom_0(uintptr_t cbdata)
+static uint16_t pgpci_vin_read_eom_0(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x0000 + 0x0c0) & 0xffff, addr + 0x0000 + 0x11700);
 	udelay(1);
@@ -309,9 +309,9 @@ static u_int16_t pgpci_vin_read_eom_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t pgpci_vin_read_eom_1(uintptr_t cbdata)
+static uint16_t pgpci_vin_read_eom_1(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x2000 + 0x0c0) & 0xffff, addr + 0x2000 + 0x11700);
 	udelay(1);
@@ -339,9 +339,9 @@ static size_t pgpci_vin_is_not_ready_1(uintptr_t cbdata)
 	return st;
 }
 
-static u_int16_t pgpci_vin_read_dia_0(uintptr_t cbdata)
+static uint16_t pgpci_vin_read_dia_0(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x0000 + 0x300) & 0xffff, addr + 0x0000 + 0x11700);
 	udelay(1);
@@ -349,9 +349,9 @@ static u_int16_t pgpci_vin_read_dia_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t pgpci_vin_read_dia_1(uintptr_t cbdata)
+static uint16_t pgpci_vin_read_dia_1(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x2000 + 0x300) & 0xffff, addr + 0x2000 + 0x11700);
 	udelay(1);
