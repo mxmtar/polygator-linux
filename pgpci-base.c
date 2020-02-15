@@ -522,15 +522,15 @@ static void pgpci_power_on(void *cbdata)
 	spin_unlock(&mod->lock);
 }
 
-static void pgpci_uart_poll(unsigned long addr)
+static void pgpci_uart_poll(struct timer_list *timer)
 {
 	size_t i, len, chunk;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
 	struct tty_struct *tty;
 #endif
 	union radio_module_uart_rx_status_reg rx_status;
-	
-	struct radio_module_data *mod = (struct radio_module_data *)addr;
+
+    struct radio_module_data *mod = container_of(timer, struct radio_module_data, uart_poll_timer);
 	struct pgpci_board *board = mod->board;
 
 	spin_lock(&mod->at_lock);
@@ -1028,7 +1028,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
         mod->uart_control_data.bits.reset = 0;
         iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((i & 7) << 2));
 
-        init_timer(&mod->uart_poll_timer);
+        timer_setup(&mod->uart_poll_timer, pgpci_uart_poll, 0);
 
         spin_lock_init(&mod->at_lock);
 #ifdef TTY_PORT
@@ -1221,10 +1221,7 @@ static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
 #else
 	spin_lock_bh(&mod->at_lock);
 	if (!mod->at_count++) {
-		mod->uart_poll_timer.function = pgpci_uart_poll;
-		mod->uart_poll_timer.data = (unsigned long)mod;
-		mod->uart_poll_timer.expires = jiffies + 1;
-		add_timer(&mod->uart_poll_timer);
+		mod_timer(&mod->uart_poll_timer, jiffies + 1);
 		mod->at_tty = tty;
 	}
 	spin_unlock_bh(&mod->at_lock);
@@ -1433,10 +1430,7 @@ static int k32pci_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 {
 	struct radio_module_data *mod = container_of(port, struct radio_module_data, at_port);
 
-	mod->uart_poll_timer.function = pgpci_uart_poll;
-	mod->uart_poll_timer.data = (unsigned long)mod;
-	mod->uart_poll_timer.expires = jiffies + 1;
-	add_timer(&mod->uart_poll_timer);
+    mod_timer(&mod->uart_poll_timer, jiffies + 1);
 
 	return 0;
 }
