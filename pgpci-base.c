@@ -201,36 +201,36 @@ struct pgpci_board_private_data {
 	size_t length;
 };
 
-static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp);
-static void k32pci_tty_at_close(struct tty_struct *tty, struct file *filp);
-static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count);
-static int k32pci_tty_at_write_room(struct tty_struct *tty);
-static int k32pci_tty_at_chars_in_buffer(struct tty_struct *tty);
-static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios);
-static void k32pci_tty_at_flush_buffer(struct tty_struct *tty);
-static void k32pci_tty_at_hangup(struct tty_struct *tty);
+static int pgpci_tty_at_open(struct tty_struct *tty, struct file *filp);
+static void pgpci_tty_at_close(struct tty_struct *tty, struct file *filp);
+static int pgpci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count);
+static int pgpci_tty_at_write_room(struct tty_struct *tty);
+static int pgpci_tty_at_chars_in_buffer(struct tty_struct *tty);
+static void pgpci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios);
+static void pgpci_tty_at_flush_buffer(struct tty_struct *tty);
+static void pgpci_tty_at_hangup(struct tty_struct *tty);
 
-static struct tty_operations k32pci_tty_at_ops = {
-	.open = k32pci_tty_at_open,
-	.close = k32pci_tty_at_close,
-	.write = k32pci_tty_at_write,
-	.write_room = k32pci_tty_at_write_room,
-	.chars_in_buffer = k32pci_tty_at_chars_in_buffer,
-	.set_termios = k32pci_tty_at_set_termios,
-	.flush_buffer = k32pci_tty_at_flush_buffer,
-	.hangup = k32pci_tty_at_hangup,
+static struct tty_operations pgpci_tty_at_ops = {
+	.open = pgpci_tty_at_open,
+	.close = pgpci_tty_at_close,
+	.write = pgpci_tty_at_write,
+	.write_room = pgpci_tty_at_write_room,
+	.chars_in_buffer = pgpci_tty_at_chars_in_buffer,
+	.set_termios = pgpci_tty_at_set_termios,
+	.flush_buffer = pgpci_tty_at_flush_buffer,
+	.hangup = pgpci_tty_at_hangup,
 };
 
-static int k32pci_tty_at_port_carrier_raised(struct tty_port *port);
-static void k32pci_tty_at_port_dtr_rts(struct tty_port *port, int onoff);
-static int k32pci_tty_at_port_activate(struct tty_port *tport, struct tty_struct *tty);
-static void k32pci_tty_at_port_shutdown(struct tty_port *port);
+static int pgpci_tty_at_port_carrier_raised(struct tty_port *port);
+static void pgpci_tty_at_port_dtr_rts(struct tty_port *port, int onoff);
+static int pgpci_tty_at_port_activate(struct tty_port *tport, struct tty_struct *tty);
+static void pgpci_tty_at_port_shutdown(struct tty_port *port);
 
-static const struct tty_port_operations k32pci_tty_at_port_ops = {
-	.carrier_raised = k32pci_tty_at_port_carrier_raised,
-	.dtr_rts = k32pci_tty_at_port_dtr_rts,
-	.activate = k32pci_tty_at_port_activate,
-	.shutdown = k32pci_tty_at_port_shutdown,
+static const struct tty_port_operations pgpci_tty_at_port_ops = {
+	.carrier_raised = pgpci_tty_at_port_carrier_raised,
+	.dtr_rts = pgpci_tty_at_port_dtr_rts,
+	.activate = pgpci_tty_at_port_activate,
+	.shutdown = pgpci_tty_at_port_shutdown,
 };
 
 static struct pci_device_id pgpci_board_id_table[] = {
@@ -239,7 +239,7 @@ static struct pci_device_id pgpci_board_id_table[] = {
 };
 MODULE_DEVICE_TABLE(pci, pgpci_board_id_table);
 
-static void k32pci_vin_reset_0(uintptr_t cbdata)
+static void pgpci_vin_reset_0(uintptr_t cbdata)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite8(0, addr + 0x0000 + 0x11c00);
@@ -247,7 +247,7 @@ static void k32pci_vin_reset_0(uintptr_t cbdata)
 	iowrite8(1, addr + 0x0000 + 0x11c00);
 }
 
-static void k32pci_vin_reset_1(uintptr_t cbdata)
+static void pgpci_vin_reset_1(uintptr_t cbdata)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite8(0, addr + 0x2000 + 0x11c00);
@@ -255,31 +255,31 @@ static void k32pci_vin_reset_1(uintptr_t cbdata)
 	iowrite8(1, addr + 0x2000 + 0x11c00);
 }
 
-static void k32pci_vin_write_nwd_0(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_nwd_0(uintptr_t cbdata, u_int16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x0000  + 0x080);
 }
 
-static void k32pci_vin_write_nwd_1(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_nwd_1(uintptr_t cbdata, u_int16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x2000 + 0x080);
 }
 
-static void k32pci_vin_write_eom_0(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_eom_0(uintptr_t cbdata, u_int16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x0000 + 0x0c0);
 }
 
-static void k32pci_vin_write_eom_1(uintptr_t cbdata, u_int16_t value)
+static void pgpci_vin_write_eom_1(uintptr_t cbdata, u_int16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x2000 + 0x0c0);
 }
 
-static u_int16_t k32pci_vin_read_nwd_0(uintptr_t cbdata)
+static u_int16_t pgpci_vin_read_nwd_0(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -289,7 +289,7 @@ static u_int16_t k32pci_vin_read_nwd_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_nwd_1(uintptr_t cbdata)
+static u_int16_t pgpci_vin_read_nwd_1(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -299,7 +299,7 @@ static u_int16_t k32pci_vin_read_nwd_1(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_eom_0(uintptr_t cbdata)
+static u_int16_t pgpci_vin_read_eom_0(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -309,7 +309,7 @@ static u_int16_t k32pci_vin_read_eom_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_eom_1(uintptr_t cbdata)
+static u_int16_t pgpci_vin_read_eom_1(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -319,7 +319,7 @@ static u_int16_t k32pci_vin_read_eom_1(uintptr_t cbdata)
 	return value;
 }
 
-static size_t k32pci_vin_is_not_ready_0(uintptr_t cbdata)
+static size_t pgpci_vin_is_not_ready_0(uintptr_t cbdata)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	size_t st;
@@ -329,7 +329,7 @@ static size_t k32pci_vin_is_not_ready_0(uintptr_t cbdata)
 	return st;
 }
 
-static size_t k32pci_vin_is_not_ready_1(uintptr_t cbdata)
+static size_t pgpci_vin_is_not_ready_1(uintptr_t cbdata)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	size_t st;
@@ -339,7 +339,7 @@ static size_t k32pci_vin_is_not_ready_1(uintptr_t cbdata)
 	return st;
 }
 
-static u_int16_t k32pci_vin_read_dia_0(uintptr_t cbdata)
+static u_int16_t pgpci_vin_read_dia_0(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -349,7 +349,7 @@ static u_int16_t k32pci_vin_read_dia_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_dia_1(uintptr_t cbdata)
+static u_int16_t pgpci_vin_read_dia_1(uintptr_t cbdata)
 {
 	u_int16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
@@ -903,13 +903,13 @@ static int pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *e
 	for (j = 0; j < 2; ++j) {
 		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j);
 		if (!(board->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, ((uintptr_t)board->iomem_base) + (board->position * 0x4000),
-													(j)?(k32pci_vin_reset_1):(k32pci_vin_reset_0),
-													(j)?(k32pci_vin_is_not_ready_1):(k32pci_vin_is_not_ready_0),
-													(j)?(k32pci_vin_write_nwd_1):(k32pci_vin_write_nwd_0),
-													(j)?(k32pci_vin_write_eom_1):(k32pci_vin_write_eom_0),
-													(j)?(k32pci_vin_read_nwd_1):(k32pci_vin_read_nwd_0),
-													(j)?(k32pci_vin_read_eom_1):(k32pci_vin_read_eom_0),
-													(j)?(k32pci_vin_read_dia_1):(k32pci_vin_read_dia_0)))) {
+													(j)?(pgpci_vin_reset_1):(pgpci_vin_reset_0),
+													(j)?(pgpci_vin_is_not_ready_1):(pgpci_vin_is_not_ready_0),
+													(j)?(pgpci_vin_write_nwd_1):(pgpci_vin_write_nwd_0),
+													(j)?(pgpci_vin_write_eom_1):(pgpci_vin_write_eom_0),
+													(j)?(pgpci_vin_read_nwd_1):(pgpci_vin_read_nwd_0),
+													(j)?(pgpci_vin_read_eom_1):(pgpci_vin_read_eom_0),
+													(j)?(pgpci_vin_read_dia_1):(pgpci_vin_read_dia_0)))) {
 			rc = -1;
 			goto pgpci_board_probe_error;
 		}
@@ -967,7 +967,7 @@ static int pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *e
         timer_setup(&mod->uart_poll_timer, pgpci_uart_poll, 0);
         spin_lock_init(&mod->at_lock);
         tty_port_init(&mod->at_port);
-        mod->at_port.ops = &k32pci_tty_at_port_ops;
+        mod->at_port.ops = &pgpci_tty_at_port_ops;
         mod->at_port.close_delay = 0;
         mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
         board->gsm_modules[i] = mod;
@@ -976,7 +976,7 @@ static int pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *e
     // register polygator tty at device
     for (i = 0; i < 8; ++i) {
         if ((mod = board->gsm_modules[i])) {
-            if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &k32pci_tty_at_ops))) {
+            if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &pgpci_tty_at_ops))) {
                 log(KERN_ERR, "can't register polygator tty device\n");
                 rc = -1;
                 goto pgpci_board_probe_error;
@@ -1136,7 +1136,7 @@ static struct pci_driver pgpci_driver = {
 	.remove = pgpci_board_remove,
 };
 
-static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
+static int pgpci_tty_at_open(struct tty_struct *tty, struct file *filp)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
@@ -1144,7 +1144,7 @@ static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
 	return tty_port_open(&mod->at_port, tty, filp);
 }
 
-static void k32pci_tty_at_close(struct tty_struct *tty, struct file *filp)
+static void pgpci_tty_at_close(struct tty_struct *tty, struct file *filp)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
@@ -1152,7 +1152,7 @@ static void k32pci_tty_at_close(struct tty_struct *tty, struct file *filp)
 	tty_port_close(&mod->at_port, tty, filp);
 }
 
-static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
+static int pgpci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
 {
 	int res = 0;
 	size_t i, len, chunk;
@@ -1197,7 +1197,7 @@ static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf,
 	return res ;
 }
 
-static int k32pci_tty_at_write_room(struct tty_struct *tty)
+static int pgpci_tty_at_write_room(struct tty_struct *tty)
 {
 	int res;
 	struct polygator_tty_device *ptd = tty->driver_data;
@@ -1222,7 +1222,7 @@ static int k32pci_tty_at_write_room(struct tty_struct *tty)
 	return res;
 }
 
-static int k32pci_tty_at_chars_in_buffer(struct tty_struct *tty)
+static int pgpci_tty_at_chars_in_buffer(struct tty_struct *tty)
 {
 	int res;
 	struct polygator_tty_device *ptd = tty->driver_data;
@@ -1247,7 +1247,7 @@ static int k32pci_tty_at_chars_in_buffer(struct tty_struct *tty)
 	return res;
 }
 
-static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
+static void pgpci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
 	speed_t baudrate;
 	struct polygator_tty_device *ptd = tty->driver_data;
@@ -1287,7 +1287,7 @@ static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *o
 	tty_encode_baud_rate(tty, baudrate, baudrate);
 }
 
-static void k32pci_tty_at_flush_buffer(struct tty_struct *tty)
+static void pgpci_tty_at_flush_buffer(struct tty_struct *tty)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
@@ -1304,23 +1304,23 @@ static void k32pci_tty_at_flush_buffer(struct tty_struct *tty)
 	tty_wakeup(tty);
 }
 
-static void k32pci_tty_at_hangup(struct tty_struct *tty)
+static void pgpci_tty_at_hangup(struct tty_struct *tty)
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
 	tty_port_hangup(&mod->at_port);
 }
 
-static int k32pci_tty_at_port_carrier_raised(struct tty_port *port)
+static int pgpci_tty_at_port_carrier_raised(struct tty_port *port)
 {
 	return 1;
 }
 
-static void k32pci_tty_at_port_dtr_rts(struct tty_port *port, int onoff)
+static void pgpci_tty_at_port_dtr_rts(struct tty_port *port, int onoff)
 {
 }
 
-static int k32pci_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty)
+static int pgpci_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty)
 {
 	struct radio_module_data *mod = container_of(port, struct radio_module_data, at_port);
 
@@ -1329,7 +1329,7 @@ static int k32pci_tty_at_port_activate(struct tty_port *port, struct tty_struct 
 	return 0;
 }
 
-static void k32pci_tty_at_port_shutdown(struct tty_port *port)
+static void pgpci_tty_at_port_shutdown(struct tty_port *port)
 {
 	struct radio_module_data *mod = container_of(port, struct radio_module_data, at_port);
 
