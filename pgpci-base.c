@@ -46,34 +46,34 @@ MODULE_LICENSE("GPL");
 
 union board_control_reg {
     struct {
-        u_int32_t reset:1;
-        u_int32_t reserved:31;
+        uint32_t reset:1;
+        uint32_t reserved:31;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_control_reg {
 	struct {
-		u_int32_t power_supply:1;
-		u_int32_t power_key:1;
-		u_int32_t reset:1;
-		u_int32_t reserved:29;
+		uint32_t power_supply:1;
+		uint32_t power_key:1;
+		uint32_t reset:1;
+		uint32_t reserved:29;
 	} __attribute__((packed)) bits;
-	u_int32_t full;
+	uint32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_control_reg {
 	struct {
-		u_int32_t reset:1;
-		u_int32_t csize:2;
-		u_int32_t cstopb:1;
-		u_int32_t parenb:1;
-		u_int32_t parodd:1;
-		u_int32_t cread:1;
-		u_int32_t reserved:24;
-		u_int32_t loopback:1;
+		uint32_t reset:1;
+		uint32_t csize:2;
+		uint32_t cstopb:1;
+		uint32_t parenb:1;
+		uint32_t parodd:1;
+		uint32_t cread:1;
+		uint32_t reserved:24;
+		uint32_t loopback:1;
 	} __attribute__((packed)) bits;
-	u_int32_t full;
+	uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_control_reg {
@@ -90,66 +90,66 @@ union radio_module_smart_card_control_reg {
 
 union radio_module_status_reg {
 	struct {
-		u_int32_t status:1;
-		u_int32_t reserved:31;
+		uint32_t status:1;
+		uint32_t reserved:31;
 	} __attribute__((packed)) bits;
-	u_int32_t full;
+	uint32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_tx_status_reg {
     struct {
-        u_int32_t wp:11;
-        u_int32_t rp:11;
-        u_int32_t fl:1;
-        u_int32_t reserved:9;
+        uint32_t wp:11;
+        uint32_t rp:11;
+        uint32_t fl:1;
+        uint32_t reserved:9;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_rx_status_reg {
     struct {
-        u_int32_t wp:11;
-        u_int32_t rp:11;
-        u_int32_t fl:1;
-        u_int32_t reserved:8;
-        u_int32_t valid:1;
+        uint32_t wp:11;
+        uint32_t rp:11;
+        uint32_t fl:1;
+        uint32_t reserved:8;
+        uint32_t valid:1;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_status_reg {
     struct {
-        u_int32_t reset:1;
-        u_int32_t reserved:31;
+        uint32_t reset:1;
+        uint32_t reserved:31;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_tx_status_reg {
     struct {
-        u_int32_t wp:9;
-        u_int32_t rp:9;
-        u_int32_t fl:1;
-        u_int32_t reserved:13;
+        uint32_t wp:9;
+        uint32_t rp:9;
+        uint32_t fl:1;
+        uint32_t reserved:13;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_rx_status_reg {
     struct {
-        u_int32_t wp:8;
-        u_int32_t rp:8;
-        u_int32_t fl:1;
-        u_int32_t reserved:15;
+        uint32_t wp:8;
+        uint32_t rp:8;
+        uint32_t fl:1;
+        uint32_t reserved:15;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 struct pgpci_board;
 
 struct radio_module_data {
 
-	u_int32_t type;
+	uint32_t type;
 
 	struct pgpci_board *board;
 	size_t position;
@@ -766,8 +766,8 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
 	size_t len;
 	char buf[256];
 
-	u_int32_t chan;
-	u_int32_t value;
+	uint32_t chan;
+	uint32_t value;
 	struct radio_module_data *mod;
 	struct pgpci_board_private_data *private_data = filp->private_data;
 	struct pgpci_board *board = private_data->board;
