@@ -466,7 +466,7 @@ void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
 	}
 }
 
-static void polygator_power_on_worker(unsigned long addr)
+static void polygator_power_on_worker(struct timer_list *timer)
 {
 	int id = 0;
 	struct polygator_power_on_entry *entry = NULL, *iter;
@@ -488,7 +488,6 @@ static void polygator_power_on_worker(unsigned long addr)
 		list_del(&entry->list);
 		mod_timer(&polygator_power_on_timer, jiffies + HZ);
 	}
-
 
 	spin_unlock(&polygator_power_on_list_lock);
 
@@ -654,12 +653,9 @@ static int __init polygator_init(void)
 		goto polygator_init_error;
 	}
 
-	// init power on functionality
-	spin_lock_init(&polygator_power_on_list_lock);
-	init_timer(&polygator_power_on_timer);
-	polygator_power_on_timer.function = polygator_power_on_worker;
-	polygator_power_on_timer.data = 0;
-	polygator_power_on_timer.expires = jiffies + 1;
+    /* init power on functionality */
+    spin_lock_init(&polygator_power_on_list_lock);
+    timer_setup(&polygator_power_on_timer, polygator_power_on_worker, 0);
 
 	verbose("loaded successfull\n");
 	return 0;

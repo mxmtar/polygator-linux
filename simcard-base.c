@@ -1,4 +1,3 @@
-
 #include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
@@ -71,12 +70,12 @@ MODULE_PARM_DESC(simcard_major, "Major number for Polygator Linux simcard module
 static struct simcard_device *simcard_device_list[SIMCARD_DEVICE_MAXCOUNT];
 static DEFINE_MUTEX(simcard_device_list_lock);
 
-static void simcard_poll_proc(unsigned long addr)
+static void simcard_poll_proc(struct timer_list *timer)
 {
     uint8_t buf[256];
     size_t len = 0;
     int reset = 0;
-    struct simcard_device *sim = (struct simcard_device *)addr;
+    struct simcard_device *sim = container_of(timer, struct simcard_device, poll_timer);
 
     spin_lock(&sim->lock);
 
@@ -146,10 +145,7 @@ static int simcard_open(struct inode *inode, struct file *filp)
     spin_unlock_bh(&sim->lock);
 
     if (!usage) {
-        sim->poll_timer.function = simcard_poll_proc;
-        sim->poll_timer.data = (unsigned long)sim;
-        sim->poll_timer.expires = jiffies + 1;
-        add_timer(&sim->poll_timer);
+        mod_timer(&sim->poll_timer, jiffies + 1);
     }
 
     return 0;
@@ -399,7 +395,7 @@ struct simcard_device *simcard_device_register(struct module *owner,
     init_waitqueue_head(&sim->poll_waitq);
     init_waitqueue_head(&sim->read_waitq);
     init_waitqueue_head(&sim->write_waitq);
-    init_timer(&sim->poll_timer);
+    timer_setup(&sim->poll_timer, simcard_poll_proc, 0);
     sim->poll = 0;
 
     // set callback data pointer
@@ -516,7 +512,7 @@ struct simcard_device *simcard_device_register2(struct module *owner,
     init_waitqueue_head(&sim->poll_waitq);
     init_waitqueue_head(&sim->read_waitq);
     init_waitqueue_head(&sim->write_waitq);
-    init_timer(&sim->poll_timer);
+    timer_setup(&sim->poll_timer, simcard_poll_proc, 0);
     sim->poll = 0;
 
     // set callback data pointer
