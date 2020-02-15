@@ -1,6 +1,8 @@
 *~
 *.d
 *.o
+*.cmd
+*.mod
 *.o.cmd
 *.ko
 *.ko.cmd
