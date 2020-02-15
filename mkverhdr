@@ -11,11 +11,8 @@ if [ -n "${1}" ]; then
 		VERSION=unknown
 	fi
 
-	printf "/******************************************************************************/\n"
-	printf "/* version.h                                                                  */\n"
-	printf "/******************************************************************************/\n"
-	printf "/* this file is automaticaly generated                                        */\n"
-	printf "/******************************************************************************/\n"
+	printf "\n"
+	printf "/* this file is generated automaticaly */\n"
 	printf "\n"
 	printf "#ifndef __${1}_VERSION_H__\n"
 	printf "#define __${1}_VERSION_H__\n"
@@ -24,9 +21,6 @@ if [ -n "${1}" ]; then
 	printf "\n"
 	printf "#endif //__${1}_VERSION_H__\n"
 	printf "\n"
-	printf "/******************************************************************************/\n"
-	printf "/* end of version.h                                                           */\n"
-	printf "/******************************************************************************/\n"
 
 else
 	echo "usage: mkverhdr prefix [version]"
