@@ -33,39 +33,11 @@ static int simcard_major = 0;
 module_param(simcard_major, int, 0);
 MODULE_PARM_DESC(simcard_major, "Major number for Polygator Linux simcard module");
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-    #define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, NULL, "%s", _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-    #define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
-    #define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_device_create(_class, NULL, _devt, _device, _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-    #define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_device_create(_class, _devt, _device, _name)
-#else
-    #define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_simple_device_add(_class, _devt, _device, _name)
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-    #define CLASS_DEV_DESTROY(_class, _devt) device_destroy(_class, _devt)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-    #define CLASS_DEV_DESTROY(_class, _devt) class_device_destroy(_class, _devt)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9)
-    #define CLASS_DEV_DESTROY(_class, _devt) class_simple_device_remove(_devt)
-#else
-    #define CLASS_DEV_DESTROY(_class, _devt) class_simple_device_remove(_class, _devt)
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-    static struct class *simcard_class = NULL;
-#else
-    static struct class_simple *simcard_class = NULL;
-    #define class_create(_a, _b) class_simple_create(_a, _b)
-    #define class_destroy(_a) class_simple_destroy(_a)
-#endif
-
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "simcard-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "simcard-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
+
+static struct class *simcard_class = 0;
 
 static struct simcard_device *simcard_device_list[SIMCARD_DEVICE_MAXCOUNT];
 static DEFINE_MUTEX(simcard_device_list_lock);
@@ -363,7 +335,6 @@ struct simcard_device *simcard_device_register(struct module *owner,
     struct simcard_device *sim;
     size_t i;
     int rc;
-    char devname[64];
     int devno = 0;
     int slot_alloc = 0;
 
@@ -451,9 +422,8 @@ struct simcard_device *simcard_device_register(struct module *owner,
         log(KERN_ERR, "cdev_add() error=%d\n", rc);
         goto simcard_device_register_error;
     }
-    snprintf(devname, sizeof(devname), "polygator!sim%d", MINOR(sim->devno));
-    if (!(sim->device = CLASS_DEV_CREATE(simcard_class, devno, NULL, devname))) {
-        log(KERN_ERR, "class_dev_create() error\n");
+    if (!(sim->device = device_create(simcard_class, 0, devno, 0, "polygator!sim%d", MINOR(sim->devno)))) {
+        log(KERN_ERR, "device_create() failed\n");
         goto simcard_device_register_error;
     }
 
@@ -464,13 +434,13 @@ struct simcard_device *simcard_device_register(struct module *owner,
 simcard_device_register_error:
     if (slot_alloc) {
         mutex_lock(&simcard_device_list_lock);
-        simcard_device_list[MINOR(sim->devno)] = NULL;
+        simcard_device_list[MINOR(sim->devno)] = 0;
         mutex_unlock(&simcard_device_list_lock);
     }
     if (sim) {
         kfree(sim);
     }
-    return NULL;
+    return 0;
 }
 EXPORT_SYMBOL(simcard_device_register);
 
@@ -480,7 +450,6 @@ struct simcard_device *simcard_device_register2(struct module *owner,
     struct simcard_device *sim;
     size_t i;
     int rc;
-    char devname[64];
     int devno = 0;
     int slot_alloc = 0;
 
@@ -526,9 +495,8 @@ struct simcard_device *simcard_device_register2(struct module *owner,
         log(KERN_ERR, "cdev_add() error=%d\n", rc);
         goto simcard_device_register_error;
     }
-    snprintf(devname, sizeof(devname), "polygator!sim%d", MINOR(sim->devno));
-    if (!(sim->device = CLASS_DEV_CREATE(simcard_class, devno, NULL, devname))) {
-        log(KERN_ERR, "class_dev_create() error\n");
+    if (!(sim->device = device_create(simcard_class, 0, devno, 0, "polygator!sim%d", MINOR(sim->devno)))) {
+        log(KERN_ERR, "device_create() failed\n");
         goto simcard_device_register_error;
     }
 
@@ -539,23 +507,23 @@ struct simcard_device *simcard_device_register2(struct module *owner,
 simcard_device_register_error:
     if (slot_alloc) {
         mutex_lock(&simcard_device_list_lock);
-        simcard_device_list[MINOR(sim->devno)] = NULL;
+        simcard_device_list[MINOR(sim->devno)] = 0;
         mutex_unlock(&simcard_device_list_lock);
     }
     if (sim) {
         kfree(sim);
     }
-    return NULL;
+    return 0;
 }
 EXPORT_SYMBOL(simcard_device_register2);
 
 void simcard_device_unregister(struct simcard_device *sim)
 {
-    CLASS_DEV_DESTROY(simcard_class, sim->devno);
+    device_destroy(simcard_class, sim->devno);
     cdev_del(&sim->cdev);
 
     mutex_lock(&simcard_device_list_lock);
-    simcard_device_list[MINOR(sim->devno)] = NULL;
+    simcard_device_list[MINOR(sim->devno)] = 0;
     mutex_unlock(&simcard_device_list_lock);
 
     kfree(sim);
@@ -603,7 +571,7 @@ static int __init simcard_init(void)
 
     // Init simcard device list
     for (i = 0; i < SIMCARD_DEVICE_MAXCOUNT; ++i) {
-        simcard_device_list[i] = NULL;
+        simcard_device_list[i] = 0;
     }
 
     // Registering simcard device class

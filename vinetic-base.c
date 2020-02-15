@@ -39,36 +39,6 @@ EXPORT_SYMBOL(vinetic_device_unregister);
 EXPORT_SYMBOL(vinetic_rtp_channel_register);
 EXPORT_SYMBOL(vinetic_rtp_channel_unregister);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, NULL, "%s", _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_device_create(_class, NULL, _devt, _device, _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_device_create(_class, _devt, _device, _name)
-#else
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_simple_device_add(_class, _devt, _device, _name)
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	#define CLASS_DEV_DESTROY(_class, _devt) device_destroy(_class, _devt)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-	#define CLASS_DEV_DESTROY(_class, _devt) class_device_destroy(_class, _devt)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9)
-	#define CLASS_DEV_DESTROY(_class, _devt) class_simple_device_remove(_devt)
-#else
-	#define CLASS_DEV_DESTROY(_class, _devt) class_simple_device_remove(_class, _devt)
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-	static struct class *vinetic_class = NULL;
-#else
-	static struct class_simple *vinetic_class = NULL;
-	#define class_create(_a, _b) class_simple_create(_a, _b)
-	#define class_destroy(_a) class_simple_destroy(_a)
-#endif
-
 #define verbose(_fmt, _args...) printk(KERN_INFO "[polygator-%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "vinetic-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "vinetic-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
@@ -82,6 +52,8 @@ struct vinetic_device {
 	u_int32_t type;
 	void *data;
 };
+
+static struct class *vinetic_class = 0;
 
 static struct vinetic_device vinetic_device_list[VINETIC_DEVICE_MAXCOUNT];
 static DEFINE_MUTEX(vinetic_device_list_lock);
@@ -660,7 +632,6 @@ static int vinetic_release(struct inode *inode, struct file *filp)
 	spin_lock_bh(&vin->lock);
 	usage = --vin->usage;
 	if (!usage) {
-// 		vin->filp = NULL;
 		vin->poll = 0;
 	}
 	spin_unlock_bh(&vin->lock);
@@ -1710,7 +1681,6 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	struct vinetic *vin;
 	size_t i;
 	int rc;
-	char devname[64];
 	int devno = 0;
 	int slot_alloc = 0;
 
@@ -1752,7 +1722,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 	
 	// init vinetic private data
 	for (i = 0; i < 8; i++) {
-		vin->rtp_channels[i] = NULL;
+		vin->rtp_channels[i] = 0;
 	}
 	spin_lock_init(&vin->lock);
 	init_waitqueue_head(&vin->free_cbox_waitq);
@@ -1814,8 +1784,7 @@ struct vinetic *vinetic_device_register(struct module *owner,
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_device_register_error;
 	}
-	snprintf(devname, sizeof(devname), "polygator!%s", name);
-	if (!(vin->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname))) {
+	if (!(vin->device = device_create(vinetic_class, 0, devno, 0, "polygator!%s", name))) {
 		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
 		goto vinetic_device_register_error;
 	}
@@ -1830,7 +1799,7 @@ vinetic_device_register_error:
 				vinetic_device_list[i].name[0] = '\0';
 				vinetic_device_list[i].devno = 0;
 				vinetic_device_list[i].type = VINETIC_DEVTYPE_UNKNOWN;
-				vinetic_device_list[i].data = NULL;
+				vinetic_device_list[i].data = 0;
 				break;
 			}
 		}
@@ -1839,14 +1808,14 @@ vinetic_device_register_error:
 	if (vin) {
 		kfree(vin);
 	}
-	return NULL;
+	return 0;
 }
 
 void vinetic_device_unregister(struct vinetic *vin)
 {
 	size_t i;
 
-	CLASS_DEV_DESTROY(vinetic_class, vin->devno);
+	device_destroy(vinetic_class, vin->devno);
 	cdev_del(&vin->cdev);
 
 	mutex_lock(&vinetic_device_list_lock);
@@ -1857,7 +1826,7 @@ void vinetic_device_unregister(struct vinetic *vin)
 			vinetic_device_list[i].name[0] = '\0';
 			vinetic_device_list[i].devno = 0;
 			vinetic_device_list[i].type = VINETIC_DEVTYPE_UNKNOWN;
-			vinetic_device_list[i].data = NULL;
+			vinetic_device_list[i].data = 0;
 			break;
 		}
 	}
@@ -1874,7 +1843,6 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 	struct vinetic_rtp_channel *rtp;
 	size_t i;
 	int rc;
-	char devname[64];
 	int devno = 0;
 	int slot_alloc = 0;
 
@@ -1954,8 +1922,7 @@ struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, c
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto vinetic_rtp_channel_register_error;
 	}
-	snprintf(devname, sizeof(devname), "polygator!%s", name);
-	if (!(rtp->device = CLASS_DEV_CREATE(vinetic_class, devno, NULL, devname))) {
+	if (!(rtp->device = device_create(vinetic_class, 0, devno, 0, "polygator!%s", name))) {
 		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
 		goto vinetic_rtp_channel_register_error;
 	}
@@ -1970,7 +1937,7 @@ vinetic_rtp_channel_register_error:
 				vinetic_device_list[i].name[0] = '\0';
 				vinetic_device_list[i].devno = 0;
 				vinetic_device_list[i].type = VINETIC_DEVTYPE_UNKNOWN;
-				vinetic_device_list[i].data = NULL;
+				vinetic_device_list[i].data = 0;
 				break;
 			}
 		}
@@ -1979,7 +1946,7 @@ vinetic_rtp_channel_register_error:
 	if (rtp) {
 		kfree(rtp);
 	}
-	return NULL;
+	return 0;
 }
 
 void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
@@ -1990,7 +1957,7 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 		return;
 	}
 
-	CLASS_DEV_DESTROY(vinetic_class, rtp->devno);
+	device_destroy(vinetic_class, rtp->devno);
 	cdev_del(&rtp->cdev);
 
 	mutex_lock(&vinetic_device_list_lock);
@@ -2001,14 +1968,14 @@ void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp)
 			vinetic_device_list[i].name[0] = '\0';
 			vinetic_device_list[i].devno = 0;
 			vinetic_device_list[i].type = VINETIC_DEVTYPE_UNKNOWN;
-			vinetic_device_list[i].data = NULL;
+			vinetic_device_list[i].data = 0;
 			break;
 		}
 	}
 	mutex_unlock(&vinetic_device_list_lock);
 
 	spin_lock_bh(&rtp->vinetic->lock);
-	rtp->vinetic->rtp_channels[rtp->index] = NULL;
+	rtp->vinetic->rtp_channels[rtp->index] = 0;
 	spin_unlock_bh(&rtp->vinetic->lock);
 
 	kfree(rtp);
@@ -2028,7 +1995,7 @@ static int __init vinetic_init(void)
 		vinetic_device_list[i].name[0] = '\0';
 		vinetic_device_list[i].devno = 0;
 		vinetic_device_list[i].type = VINETIC_DEVTYPE_UNKNOWN;
-		vinetic_device_list[i].data = NULL;
+		vinetic_device_list[i].data = 0;
 	}
 
 	// Registering vinetic device class

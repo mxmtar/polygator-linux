@@ -39,22 +39,14 @@ enum {
 struct polygator_board {
 	char name[POLYGATOR_BRDNAME_MAXLEN];
 	int devno;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	struct device *device;
-#else
-	struct class_device *device;
-#endif
 	struct cdev *cdev;
 };
 
 struct polygator_tty_device {
 	int tty_minor;
 	struct tty_operations *tty_ops;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	struct device *device;
-#else
-	struct class_device *device;
-#endif
 	void *data;
 };
 
@@ -63,11 +55,7 @@ void polygator_board_unregister(struct polygator_board *brd);
 
 char *polygator_print_gsm_module_type(int type);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_port *port, struct tty_operations *tty_ops);
-#else
-struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_operations *tty_ops);
-#endif
 void polygator_tty_device_unregister(struct polygator_tty_device *ptd);
 
 int polygator_power_on_schedule(void (* callback)(void *data), void *data);

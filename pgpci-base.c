@@ -30,10 +30,6 @@
 
 #include "polygator/simcard-base.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36) // 2,6,30 - orig
-#define TTY_PORT
-#endif
-
 MODULE_AUTHOR("Maksym Tarasevych <mxmtar@gmail.com>");
 MODULE_DESCRIPTION("Linux module for Polygator Gateway PCI boards");
 MODULE_LICENSE("GPL");
@@ -167,12 +163,7 @@ struct radio_module_data {
 	int at_port_select;
 	spinlock_t at_lock;
 	int at_no_buf;
-#ifdef TTY_PORT
 	struct tty_port at_port;
-#else
-	size_t at_count;
-	struct tty_struct *at_tty;
-#endif
 	struct timer_list uart_poll_timer;
 	u_int8_t uart_rx_buf[2048];
 };
@@ -215,11 +206,7 @@ static void k32pci_tty_at_close(struct tty_struct *tty, struct file *filp);
 static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count);
 static int k32pci_tty_at_write_room(struct tty_struct *tty);
 static int k32pci_tty_at_chars_in_buffer(struct tty_struct *tty);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios);
-#else
-static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct termios *old_termios);
-#endif
 static void k32pci_tty_at_flush_buffer(struct tty_struct *tty);
 static void k32pci_tty_at_hangup(struct tty_struct *tty);
 
@@ -233,7 +220,7 @@ static struct tty_operations k32pci_tty_at_ops = {
 	.flush_buffer = k32pci_tty_at_flush_buffer,
 	.hangup = k32pci_tty_at_hangup,
 };
-#ifdef TTY_PORT
+
 static int k32pci_tty_at_port_carrier_raised(struct tty_port *port);
 static void k32pci_tty_at_port_dtr_rts(struct tty_port *port, int onoff);
 static int k32pci_tty_at_port_activate(struct tty_port *tport, struct tty_struct *tty);
@@ -245,7 +232,7 @@ static const struct tty_port_operations k32pci_tty_at_port_ops = {
 	.activate = k32pci_tty_at_port_activate,
 	.shutdown = k32pci_tty_at_port_shutdown,
 };
-#endif
+
 static struct pci_device_id pgpci_board_id_table[] = {
 	{ PCI_DEVICE(0xdead, 0xbede), .driver_data = 1, },
 	{ 0, },
@@ -525,9 +512,6 @@ static void pgpci_power_on(void *cbdata)
 static void pgpci_uart_poll(struct timer_list *timer)
 {
 	size_t i, len, chunk;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
-	struct tty_struct *tty;
-#endif
 	union radio_module_uart_rx_status_reg rx_status;
 
     struct radio_module_data *mod = container_of(timer, struct radio_module_data, uart_poll_timer);
@@ -575,21 +559,8 @@ static void pgpci_uart_poll(struct timer_list *timer)
 	}
 
 	if (len) {
-#ifdef TTY_PORT
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
 		tty_insert_flip_string(&mod->at_port, mod->uart_rx_buf, len);
 		tty_flip_buffer_push(&mod->at_port);
-#else
-		tty = tty_port_tty_get(&mod->at_port);
-		tty_insert_flip_string(tty, mod->uart_rx_buf, len);
-		tty_flip_buffer_push(tty);
-		tty_kref_put(tty);
-#endif
-#else
-		tty = mod->at_tty;
-		tty_insert_flip_string(tty, mod->uart_rx_buf, len);
-		tty_flip_buffer_push(tty);
-#endif
 	}
 
 	mod_timer(&mod->uart_poll_timer, jiffies + 1);
@@ -665,13 +636,8 @@ static int pgpci_board_open(struct inode *inode, struct file *filp)
 														\r\n\t\t\t}\
 														\r\n\t\t}",
 							i ? "," : "",
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 							board->tty_at_channels[i]?dev_name(board->tty_at_channels[i]->device):"unknown",
 							board->simcard_channels[i]?dev_name(board->simcard_channels[i]->device):"unknown",
-#else
-							board->tty_at_channels[i]?board->tty_at_channels[i]->device->class_id:"unknown",
-							board->simcard_channels[i]?board->simcard_channels[i]->device->class_id:"unknown",
-#endif
 							polygator_print_gsm_module_type(mod->type),
 							mod->control_data.bits.power_supply ? "on" : "off",
 							mod->control_data.bits.power_key ? "on" : "off",
@@ -687,27 +653,13 @@ static int pgpci_board_open(struct inode *inode, struct file *filp)
 		if (board->vinetics[i]) {
 			len += sprintf(private_data->buff + len, "%s\r\n\t\t{\r\n\t\t\t\"path\": \"%s\",",
 							i ? "," : "",
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-							dev_name(board->vinetics[i]->device)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							dev_name(board->vinetics[i]->device)
-#else
-							board->vinetics[i]->device->class_id
-#endif
-							);
+							dev_name(board->vinetics[i]->device));
 			len += sprintf(private_data->buff + len, "\r\n\t\t\t\"rtp\": [");
 			for (j = 0; j < 4; ++j) {
 				if (board->vinetics[i]->rtp_channels[j])
 					len += sprintf(private_data->buff + len, "%s\r\n\t\t\t\t{\r\n\t\t\t\t\t\"path\": \"%s\"\r\n\t\t\t\t}",
 								j ? "," : "",
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-								dev_name(board->vinetics[i]->rtp_channels[j]->device)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-								dev_name(board->vinetics[i]->rtp_channels[j]->device)
-#else
-								board->vinetics[i]->rtp_channels[j]->device->class_id
-#endif
-								);
+								dev_name(board->vinetics[i]->rtp_channels[j]->device));
 			}
 			len += sprintf(private_data->buff + len, "\r\n\t\t\t]");
 		}
@@ -891,11 +843,7 @@ static struct file_operations pgpci_board_fops = {
 	.write   = pgpci_board_write,
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 static int pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
-#else
-static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
-#endif
 {
 	int rc = -1;
 	size_t i, j;
@@ -945,11 +893,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 	board->control_data.bits.reset = 0;
 	iowrite32(board->control_data.full, board->iomem_base + 0x00080);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "board-pgpci-%02x%02x%x", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
-#else
-	snprintf(devname, POLYGATOR_BRDNAME_MAXLEN, "bp%02x%02x%x", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
-#endif
 
 	if (!(board->pg_board = polygator_board_register(&pdev->dev, THIS_MODULE, devname, &board->cdev, &pgpci_board_fops))) {
 		rc = -1;
@@ -957,11 +901,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 	}
 
 	for (j = 0; j < 2; ++j) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j);
-#else
-		snprintf(devname, VINETIC_DEVNAME_MAXLEN, "v%02x%02x%x%lu", board->serial_number, board->position, (unsigned long int)j);
-#endif
 		if (!(board->vinetics[j] = vinetic_device_register(THIS_MODULE, devname, ((uintptr_t)board->iomem_base) + (board->position * 0x4000),
 													(j)?(k32pci_vin_reset_1):(k32pci_vin_reset_0),
 													(j)?(k32pci_vin_is_not_ready_1):(k32pci_vin_is_not_ready_0),
@@ -974,11 +914,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 			goto pgpci_board_probe_error;
 		}
 		for (i = 0; i < 4; ++i) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu-rtp%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j, (unsigned long int)i);
-#else
-			snprintf(devname, VINETIC_DEVNAME_MAXLEN, "r%02x%02x%x%lu%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j, (unsigned long int)i);
-#endif
 			if (!vinetic_rtp_channel_register(THIS_MODULE, devname, board->vinetics[j], i)) {
 				rc = -1;
 				goto pgpci_board_probe_error;
@@ -1029,25 +965,18 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
         iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((i & 7) << 2));
 
         timer_setup(&mod->uart_poll_timer, pgpci_uart_poll, 0);
-
         spin_lock_init(&mod->at_lock);
-#ifdef TTY_PORT
         tty_port_init(&mod->at_port);
         mod->at_port.ops = &k32pci_tty_at_port_ops;
         mod->at_port.close_delay = 0;
         mod->at_port.closing_wait = ASYNC_CLOSING_WAIT_NONE;
-#endif
         board->gsm_modules[i] = mod;
     }
 
     // register polygator tty at device
     for (i = 0; i < 8; ++i) {
         if ((mod = board->gsm_modules[i])) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
             if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &k32pci_tty_at_ops))) {
-#else
-            if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &k32pci_tty_at_ops))) {
-#endif
                 log(KERN_ERR, "can't register polygator tty device\n");
                 rc = -1;
                 goto pgpci_board_probe_error;
@@ -1156,11 +1085,7 @@ pgpci_board_probe_error:
 	return rc;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 static void pgpci_board_remove(struct pci_dev *pdev)
-#else
-static void __devexit pgpci_board_remove(struct pci_dev *pdev)
-#endif
 {
 	size_t i, j;
 
@@ -1216,17 +1141,7 @@ static int k32pci_tty_at_open(struct tty_struct *tty, struct file *filp)
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
 
-#ifdef TTY_PORT
 	return tty_port_open(&mod->at_port, tty, filp);
-#else
-	spin_lock_bh(&mod->at_lock);
-	if (!mod->at_count++) {
-		mod_timer(&mod->uart_poll_timer, jiffies + 1);
-		mod->at_tty = tty;
-	}
-	spin_unlock_bh(&mod->at_lock);
-	return 0;
-#endif
 }
 
 static void k32pci_tty_at_close(struct tty_struct *tty, struct file *filp)
@@ -1234,17 +1149,7 @@ static void k32pci_tty_at_close(struct tty_struct *tty, struct file *filp)
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
 
-#ifdef TTY_PORT
 	tty_port_close(&mod->at_port, tty, filp);
-#else
-	spin_lock_bh(&mod->at_lock);
-	if (!--mod->at_count) {
-		del_timer_sync(&mod->uart_poll_timer);
-		mod->at_tty = NULL;
-	}
-	spin_unlock_bh(&mod->at_lock);
-#endif
-	return;
 }
 
 static int k32pci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, int count)
@@ -1342,21 +1247,13 @@ static int k32pci_tty_at_chars_in_buffer(struct tty_struct *tty)
 	return res;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
-#else
-static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct termios *old_termios)
-#endif
 {
 	speed_t baudrate;
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
 	struct pgpci_board *board = mod->board;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 	struct ktermios *termios = &tty->termios;
-#else
-	struct termios *termios = &tty->termios;
-#endif
 
 	baudrate = tty_get_baud_rate(tty);
 
@@ -1386,9 +1283,8 @@ static void k32pci_tty_at_set_termios(struct tty_struct *tty, struct termios *ol
 
 	spin_unlock_bh(&mod->at_lock);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
+
 	tty_encode_baud_rate(tty, baudrate, baudrate);
-#endif
 }
 
 static void k32pci_tty_at_flush_buffer(struct tty_struct *tty)
@@ -1410,13 +1306,11 @@ static void k32pci_tty_at_flush_buffer(struct tty_struct *tty)
 
 static void k32pci_tty_at_hangup(struct tty_struct *tty)
 {
-#ifdef TTY_PORT
 	struct polygator_tty_device *ptd = tty->driver_data;
 	struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
 	tty_port_hangup(&mod->at_port);
-#endif
 }
-#ifdef TTY_PORT
+
 static int k32pci_tty_at_port_carrier_raised(struct tty_port *port)
 {
 	return 1;
@@ -1441,7 +1335,7 @@ static void k32pci_tty_at_port_shutdown(struct tty_port *port)
 
 	del_timer_sync(&mod->uart_poll_timer);
 }
-#endif
+
 static int __init pgpci_init(void)
 {
 	int rc;

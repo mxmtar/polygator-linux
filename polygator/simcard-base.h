@@ -54,11 +54,7 @@ struct simcard_device {
     uint8_t read_data[256];
     size_t read_data_length;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
     struct device *device;
-#else
-    struct class_device *device;
-#endif
     struct cdev cdev;
 };
 

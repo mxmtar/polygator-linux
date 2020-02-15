@@ -44,36 +44,6 @@ EXPORT_SYMBOL(polygator_tty_device_unregister);
 EXPORT_SYMBOL(polygator_power_on_schedule);
 EXPORT_SYMBOL(polygator_power_on_cancel);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, NULL, "%s", _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) device_create(_class, _device, _devt, _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_device_create(_class, NULL, _devt, _device, _name)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_device_create(_class, _devt, _device, _name)
-#else
-	#define CLASS_DEV_CREATE(_class, _devt, _device, _name) class_simple_device_add(_class, _devt, _device, _name)
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	#define CLASS_DEV_DESTROY(_class, _devt) device_destroy(_class, _devt)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-	#define CLASS_DEV_DESTROY(_class, _devt) class_device_destroy(_class, _devt)
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9)
-	#define CLASS_DEV_DESTROY(_class, _devt) class_simple_device_remove(_devt)
-#else
-	#define CLASS_DEV_DESTROY(_class, _devt) class_simple_device_remove(_class, _devt)
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-	static struct class *polygator_class = NULL;
-#else
-	static struct class_simple *polygator_class = NULL;
-	#define class_create(_a, _b) class_simple_create(_a, _b)
-	#define class_destroy(_a) class_simple_destroy(_a)
-#endif
-
 #define verbose(_fmt, _args...) printk(KERN_INFO "[%s] " _fmt, THIS_MODULE->name, ## _args)
 #define log(_level, _fmt, _args...) printk(_level "[%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "polygator-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "polygator-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
@@ -82,6 +52,8 @@ struct subsystem_private_data {
 	char buff[0x8000];
 	size_t length;
 };
+
+static struct class *polygator_class = 0;
 
 static struct cdev polygator_subsystem_cdev;
 
@@ -98,7 +70,7 @@ static LIST_HEAD(polygator_power_on_list);
 static spinlock_t polygator_power_on_list_lock;
 static struct timer_list polygator_power_on_timer;
 
-static struct tty_driver *polygator_tty_device_driver = NULL;
+static struct tty_driver *polygator_tty_device_driver = 0;
 
 struct polygator_tty_device *polygator_tty_device_list[POLYGATOR_TTY_DEVICE_MAXCOUNT];
 static DEFINE_MUTEX(polygator_tty_device_list_lock);
@@ -108,11 +80,7 @@ static void polygator_tty_device_close(struct tty_struct *tty, struct file *filp
 static int polygator_tty_device_write(struct tty_struct *tty, const unsigned char *buf, int count);
 static int polygator_tty_device_write_room(struct tty_struct *tty);
 static int polygator_tty_device_chars_in_buffer(struct tty_struct *tty);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 static void polygator_tty_device_set_termios(struct tty_struct *tty, struct ktermios *old_termios);
-#else
-static void polygator_tty_device_set_termios(struct tty_struct *tty, struct termios *old_termios);
-#endif
 static void polygator_tty_device_flush_buffer(struct tty_struct *tty);
 static void polygator_tty_device_hangup(struct tty_struct *tty);
 
@@ -130,7 +98,7 @@ static struct tty_operations polygator_tty_device_ops = {
 static int polygator_tty_device_open(struct tty_struct *tty, struct file *filp)
 {
 	size_t i;
-	struct polygator_tty_device *ptd = NULL;
+	struct polygator_tty_device *ptd = 0;
 
 	if (mutex_lock_interruptible(&polygator_tty_device_list_lock)) {
 		return -ERESTARTSYS;
@@ -179,11 +147,7 @@ static int polygator_tty_device_chars_in_buffer(struct tty_struct *tty)
 	return ptd->tty_ops->chars_in_buffer(tty);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 static void polygator_tty_device_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
-#else
-static void polygator_tty_device_set_termios(struct tty_struct *tty, struct termios *old_termios)
-#endif
 {
 	struct polygator_tty_device *ptd = tty->driver_data;
 	ptd->tty_ops->set_termios(tty, old_termios);
@@ -226,12 +190,7 @@ static int polygator_subsystem_open(struct inode *inode, struct file *filp)
 			len += sprintf(private_data->buff + len, "%s\r\n\t\t{\r\n\t\t\t\"driver\": \"%s\",\r\n\t\t\t\"path\": \"%s\"\r\n\t\t}",
 							i ? "," : "",
 							polygator_board_list[i]->cdev->owner->name,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-							dev_name(polygator_board_list[i]->device)
-#else
-							polygator_board_list[i]->device->class_id
-#endif
-						  );
+							dev_name(polygator_board_list[i]->device));
 		}
 	}
 	len += sprintf(private_data->buff + len, "\r\n\t]");
@@ -304,7 +263,6 @@ char *polygator_print_gsm_module_type(int type)
 struct polygator_board *polygator_board_register(struct device *device, struct module *owner, char *name, struct cdev *cdev, struct file_operations *fops)
 {
 	size_t i;
-	char brdname[POLYGATOR_BRDNAME_MAXLEN];
 	int rc;
 	int devno = -1;
 	struct polygator_board *brd;
@@ -349,8 +307,8 @@ struct polygator_board *polygator_board_register(struct device *device, struct m
 		log(KERN_ERR, "\"%s\" - cdev_add() error=%d\n", name, rc);
 		goto polygator_board_register_error;
 	}
-	snprintf(brdname, POLYGATOR_BRDNAME_MAXLEN, "polygator!%s", name);
-	if (!(brd->device = CLASS_DEV_CREATE(polygator_class, devno, device, brdname))) {
+
+	if (!(brd->device = device_create(polygator_class, device, devno, 0, "polygator!%s", name))) {
 		log(KERN_ERR, "\"%s\" - class_dev_create() error\n", name);
 		goto polygator_board_register_error;
 	}
@@ -363,7 +321,7 @@ polygator_board_register_error:
 		mutex_lock(&polygator_board_list_lock);
 		for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 			if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, name))) {
-				polygator_board_list[i] = NULL;
+				polygator_board_list[i] = 0;
 				break;
 			}
 		}
@@ -372,14 +330,14 @@ polygator_board_register_error:
 	if (brd) {
 		kfree(brd);
 	}
-	return NULL;
+	return 0;
 }
 
 void polygator_board_unregister(struct polygator_board *brd)
 {
 	size_t i;
 
-	CLASS_DEV_DESTROY(polygator_class, brd->devno);
+	device_destroy(polygator_class, brd->devno);
 	cdev_del(brd->cdev);
 
 	verbose("\"%s\" unregistered\n", brd->name);
@@ -389,18 +347,14 @@ void polygator_board_unregister(struct polygator_board *brd)
 	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
 		if ((polygator_board_list[i]) && (!strcmp(polygator_board_list[i]->name, brd->name))) {
 			kfree(polygator_board_list[i]);
-			polygator_board_list[i] = NULL;
+			polygator_board_list[i] = 0;
 			break;
 		}
 	}
 	mutex_unlock(&polygator_board_list_lock);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_port *port, struct tty_operations *tty_ops)
-#else
-struct polygator_tty_device *polygator_tty_device_register(struct device *device, void *data, struct tty_operations *tty_ops)
-#endif
 {
 	size_t i;
 	struct polygator_tty_device *ptd;
@@ -429,11 +383,7 @@ struct polygator_tty_device *polygator_tty_device_register(struct device *device
 	ptd->tty_ops = tty_ops;
 
 	// register device on sysfs
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
 	ptd->device = tty_port_register_device(port, polygator_tty_device_driver, ptd->tty_minor, device);
-#else
-	ptd->device = tty_register_device(polygator_tty_device_driver, ptd->tty_minor, device);
-#endif
 	if (IS_ERR(ptd->device)) {
 		log(KERN_ERR, "can't register tty device\n");
 		goto polygator_tty_device_register_error;
@@ -447,12 +397,12 @@ polygator_tty_device_register_error:
 	if (ptd) {
 		if (ptd->tty_minor >= 0) {
 			mutex_lock(&polygator_tty_device_list_lock);
-			polygator_tty_device_list[ptd->tty_minor] = NULL;
+			polygator_tty_device_list[ptd->tty_minor] = 0;
 			mutex_unlock(&polygator_tty_device_list_lock);
 		}
 		kfree(ptd);
 	}
-	return NULL;
+	return 0;
 }
 
 void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
@@ -460,7 +410,7 @@ void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
 	if (ptd) {
 		tty_unregister_device(polygator_tty_device_driver, ptd->tty_minor);
 		mutex_lock(&polygator_tty_device_list_lock);
-		polygator_tty_device_list[ptd->tty_minor] = NULL;
+		polygator_tty_device_list[ptd->tty_minor] = 0;
 		mutex_unlock(&polygator_tty_device_list_lock);
 		kfree(ptd);
 	}
@@ -469,7 +419,7 @@ void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
 static void polygator_power_on_worker(struct timer_list *timer)
 {
 	int id = 0;
-	struct polygator_power_on_entry *entry = NULL, *iter;
+	struct polygator_power_on_entry *entry = 0, *iter;
 
 	spin_lock(&polygator_power_on_list_lock);
 
@@ -542,7 +492,7 @@ polygator_power_on_schedule_end:
 
 void polygator_power_on_cancel(int id)
 {
-	struct polygator_power_on_entry *entry = NULL, *iter;
+	struct polygator_power_on_entry *entry = 0, *iter;
 
 	spin_lock_bh(&polygator_power_on_list_lock);
 
@@ -572,18 +522,14 @@ static int __init polygator_init(void)
 {
 	size_t i;
 	dev_t devno;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
-	struct device *device = NULL;
-#else
-	struct class_device *device = NULL;
-#endif
+	struct device *device = 0;
 	int polygator_subsystem_major_reg = 0;
 	int rc = -1;
 
 	verbose("loading version \"%s\"...\n", POLYGATOR_LINUX_VERSION);
 
 	for (i = 0; i < POLYGATOR_BOARD_MAXCOUNT; i++) {
-		polygator_board_list[i] = NULL;
+		polygator_board_list[i] = 0;
 	}
 
 	// Registering polygator device class
@@ -614,7 +560,7 @@ static int __init polygator_init(void)
 		log(KERN_ERR, "\"subsystem\" - cdev_add() error=%d\n", rc);
 		goto polygator_init_error;
 	}
-	if (!(device = CLASS_DEV_CREATE(polygator_class, devno, NULL, "polygator!subsystem"))) {
+	if (!(device = device_create(polygator_class, 0, devno, 0, "polygator!subsystem"))) {
 		log(KERN_ERR, "\"subsystem\" - class_dev_create() error\n");
 		goto polygator_init_error;
 	}
@@ -638,10 +584,8 @@ static int __init polygator_init(void)
 	polygator_tty_device_driver->init_termios.c_iflag &= ~ICRNL;
 	polygator_tty_device_driver->init_termios.c_cflag = B115200 | CS8 | HUPCL | CLOCAL | CREAD;
 	polygator_tty_device_driver->init_termios.c_lflag &= ~ECHO;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	polygator_tty_device_driver->init_termios.c_ispeed = 115200;
 	polygator_tty_device_driver->init_termios.c_ospeed = 115200;
-#endif
 	polygator_tty_device_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;
 	tty_set_operations(polygator_tty_device_driver, &polygator_tty_device_ops);
 
@@ -649,7 +593,7 @@ static int __init polygator_init(void)
 		log(KERN_ERR, "can't register polygator_tty_device driver: rc=%d\n", rc);
 		// release allocated tty driver environment
 		put_tty_driver(polygator_tty_device_driver);
-		polygator_tty_device_driver = NULL;
+		polygator_tty_device_driver = 0;
 		goto polygator_init_error;
 	}
 
@@ -666,7 +610,7 @@ polygator_init_error:
 		put_tty_driver(polygator_tty_device_driver);
 	}
 	if (device) {
-		CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
+		device_destroy(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
 	}
 	if (polygator_subsystem_major_reg) {
 		unregister_chrdev_region(MKDEV(polygator_subsystem_major, 0), POLYGATOR_DEVICE_MAXCOUNT);
@@ -686,7 +630,7 @@ static void __exit polygator_exit(void)
 	tty_unregister_driver(polygator_tty_device_driver);
 	put_tty_driver(polygator_tty_device_driver);
 	// Destroy subsystem device
-	CLASS_DEV_DESTROY(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
+	device_destroy(polygator_class, MKDEV(polygator_subsystem_major, POLYGATOR_DEVICE_MAXCOUNT - 1));
 	cdev_del(&polygator_subsystem_cdev);
 	// Unregister char device region
 	unregister_chrdev_region(MKDEV(polygator_subsystem_major, 0), POLYGATOR_DEVICE_MAXCOUNT);

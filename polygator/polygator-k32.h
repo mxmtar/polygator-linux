@@ -9,10 +9,6 @@
 
 #include "polygator-types.h"
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36) // 2,6,30 - orig
-#define TTY_PORT
-#endif
-
 union k32_gsm_mod_status_reg {
 	struct {
 		u_int8_t at_rdy_rd:1;
@@ -81,13 +77,7 @@ struct k32_gsm_module_data {
 	int at_port_select;
 	spinlock_t at_lock;
 	int at_no_buf;
-#ifdef TTY_PORT
 	struct tty_port at_port;
-#else
-	size_t at_count;
-	struct tty_struct *at_tty;
-	unsigned char *at_xmit_buf;
-#endif
 	size_t at_xmit_count;
 	size_t at_xmit_head;
 	size_t at_xmit_tail;
