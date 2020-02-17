@@ -440,6 +440,10 @@ static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
     struct pgpci_board *board = mod->board;
     size_t res, i, chunk;
 
+    if (0 == mod->control_data.bits.power_supply) {
+        return 0;
+    }
+
     smart_card_rx_status.full = ioread32(board->iomem_base + 0x002e0 + ((mod->position & 7) << 2));
 
     if (smart_card_rx_status.bits.fl) {
@@ -798,6 +802,15 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
 		} else {
 			res = -ENODEV;
 		}
+    } else if (sscanf(cmd, "channel[%u].smart_card.reset(%u)", &chan, &value) == 2) {
+        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+            mod = board->gsm_modules[chan];
+            mod->smart_card_control_data.bits.reset = value;
+            iowrite32(mod->smart_card_control_data.full, board->iomem_base + 0x00160 + ((mod->position & 7) << 2));
+            res = len;
+        } else {
+            res = -ENODEV;
+        }
     } else if (sscanf(cmd, "channel[%u].smart_card.enable(%u)", &chan, &value) == 2) {
         if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
