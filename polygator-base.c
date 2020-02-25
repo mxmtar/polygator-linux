@@ -1,18 +1,14 @@
-/******************************************************************************/
-/* polygator-base.c                                                           */
-/******************************************************************************/
-
+#include <linux/delay.h>
 #include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-// #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/slab.h>
-// #include <linux/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
@@ -708,7 +704,3 @@ static void __exit polygator_exit(void)
 
 module_init(polygator_init);
 module_exit(polygator_exit);
-
-/******************************************************************************/
-/* end of polygator-base.c                                                    */
-/******************************************************************************/

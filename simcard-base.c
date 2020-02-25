@@ -1,8 +1,7 @@
-
+#include <linux/delay.h>
 #include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/mm.h>

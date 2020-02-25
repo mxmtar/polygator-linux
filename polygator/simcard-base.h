@@ -1,5 +1,5 @@
-#ifndef __SIMCARD_BASE_H__
-#define __SIMCARD_BASE_H__
+#ifndef SIMCARD_BASE_H
+#define SIMCARD_BASE_H
 
 #include <linux/cdev.h>
 #include <linux/poll.h>
@@ -83,4 +83,4 @@ void simcard_device_set_write2(struct simcard_device *sim, size_t (* write2)(voi
 void simcard_device_set_read2(struct simcard_device *sim, size_t (* read2)(void *cbdata, uint8_t *data, size_t length));
 void simcard_device_set_etu_count(struct simcard_device *sim, void (* set_etu_count)(void *cbdata, uint32_t etu));
 
-#endif //__SIMCARD_BASE_H__
+#endif /* SIMCARD_BASE_H */

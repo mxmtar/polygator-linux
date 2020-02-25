@@ -1,9 +1,5 @@
-/******************************************************************************/
-/* polygator-base.h                                                           */
-/******************************************************************************/
-
-#ifndef __POLYGATOR_BASE_H__
-#define __POLYGATOR_BASE_H__
+#ifndef POLYGATOR_BASE_H
+#define POLYGATOR_BASE_H
 
 #define POLYGATOR_DEVICE_MAXCOUNT 256
 #define POLYGATOR_DEVNAME_MAXLEN 256
@@ -75,8 +71,4 @@ void polygator_power_on_cancel(int id);
 
 #endif //__KERNEL__
 
-#endif //__POLYGATOR_BASE_H__
-
-/******************************************************************************/
-/* end of polygator-base.h                                                    */
-/******************************************************************************/
+#endif /* POLYGATOR_BASE_H */

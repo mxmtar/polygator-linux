@@ -1,9 +1,5 @@
-/******************************************************************************/
-/* vinetic-base.h                                                             */
-/******************************************************************************/
-
-#ifndef __VINETIC_BASE_H__
-#define __VINETIC_BASE_H__
+#ifndef VINETIC_BASE_H
+#define VINETIC_BASE_H
 
 #include <linux/cdev.h>
 #include <linux/poll.h>
@@ -123,8 +119,4 @@ void vinetic_device_unregister(struct vinetic *vin);
 struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, char *name, struct vinetic *vin, int index);
 void vinetic_rtp_channel_unregister(struct vinetic_rtp_channel *rtp);
 
-#endif //__VINETIC_BASE_H__
-
-/******************************************************************************/
-/* end of vinetic-base.h                                                      */
-/******************************************************************************/
+#endif /* VINETIC_BASE_H */

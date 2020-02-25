@@ -1,9 +1,5 @@
-/******************************************************************************/
-/* polygator-types.h                                                          */
-/******************************************************************************/
-
-#ifndef __POLYGATOR_TYPES_H__
-#define __POLYGATOR_TYPES_H__
+#ifndef POLYGATOR_TYPES_H
+#define POLYGATOR_TYPES_H
 
 #ifdef __KERNEL__
 #include <linux/types.h>
@@ -15,8 +11,4 @@
 typedef unsigned long int uintptr_t;
 #endif
 
-#endif //__POLYGATOR_TYPES_H__
-
-/******************************************************************************/
-/* end of polygator-types.h                                                   */
-/******************************************************************************/
+#endif /* POLYGATOR_TYPES_H */

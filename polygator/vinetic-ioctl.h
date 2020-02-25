@@ -1,9 +1,5 @@
-/******************************************************************************/
-/* vinetic-ioctl.h                                                            */
-/******************************************************************************/
-
-#ifndef __VINETIC_IOCTL_H__
-#define __VINETIC_IOCTL_H__
+#ifndef VINETIC_IOCTL_H
+#define VINETIC_IOCTL_H
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
@@ -20,8 +16,4 @@
 #define VINETIC_SET_POLL		_IOW(VINETIC_MAGIC, 8, int)
 #define VINETIC_RESET_STATUS	_IO(VINETIC_MAGIC, 9)
 
-#endif //__VINETIC_IOCTL_H__
-
-/******************************************************************************/
-/* end of vinetic-ioctl.h                                                     */
-/******************************************************************************/
+#endif /* VINETIC_IOCTL_H */

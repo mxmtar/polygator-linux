@@ -1,6 +1,5 @@
-
-#ifndef __SIMCARD_DEF_H__
-#define __SIMCARD_DEF_H__
+#ifndef SIMCARD_DEF_H
+#define SIMCARD_DEF_H
 
 #ifdef __KERNEL__
 #include <linux/types.h>
@@ -29,4 +28,4 @@ struct simcard_data {
 	} __attribute__((packed)) body;
 } __attribute__((packed));
 
-#endif //__SIMCARD_DEF_H__
+#endif /* SIMCARD_DEF_H */

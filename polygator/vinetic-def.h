@@ -1,9 +1,5 @@
-/******************************************************************************/
-/* vinetic-def.h                                                              */
-/******************************************************************************/
-
-#ifndef __VINETIC_DEF_H__
-#define __VINETIC_DEF_H__
+#ifndef VINETIC_DEF_H
+#define VINETIC_DEF_H
 
 #ifdef __KERNEL__
 #include <linux/types.h>
@@ -2108,8 +2104,4 @@ struct vin_cmd_eop_crc_dram {
 	uint16_t crc;
 } __attribute__((packed));
 
-#endif //__VINETIC_DEF_H__
-
-/******************************************************************************/
-/* end of vinetic-def.h                                                       */
-/******************************************************************************/
+#endif /* VINETIC_DEF_H */

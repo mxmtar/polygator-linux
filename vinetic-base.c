@@ -1,11 +1,7 @@
-/******************************************************************************/
-/* vinetic-base.c                                                             */
-/******************************************************************************/
-
+#include <linux/delay.h>
 #include <linux/kobject.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -2082,7 +2078,3 @@ static void __exit vinetic_exit(void)
 
 module_init(vinetic_init);
 module_exit(vinetic_exit);
-
-/******************************************************************************/
-/* end of vinetic-base.c                                                      */
-/******************************************************************************/
