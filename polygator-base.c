@@ -468,7 +468,11 @@ void polygator_tty_device_unregister(struct polygator_tty_device *ptd)
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+static void polygator_power_on_worker(struct timer_list *timer)
+#else
 static void polygator_power_on_worker(unsigned long addr)
+#endif
 {
 	int id = 0;
 	struct polygator_power_on_entry *entry = NULL, *iter;
@@ -656,12 +660,15 @@ static int __init polygator_init(void)
 		goto polygator_init_error;
 	}
 
-	// init power on functionality
-	spin_lock_init(&polygator_power_on_list_lock);
-	init_timer(&polygator_power_on_timer);
-	polygator_power_on_timer.function = polygator_power_on_worker;
-	polygator_power_on_timer.data = 0;
-	polygator_power_on_timer.expires = jiffies + 1;
+    /* init power on functionality */
+    spin_lock_init(&polygator_power_on_list_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+    timer_setup(&polygator_power_on_timer, polygator_power_on_worker, 0);
+#else
+    init_timer(&polygator_power_on_timer);
+    polygator_power_on_timer.function = polygator_power_on_worker;
+    polygator_power_on_timer.data = 0;
+#endif
 
 	verbose("loaded successfull\n");
 	return 0;
