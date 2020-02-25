@@ -1,10 +1,15 @@
 *~
+*.d
 *.o
+*.cmd
 *.o.cmd
+*.o.ur-safe
 *.ko
 *.ko.cmd
+*.mod
 *.mod.c
 .tmp_versions
+.cache.mk
 Module.symvers
 modules.order
 Makefile.*
