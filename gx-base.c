@@ -82,28 +82,28 @@ MODULE_LICENSE("GPL");
 
 union gx_gsm_mod_status_reg {
 	struct {
-		u_int8_t status:1;
-		u_int8_t at_rd_empty:1;
-		u_int8_t at_wr_empty:1;
-		u_int8_t sim_rd_empty:1;
-		u_int8_t sim_wr_empty:1;
-		u_int8_t sim_rst_req:1;
-		u_int8_t imei_rd_empty:1;
-		u_int8_t imei_wr_empty:1;
+		uint8_t status:1;
+		uint8_t at_rd_empty:1;
+		uint8_t at_wr_empty:1;
+		uint8_t sim_rd_empty:1;
+		uint8_t sim_wr_empty:1;
+		uint8_t sim_rst_req:1;
+		uint8_t imei_rd_empty:1;
+		uint8_t imei_wr_empty:1;
 	} __attribute__((packed)) bits;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 union gx_gsm_mod_control_reg {
 	struct {
-		u_int8_t vbat:1; // 1 - disable, 0 - enable
-		u_int8_t pkey:1;
-		u_int8_t gap:2;
-		u_int8_t cn_speed_a:1;
-		u_int8_t cn_speed_b:1;
-		u_int8_t at_baudrate:2;
+		uint8_t vbat:1; // 1 - disable, 0 - enable
+		uint8_t pkey:1;
+		uint8_t gap:2;
+		uint8_t cn_speed_a:1;
+		uint8_t cn_speed_b:1;
+		uint8_t at_baudrate:2;
 	} __attribute__((packed)) bits;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 struct gx_board;
@@ -117,17 +117,17 @@ struct gx_gsm_module_data {
 
 	uintptr_t cbdata;
 
-	void (* set_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* get_status)(uintptr_t cbdata, size_t pos);
-	void (* at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* at_read)(uintptr_t cbdata, size_t pos);
-	void (* at_write_sim16)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int16_t (* at_read_sim16)(uintptr_t cbdata, size_t pos);
-	void (* sim_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* sim_read)(uintptr_t cbdata, size_t pos);
+	void (* set_control)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* get_status)(uintptr_t cbdata, size_t pos);
+	void (* at_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* at_read)(uintptr_t cbdata, size_t pos);
+	void (* at_write_sim16)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint16_t (* at_read_sim16)(uintptr_t cbdata, size_t pos);
+	void (* sim_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* sim_read)(uintptr_t cbdata, size_t pos);
 	void (* sim_do_after_reset)(uintptr_t cbdata, size_t pos);
-	void (* imei_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* imei_read)(uintptr_t cbdata, size_t pos);
+	void (* imei_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* imei_read)(uintptr_t cbdata, size_t pos);
 
 	// at section
 	int at_port_select;
@@ -152,14 +152,14 @@ struct gx_board {
 
 	char name[POLYGATOR_BRDNAME_MAXLEN];
 
-	u_int32_t type;
-	u_int32_t pos;
+	uint32_t type;
+	uint32_t pos;
 
-	u_int8_t rom[256];
+	uint8_t rom[256];
 	size_t romsize;
 
-	u_int32_t ver_maj;
-	u_int32_t ver_min;
+	uint32_t ver_maj;
+	uint32_t ver_min;
 
 	int sim16;
 
@@ -232,7 +232,7 @@ static void gx_vinetic_reset(uintptr_t cbdata)
 	mdelay(2);
 // 	log(KERN_INFO, "%08lx\n", addr);
 }
-static void gx_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
+static void gx_vinetic_write_nwd(uintptr_t cbdata, uint16_t value)
 {
 	uintptr_t addr;
 
@@ -241,7 +241,7 @@ static void gx_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
 	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 }
-static void gx_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
+static void gx_vinetic_write_eom(uintptr_t cbdata, uint16_t value)
 {
 	uintptr_t addr;
 
@@ -250,9 +250,9 @@ static void gx_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
 	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 }
-static u_int16_t gx_vinetic_read_nwd(uintptr_t cbdata)
+static uint16_t gx_vinetic_read_nwd(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)gx_cs3_base_ptr;
@@ -261,9 +261,9 @@ static u_int16_t gx_vinetic_read_nwd(uintptr_t cbdata)
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 	return value;
 }
-static u_int16_t gx_vinetic_read_eom(uintptr_t cbdata)
+static uint16_t gx_vinetic_read_eom(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)gx_cs3_base_ptr;
@@ -298,9 +298,9 @@ static size_t gx_vinetic_is_not_ready(uintptr_t cbdata)
 	return reg_ir.bits.rdyq;
 }
 #endif
-static u_int16_t gx_vinetic_read_dia(uintptr_t cbdata)
+static uint16_t gx_vinetic_read_dia(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)gx_cs3_base_ptr;
@@ -309,21 +309,21 @@ static u_int16_t gx_vinetic_read_dia(uintptr_t cbdata)
 	return value;
 }
 
-static void gx_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_set_control(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	iowrite8(reg, addr);
 }
 
-static u_int8_t gx_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
+static uint8_t gx_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	return ioread8(addr);
 }
 
-static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
@@ -333,9 +333,9 @@ static void gx_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(0, addr + 0x3c);
 }
 
-static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
+static uint8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
-	u_int8_t data;
+	uint8_t data;
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	data =  ioread8(addr + 0x10);
@@ -346,7 +346,7 @@ static u_int8_t gx_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 	return data;
 }
 
-static void gx_gsm_mod_at_write_sim16(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_at_write_sim16(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
@@ -356,9 +356,9 @@ static void gx_gsm_mod_at_write_sim16(uintptr_t cbdata, size_t pos, u_int8_t reg
 	iowrite8(0, addr + 0x3c);
 }
 
-static u_int16_t gx_gsm_mod_at_read_sim16(uintptr_t cbdata, size_t pos)
+static uint16_t gx_gsm_mod_at_read_sim16(uintptr_t cbdata, size_t pos)
 {
-	u_int16_t data;
+	uint16_t data;
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	data = ioread16(addr + 0x10);
@@ -371,7 +371,7 @@ static u_int16_t gx_gsm_mod_at_read_sim16(uintptr_t cbdata, size_t pos)
 	return data;
 }
 
-static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
@@ -381,9 +381,9 @@ static void gx_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(0, addr + 0x38);
 }
 
-static u_int8_t gx_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
+static uint8_t gx_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
-	u_int8_t data;
+	uint8_t data;
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	data =  ioread8(addr + 0x20);
@@ -403,28 +403,28 @@ static void gx_gsm_mod_sim_do_after_reset(uintptr_t cbdata, size_t pos)
 	iowrite8(0x10, addr + 0x34);
 }
 
-static void gx_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void gx_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	iowrite8(reg, addr + 0x30);
 }
 
-static u_int8_t gx_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
+static uint8_t gx_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 
 	return ioread8(addr + 0x30);
 }
 
-static u_int8_t gx_sim_read(void *data)
+static uint8_t gx_sim_read(void *data)
 {
 	struct gx_gsm_module_data *mod = (struct gx_gsm_module_data *)data;
 
 	return mod->sim_read(mod->cbdata, mod->pos_on_board);
 }
 
-static void gx_sim_write(void *data, u_int8_t value)
+static void gx_sim_write(void *data, uint8_t value)
 {
 	struct gx_gsm_module_data *mod = (struct gx_gsm_module_data *)data;
 
@@ -496,7 +496,7 @@ static void gx_tty_at_poll(unsigned long addr)
 {
 	char buff[512];
 	size_t len;
-	u_int16_t rd16;
+	uint16_t rd16;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
 	struct tty_struct *tty;
 #endif
@@ -743,12 +743,12 @@ static ssize_t gx_board_write(struct file *filp, const char __user *buff, size_t
 	char cmd[256];
 	size_t len;
 
-	u_int32_t at_chan;
-	u_int32_t pwr_state;
-	u_int32_t key_state;
-	u_int32_t baudrate;
-	u_int32_t serial;
-	u_int32_t value;
+	uint32_t at_chan;
+	uint32_t pwr_state;
+	uint32_t key_state;
+	uint32_t baudrate;
+	uint32_t serial;
+	uint32_t value;
 	struct gx_gsm_module_data *mod;
 	struct gx_board_private_data *private_data = filp->private_data;
 

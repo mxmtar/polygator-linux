@@ -55,28 +55,28 @@ MODULE_LICENSE("GPL");
 
 union g20_gsm_mod_status_reg {
 	struct {
-		u_int8_t status:1;
-		u_int8_t at_rd_empty:1;
-		u_int8_t at_wr_empty:1;
-		u_int8_t sim_rd_empty:1;
-		u_int8_t sim_wr_empty:1;
-		u_int8_t sim_rst_req:1;
-		u_int8_t imei_rd_empty:1;
-		u_int8_t imei_wr_empty:1;
+		uint8_t status:1;
+		uint8_t at_rd_empty:1;
+		uint8_t at_wr_empty:1;
+		uint8_t sim_rd_empty:1;
+		uint8_t sim_wr_empty:1;
+		uint8_t sim_rst_req:1;
+		uint8_t imei_rd_empty:1;
+		uint8_t imei_wr_empty:1;
 	} __attribute__((packed)) bits;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 union g20_gsm_mod_control_reg {
 	struct {
-		u_int8_t vbat:1; // 1 - disable, 0 - enable
-		u_int8_t pkey:1;
-		u_int8_t gap:2;
-		u_int8_t cn_speed_a:1;
-		u_int8_t cn_speed_b:1;
-		u_int8_t at_baudrate:2;
+		uint8_t vbat:1; // 1 - disable, 0 - enable
+		uint8_t pkey:1;
+		uint8_t gap:2;
+		uint8_t cn_speed_a:1;
+		uint8_t cn_speed_b:1;
+		uint8_t at_baudrate:2;
 	} __attribute__((packed)) bits;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 struct g20_gsm_module_data {
@@ -88,14 +88,14 @@ struct g20_gsm_module_data {
 
 	uintptr_t cbdata;
 
-	void (* set_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* get_status)(uintptr_t cbdata, size_t pos);
-	void (* at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* at_read)(uintptr_t cbdata, size_t pos);
-	void (* sim_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* sim_read)(uintptr_t cbdata, size_t pos);
-	void (* imei_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* imei_read)(uintptr_t cbdata, size_t pos);
+	void (* set_control)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* get_status)(uintptr_t cbdata, size_t pos);
+	void (* at_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* at_read)(uintptr_t cbdata, size_t pos);
+	void (* sim_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* sim_read)(uintptr_t cbdata, size_t pos);
+	void (* imei_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* imei_read)(uintptr_t cbdata, size_t pos);
 
 	// at section
 	int at_port_select;
@@ -120,10 +120,10 @@ struct g20_board {
 	struct polygator_board *pg_board;
 	struct cdev cdev;
 
-	u_int8_t rom[256];
+	uint8_t rom[256];
 	size_t romsize;
-	u_int32_t sn;
-	u_int16_t type;
+	uint32_t sn;
+	uint16_t type;
 
 	struct vinetic *vinetic;
 
@@ -197,7 +197,7 @@ static void g20_vinetic_reset(uintptr_t cbdata)
 	mdelay(2);
 // 	log(KERN_INFO, "%08lx\n", addr);
 }
-static void g20_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
+static void g20_vinetic_write_nwd(uintptr_t cbdata, uint16_t value)
 {
 	uintptr_t addr;
 
@@ -206,7 +206,7 @@ static void g20_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
 	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 }
-static void g20_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
+static void g20_vinetic_write_eom(uintptr_t cbdata, uint16_t value)
 {
 	uintptr_t addr;
 
@@ -215,9 +215,9 @@ static void g20_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
 	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 }
-static u_int16_t g20_vinetic_read_nwd(uintptr_t cbdata)
+static uint16_t g20_vinetic_read_nwd(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)g20_cs4_base_ptr;
@@ -226,9 +226,9 @@ static u_int16_t g20_vinetic_read_nwd(uintptr_t cbdata)
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 	return value;
 }
-static u_int16_t g20_vinetic_read_eom(uintptr_t cbdata)
+static uint16_t g20_vinetic_read_eom(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)g20_cs4_base_ptr;
@@ -263,9 +263,9 @@ static size_t g20_vinetic_is_not_ready(uintptr_t cbdata)
 	return reg_ir.bits.rdyq;
 }
 #endif
-static u_int16_t g20_vinetic_read_dia(uintptr_t cbdata)
+static uint16_t g20_vinetic_read_dia(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)g20_cs4_base_ptr;
@@ -274,21 +274,21 @@ static u_int16_t g20_vinetic_read_dia(uintptr_t cbdata)
 	return value;
 }
 
-static void g20_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void g20_gsm_mod_set_control(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	uintptr_t addr = cbdata;
 
 	iowrite8(reg, addr);
 }
 
-static u_int8_t g20_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
+static uint8_t g20_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
 
 	return ioread8(addr);
 }
 
-static void g20_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void g20_gsm_mod_at_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	uintptr_t addr = cbdata;
 
@@ -297,7 +297,7 @@ static void g20_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(reg, addr);
 }
 
-static u_int8_t g20_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
+static uint8_t g20_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
 
@@ -306,7 +306,7 @@ static u_int8_t g20_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 	return ioread8(addr);
 }
 
-static void g20_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void g20_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	uintptr_t addr = cbdata;
 
@@ -315,7 +315,7 @@ static void g20_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(reg, addr);
 }
 
-static u_int8_t g20_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
+static uint8_t g20_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
 
@@ -324,7 +324,7 @@ static u_int8_t g20_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 	return ioread8(addr);
 }
 
-static void g20_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void g20_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	uintptr_t addr = cbdata;
 
@@ -333,7 +333,7 @@ static void g20_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(reg, addr);
 }
 
-static u_int8_t g20_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
+static uint8_t g20_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
 
@@ -342,14 +342,14 @@ static u_int8_t g20_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
 	return ioread8(addr);
 }
 
-static u_int8_t g20_sim_read(void *data)
+static uint8_t g20_sim_read(void *data)
 {
 	struct g20_gsm_module_data *mod = (struct g20_gsm_module_data *)data;
 
 	return mod->sim_read(mod->cbdata, mod->pos_on_board);
 }
 
-static void g20_sim_write(void *data, u_int8_t value)
+static void g20_sim_write(void *data, uint8_t value)
 {
 	struct g20_gsm_module_data *mod = (struct g20_gsm_module_data *)data;
 
@@ -624,11 +624,11 @@ static ssize_t g20_board_write(struct file *filp, const char __user *buff, size_
 	char cmd[256];
 	size_t len;
 
-	u_int32_t at_chan;
-	u_int32_t pwr_state;
-	u_int32_t key_state;
-	u_int32_t baudrate;
-	u_int32_t serial;
+	uint32_t at_chan;
+	uint32_t pwr_state;
+	uint32_t key_state;
+	uint32_t baudrate;
+	uint32_t serial;
 	struct g20_gsm_module_data *mod;
 	struct g20_board_private_data *private_data = filp->private_data;
 

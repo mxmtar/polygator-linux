@@ -19,13 +19,13 @@ enum {
 
 struct simcard_data {
 	struct simcard_data_header {
-		u_int32_t type;
-		u_int32_t length;
+		uint32_t type;
+		uint32_t length;
 	} __attribute__((packed)) header;
 	union {
-		u_int8_t data[SIMCARD_MAX_DATA_LENGTH];
-		u_int32_t reset;
-		u_int32_t speed;
+		uint8_t data[SIMCARD_MAX_DATA_LENGTH];
+		uint32_t reset;
+		uint32_t speed;
 	} __attribute__((packed)) body;
 } __attribute__((packed));
 

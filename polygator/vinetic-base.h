@@ -52,7 +52,7 @@ struct vinetic {
 	wait_queue_head_t free_cbox_waitq;
 	wait_queue_head_t seek_cbox_waitq;
 	wait_queue_head_t read_cbox_waitq;
-	u_int16_t read_cbox_data[32];
+	uint16_t read_cbox_data[32];
 	size_t read_cbox_length;
 
 	struct vinetic_rtp_channel *rtp_channels[8];
@@ -60,11 +60,11 @@ struct vinetic {
 	uintptr_t cbdata;
 	void (* reset)(uintptr_t cbdata);
 	size_t (* is_not_ready)(uintptr_t cbdata);
-	void (* write_nwd)(uintptr_t cbdata, u_int16_t value);
-	void (* write_eom)(uintptr_t cbdata, u_int16_t value);
-	u_int16_t (* read_nwd)(uintptr_t cbdata);
-	u_int16_t (* read_eom)(uintptr_t cbdata);
-	u_int16_t (* read_dia)(uintptr_t cbdata);
+	void (* write_nwd)(uintptr_t cbdata, uint16_t value);
+	void (* write_eom)(uintptr_t cbdata, uint16_t value);
+	uint16_t (* read_nwd)(uintptr_t cbdata);
+	uint16_t (* read_eom)(uintptr_t cbdata);
+	uint16_t (* read_dia)(uintptr_t cbdata);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
 	struct device *device;
 #else
@@ -74,7 +74,7 @@ struct vinetic {
 };
 
 struct rtp_packet_slot {
-	u_int16_t data[256];
+	uint16_t data[256];
 	size_t length;
 };
 
@@ -113,11 +113,11 @@ struct vinetic *vinetic_device_register(struct module *owner,
 							uintptr_t cbdata,
 							void (* reset)(uintptr_t cbdata),
 							size_t (* is_not_ready)(uintptr_t cbdata),
-							void (* write_nwd)(uintptr_t cbdata, u_int16_t value),
-							void (* write_eom)(uintptr_t cbdata, u_int16_t value),
-							u_int16_t (* read_nwd)(uintptr_t cbdata),
-							u_int16_t (* read_eom)(uintptr_t cbdata),
-							u_int16_t (* read_dia)(uintptr_t cbdata));
+							void (* write_nwd)(uintptr_t cbdata, uint16_t value),
+							void (* write_eom)(uintptr_t cbdata, uint16_t value),
+							uint16_t (* read_nwd)(uintptr_t cbdata),
+							uint16_t (* read_eom)(uintptr_t cbdata),
+							uint16_t (* read_dia)(uintptr_t cbdata));
 void vinetic_device_unregister(struct vinetic *vin);
 
 struct vinetic_rtp_channel *vinetic_rtp_channel_register(struct module *owner, char *name, struct vinetic *vin, int index);

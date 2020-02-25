@@ -80,8 +80,8 @@ struct fxs_board {
 
 	char name[POLYGATOR_BRDNAME_MAXLEN];
 
-	u_int16_t type;
-	u_int16_t version;
+	uint16_t type;
+	uint16_t version;
 
 	size_t vinetics_count;
 	struct vinetic *vinetics[2];
@@ -106,22 +106,22 @@ static void fxs_vinetic_reset(uintptr_t cbdata)
 	iowrite16(1, cbdata + 0x1e);
 	mdelay(2);
 }
-static void fxs_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
+static void fxs_vinetic_write_nwd(uintptr_t cbdata, uint16_t value)
 {
 	iowrite16(value, cbdata + 0x04);
 }
-static void fxs_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
+static void fxs_vinetic_write_eom(uintptr_t cbdata, uint16_t value)
 {
 	iowrite16(value, cbdata + 0x06);
 }
-static u_int16_t fxs_vinetic_read_nwd(uintptr_t cbdata)
+static uint16_t fxs_vinetic_read_nwd(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x04);
+	uint16_t value = ioread16(cbdata + 0x04);
 	return value;
 }
-static u_int16_t fxs_vinetic_read_eom(uintptr_t cbdata)
+static uint16_t fxs_vinetic_read_eom(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x06);
+	uint16_t value = ioread16(cbdata + 0x06);
 	return value;
 }
 static size_t fxs_vinetic_is_not_ready(uintptr_t cbdata)
@@ -130,9 +130,9 @@ static size_t fxs_vinetic_is_not_ready(uintptr_t cbdata)
 	reg_ir.full = ioread16(cbdata + 0x18);
 	return reg_ir.bits.rdyq;
 }
-static u_int16_t fxs_vinetic_read_dia(uintptr_t cbdata)
+static uint16_t fxs_vinetic_read_dia(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x18);
+	uint16_t value = ioread16(cbdata + 0x18);
 	return value;
 }
 

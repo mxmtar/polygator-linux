@@ -47,34 +47,34 @@ MODULE_LICENSE("GPL");
 
 union board_control_reg {
     struct {
-        u_int32_t reset:1;
-        u_int32_t reserved:31;
+        uint32_t reset:1;
+        uint32_t reserved:31;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_control_reg {
 	struct {
-		u_int32_t power_supply:1;
-		u_int32_t power_key:1;
-		u_int32_t reset:1;
-		u_int32_t reserved:29;
+		uint32_t power_supply:1;
+		uint32_t power_key:1;
+		uint32_t reset:1;
+		uint32_t reserved:29;
 	} __attribute__((packed)) bits;
-	u_int32_t full;
+	uint32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_control_reg {
 	struct {
-		u_int32_t reset:1;
-		u_int32_t csize:2;
-		u_int32_t cstopb:1;
-		u_int32_t parenb:1;
-		u_int32_t parodd:1;
-		u_int32_t cread:1;
-		u_int32_t reserved:24;
-		u_int32_t loopback:1;
+		uint32_t reset:1;
+		uint32_t csize:2;
+		uint32_t cstopb:1;
+		uint32_t parenb:1;
+		uint32_t parodd:1;
+		uint32_t cread:1;
+		uint32_t reserved:24;
+		uint32_t loopback:1;
 	} __attribute__((packed)) bits;
-	u_int32_t full;
+	uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_control_reg {
@@ -91,66 +91,66 @@ union radio_module_smart_card_control_reg {
 
 union radio_module_status_reg {
 	struct {
-		u_int32_t status:1;
-		u_int32_t reserved:31;
+		uint32_t status:1;
+		uint32_t reserved:31;
 	} __attribute__((packed)) bits;
-	u_int32_t full;
+	uint32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_tx_status_reg {
     struct {
-        u_int32_t wp:11;
-        u_int32_t rp:11;
-        u_int32_t fl:1;
-        u_int32_t reserved:9;
+        uint32_t wp:11;
+        uint32_t rp:11;
+        uint32_t fl:1;
+        uint32_t reserved:9;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_uart_rx_status_reg {
     struct {
-        u_int32_t wp:11;
-        u_int32_t rp:11;
-        u_int32_t fl:1;
-        u_int32_t reserved:8;
-        u_int32_t valid:1;
+        uint32_t wp:11;
+        uint32_t rp:11;
+        uint32_t fl:1;
+        uint32_t reserved:8;
+        uint32_t valid:1;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_status_reg {
     struct {
-        u_int32_t reset:1;
-        u_int32_t reserved:31;
+        uint32_t reset:1;
+        uint32_t reserved:31;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_tx_status_reg {
     struct {
-        u_int32_t wp:9;
-        u_int32_t rp:9;
-        u_int32_t fl:1;
-        u_int32_t reserved:13;
+        uint32_t wp:9;
+        uint32_t rp:9;
+        uint32_t fl:1;
+        uint32_t reserved:13;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 union radio_module_smart_card_rx_status_reg {
     struct {
-        u_int32_t wp:8;
-        u_int32_t rp:8;
-        u_int32_t fl:1;
-        u_int32_t reserved:15;
+        uint32_t wp:8;
+        uint32_t rp:8;
+        uint32_t fl:1;
+        uint32_t reserved:15;
     } __attribute__((packed)) bits;
-    u_int32_t full;
+    uint32_t full;
 } __attribute__((packed));
 
 struct pgpci_board;
 
 struct radio_module_data {
 
-	u_int32_t type;
+	uint32_t type;
 
 	struct pgpci_board *board;
 	size_t position;
@@ -175,7 +175,7 @@ struct radio_module_data {
 	struct tty_struct *at_tty;
 #endif
 	struct timer_list uart_poll_timer;
-	u_int8_t uart_rx_buf[2048];
+	uint8_t uart_rx_buf[2048];
 };
 
 struct pgpci_board {
@@ -269,33 +269,33 @@ static void k32pci_vin_reset_1(uintptr_t cbdata)
 	iowrite8(1, addr + 0x2000 + 0x11c00);
 }
 
-static void k32pci_vin_write_nwd_0(uintptr_t cbdata, u_int16_t value)
+static void k32pci_vin_write_nwd_0(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x0000  + 0x080);
 }
 
-static void k32pci_vin_write_nwd_1(uintptr_t cbdata, u_int16_t value)
+static void k32pci_vin_write_nwd_1(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x2000 + 0x080);
 }
 
-static void k32pci_vin_write_eom_0(uintptr_t cbdata, u_int16_t value)
+static void k32pci_vin_write_eom_0(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x0000 + 0x0c0);
 }
 
-static void k32pci_vin_write_eom_1(uintptr_t cbdata, u_int16_t value)
+static void k32pci_vin_write_eom_1(uintptr_t cbdata, uint16_t value)
 {
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16(value, addr + 0x11000 + 0x2000 + 0x0c0);
 }
 
-static u_int16_t k32pci_vin_read_nwd_0(uintptr_t cbdata)
+static uint16_t k32pci_vin_read_nwd_0(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x0000 + 0x080) & 0xffff, addr + 0x0000 + 0x11700);
 	udelay(1);
@@ -303,9 +303,9 @@ static u_int16_t k32pci_vin_read_nwd_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_nwd_1(uintptr_t cbdata)
+static uint16_t k32pci_vin_read_nwd_1(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x2000 + 0x080) & 0xffff, addr + 0x2000 + 0x11700);
 	udelay(1);
@@ -313,9 +313,9 @@ static u_int16_t k32pci_vin_read_nwd_1(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_eom_0(uintptr_t cbdata)
+static uint16_t k32pci_vin_read_eom_0(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x0000 + 0x0c0) & 0xffff, addr + 0x0000 + 0x11700);
 	udelay(1);
@@ -323,9 +323,9 @@ static u_int16_t k32pci_vin_read_eom_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_eom_1(uintptr_t cbdata)
+static uint16_t k32pci_vin_read_eom_1(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x2000 + 0x0c0) & 0xffff, addr + 0x2000 + 0x11700);
 	udelay(1);
@@ -353,9 +353,9 @@ static size_t k32pci_vin_is_not_ready_1(uintptr_t cbdata)
 	return st;
 }
 
-static u_int16_t k32pci_vin_read_dia_0(uintptr_t cbdata)
+static uint16_t k32pci_vin_read_dia_0(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x0000 + 0x300) & 0xffff, addr + 0x0000 + 0x11700);
 	udelay(1);
@@ -363,9 +363,9 @@ static u_int16_t k32pci_vin_read_dia_0(uintptr_t cbdata)
 	return value;
 }
 
-static u_int16_t k32pci_vin_read_dia_1(uintptr_t cbdata)
+static uint16_t k32pci_vin_read_dia_1(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	void __iomem *addr = (void __iomem *)cbdata;
 	iowrite16((cbdata + 0x11000 + 0x2000 + 0x300) & 0xffff, addr + 0x2000 + 0x11700);
 	udelay(1);
@@ -767,8 +767,8 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
 	size_t len;
 	char buf[256];
 
-	u_int32_t chan;
-	u_int32_t value;
+	uint32_t chan;
+	uint32_t value;
 	struct radio_module_data *mod;
 	struct pgpci_board_private_data *private_data = filp->private_data;
 	struct pgpci_board *board = private_data->board;

@@ -64,8 +64,8 @@ struct simcard_device {
 
 struct simcard_device *simcard_device_register(struct module *owner,
                                                 void *cbdata,
-												u_int8_t (* read)(void *cbdata),
-												void (* write)(void *cbdata, u_int8_t value),
+												uint8_t (* read)(void *cbdata),
+												void (* write)(void *cbdata, uint8_t value),
 												int (* is_read_ready)(void *cbdata),
 												int (* is_write_ready)(void *cbdata),
 												int (* is_reset_request)(void *cbdata),

@@ -83,7 +83,7 @@ EXPORT_SYMBOL(vinetic_rtp_channel_unregister);
 struct vinetic_device {
 	char name[VINETIC_DEVNAME_MAXLEN];
 	int devno;
-	u_int32_t type;
+	uint32_t type;
 	void *data;
 };
 
@@ -94,7 +94,7 @@ static void vinetic_poll_proc(unsigned long addr)
 {
 	union vin_cmd cmd;
 
-	u_int16_t res;
+	uint16_t res;
 
 	size_t ch;
 	size_t pkt_write[8];
@@ -109,7 +109,7 @@ static void vinetic_poll_proc(unsigned long addr)
 
 	size_t wait_count;
 
-	u_int16_t *datap;
+	uint16_t *datap;
 
 	struct vinetic_rtp_channel *rtp;
 	struct vinetic *vin = (struct vinetic *)addr;
@@ -464,7 +464,7 @@ static void vinetic_poll_proc(unsigned long addr)
 		goto vinetic_poll_proc_error;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rSR(VIN_BC, 0));
-	datap = (u_int16_t *)&vin->status.sr;
+	datap = (uint16_t *)&vin->status.sr;
 	for (cnt = 0; cnt < 24; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) {
@@ -494,7 +494,7 @@ static void vinetic_poll_proc(unsigned long addr)
 		goto vinetic_poll_proc_error;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rHWSR);
-	datap = (u_int16_t *)&vin->status.hwsr;
+	datap = (uint16_t *)&vin->status.hwsr;
 	for (cnt = 0; cnt < 2; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) {
@@ -524,7 +524,7 @@ static void vinetic_poll_proc(unsigned long addr)
 		goto vinetic_poll_proc_error;
 	}
 	vin->write_nwd(vin->cbdata, VIN_rBXSR);
-	datap = (u_int16_t *)&vin->status.bxsr;
+	datap = (uint16_t *)&vin->status.bxsr;
 	for (cnt = 0; cnt < 2; cnt++) {
 		for (wait_count = 0; wait_count < VINETIC_WAIT_COUNT; wait_count++) {
 			if (!vin->is_not_ready(vin->cbdata)) {
@@ -677,7 +677,7 @@ static int vinetic_release(struct inode *inode, struct file *filp)
 
 static ssize_t vinetic_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
 {
-	u_int16_t data[32];
+	uint16_t data[32];
 	size_t wait_count;
 	size_t cnt;
 	ssize_t res;
@@ -953,7 +953,7 @@ vinetic_read_end:
 
 static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
 {
-	u_int16_t data[256];
+	uint16_t data[256];
 	size_t cnt, length;
 	size_t wait_count;
 	ssize_t res;
@@ -993,29 +993,29 @@ static ssize_t vinetic_write(struct file *filp, const char __user *buff, size_t 
 
 	if (cmd.parts.first.bits.sc) {
 		// short command
-		memcpy(data, &cmd.parts.first.full, sizeof(u_int16_t));
+		memcpy(data, &cmd.parts.first.full, sizeof(uint16_t));
 		res = 0;
 		length = 1;
 	} else {
 		// regular command
 		switch (cmd.parts.first.bits.cmd) {
 			case VIN_CMD_SOP:
-				memcpy(data, &cmd.full, sizeof(u_int32_t));
+				memcpy(data, &cmd.full, sizeof(uint32_t));
 				res = cmd.parts.second.sop.bits.length;
 				length = cmd.parts.second.sop.bits.length + 2;
 				break;
 			case VIN_CMD_COP:
-				memcpy(data, &cmd.full, sizeof(u_int32_t));
+				memcpy(data, &cmd.full, sizeof(uint32_t));
 				res = cmd.parts.second.sop.bits.length;
 				length = cmd.parts.second.cop.bits.length + 2;
 				break;
 			case VIN_CMD_IOP:
-				memcpy(data, &cmd.full, sizeof(u_int32_t));
+				memcpy(data, &cmd.full, sizeof(uint32_t));
 				res = cmd.parts.second.sop.bits.length;
 				length = cmd.parts.second.iop.bits.length + 2;
 				break;
 			case VIN_CMD_EOP:
-				memcpy(data, &cmd.full, sizeof(u_int32_t));
+				memcpy(data, &cmd.full, sizeof(uint32_t));
 				res = cmd.parts.second.sop.bits.length;
 				length = cmd.parts.second.eop.bits.length + 2;
 				break;
@@ -1122,7 +1122,7 @@ vinetic_write_end:
 
 static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long data)
 {
-	u_int16_t phi;
+	uint16_t phi;
 	size_t wait_count;
 	size_t cnt;
 	int not_ready;
@@ -1310,7 +1310,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			break;
 		case VINETIC_READ_DIA:
 			phi = vin->read_dia(vin->cbdata);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t))) {
+			if (copy_to_user(argp, &phi, sizeof(uint16_t))) {
 				res = -EINVAL;
 			}
 			break;
@@ -1353,7 +1353,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			phi = vin->read_eom(vin->cbdata);
 			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t))) {
+			if (copy_to_user(argp, &phi, sizeof(uint16_t))) {
 				res = -EINVAL;
 			}
 			break;
@@ -1396,7 +1396,7 @@ static int vinetic_generic_ioctl(struct file *filp, unsigned int cmd, unsigned l
 			}
 			phi = vin->read_eom(vin->cbdata);
 			spin_unlock_bh(&vin->lock);
-			if (copy_to_user(argp, &phi, sizeof(u_int16_t))) {
+			if (copy_to_user(argp, &phi, sizeof(uint16_t))) {
 				res = -EINVAL;
 			}
 			break;
@@ -1708,11 +1708,11 @@ struct vinetic *vinetic_device_register(struct module *owner,
 							uintptr_t cbdata,
 							void (* reset)(uintptr_t cbdata),
 							size_t (* is_not_ready)(uintptr_t cbdata),
-							void (* write_nwd)(uintptr_t cbdata, u_int16_t value),
-							void (* write_eom)(uintptr_t cbdata, u_int16_t value),
-							u_int16_t (* read_nwd)(uintptr_t cbdata),
-							u_int16_t (* read_eom)(uintptr_t cbdata),
-							u_int16_t (* read_dia)(uintptr_t cbdata))
+							void (* write_nwd)(uintptr_t cbdata, uint16_t value),
+							void (* write_eom)(uintptr_t cbdata, uint16_t value),
+							uint16_t (* read_nwd)(uintptr_t cbdata),
+							uint16_t (* read_eom)(uintptr_t cbdata),
+							uint16_t (* read_dia)(uintptr_t cbdata))
 {
 	struct vinetic *vin;
 	size_t i;

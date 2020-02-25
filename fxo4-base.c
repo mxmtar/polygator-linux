@@ -79,10 +79,10 @@ struct fxo4_board {
 	struct polygator_board *pg_board;
 	struct cdev cdev;
 
-	u_int8_t rom[256];
+	uint8_t rom[256];
 	size_t romsize;
-	u_int32_t sn;
-	u_int16_t type;
+	uint32_t sn;
+	uint16_t type;
 
 	struct vinetic *vinetic;
 };
@@ -105,25 +105,25 @@ static void fxo4_vinetic_reset(uintptr_t cbdata)
 	iowrite16(1, cbdata + 0xC0);
 	mdelay(2);
 }
-static void fxo4_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
+static void fxo4_vinetic_write_nwd(uintptr_t cbdata, uint16_t value)
 {
 	iowrite16(value, cbdata + 0x04);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x04, value);
 }
-static void fxo4_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
+static void fxo4_vinetic_write_eom(uintptr_t cbdata, uint16_t value)
 {
 	iowrite16(value, cbdata + 0x06);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x06, value);
 }
-static u_int16_t fxo4_vinetic_read_nwd(uintptr_t cbdata)
+static uint16_t fxo4_vinetic_read_nwd(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x04);
+	uint16_t value = ioread16(cbdata + 0x04);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x04, value);
 	return value;
 }
-static u_int16_t fxo4_vinetic_read_eom(uintptr_t cbdata)
+static uint16_t fxo4_vinetic_read_eom(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x06);
+	uint16_t value = ioread16(cbdata + 0x06);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x06, value);
 	return value;
 }
@@ -134,9 +134,9 @@ static size_t fxo4_vinetic_is_not_ready(uintptr_t cbdata)
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x18, reg_ir.full);
 	return reg_ir.bits.rdyq;
 }
-static u_int16_t fxo4_vinetic_read_dia(uintptr_t cbdata)
+static uint16_t fxo4_vinetic_read_dia(uintptr_t cbdata)
 {
-	u_int16_t value = ioread16(cbdata + 0x18);
+	uint16_t value = ioread16(cbdata + 0x18);
 // 	log(KERN_INFO, "%08lx: %04x\n", cbdata + 0x18, value);
 	return value;
 }
@@ -251,8 +251,8 @@ static ssize_t fxo4_board_write(struct file *filp, const char __user *buff, size
 	char cmd[256];
 	size_t len;
 
-	u_int32_t ch;
-	u_int32_t value;
+	uint32_t ch;
+	uint32_t value;
 // 	struct fxo4_board_private_data *private_data = filp->private_data;
 
 	memset(cmd, 0, sizeof(cmd));

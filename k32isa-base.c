@@ -146,47 +146,47 @@ static void k32isa_vin_reset_1(uintptr_t cbdata)
 	mdelay(2);
 }
 
-static void k32isa_vin_write_nwd_0(uintptr_t cbdata, u_int16_t value)
+static void k32isa_vin_write_nwd_0(uintptr_t cbdata, uint16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 0 + 4);
 }
 
-static void k32isa_vin_write_nwd_1(uintptr_t cbdata, u_int16_t value)
+static void k32isa_vin_write_nwd_1(uintptr_t cbdata, uint16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 32 + 4);
 }
 
-static void k32isa_vin_write_eom_0(uintptr_t cbdata, u_int16_t value)
+static void k32isa_vin_write_eom_0(uintptr_t cbdata, uint16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 0 + 6);
 }
 
-static void k32isa_vin_write_eom_1(uintptr_t cbdata, u_int16_t value)
+static void k32isa_vin_write_eom_1(uintptr_t cbdata, uint16_t value)
 {
 	outw(value, PG_ISA_VD_BASE + cbdata * 64 + 32 + 6);
 }
 
-static u_int16_t k32isa_vin_read_nwd_0(uintptr_t cbdata)
+static uint16_t k32isa_vin_read_nwd_0(uintptr_t cbdata)
 {
-	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 0 + 4);
+	uint16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 0 + 4);
 	return value;
 }
 
-static u_int16_t k32isa_vin_read_nwd_1(uintptr_t cbdata)
+static uint16_t k32isa_vin_read_nwd_1(uintptr_t cbdata)
 {
-	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 32 + 4);
+	uint16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 32 + 4);
 	return value;
 }
 
-static u_int16_t k32isa_vin_read_eom_0(uintptr_t cbdata)
+static uint16_t k32isa_vin_read_eom_0(uintptr_t cbdata)
 {
-	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 0 + 6);
+	uint16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 0 + 6);
 	return value;
 }
 
-static u_int16_t k32isa_vin_read_eom_1(uintptr_t cbdata)
+static uint16_t k32isa_vin_read_eom_1(uintptr_t cbdata)
 {
-	u_int16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 32 + 6);
+	uint16_t value = inw(PG_ISA_VD_BASE + cbdata * 64 + 32 + 6);
 	return value;
 }
 
@@ -202,64 +202,64 @@ static size_t k32isa_vin_is_not_ready_1(uintptr_t cbdata)
 	return st;
 }
 
-static u_int16_t k32isa_vin_read_dia_0(uintptr_t cbdata)
+static uint16_t k32isa_vin_read_dia_0(uintptr_t cbdata)
 {
 	return 0;
 }
 
-static u_int16_t k32isa_vin_read_dia_1(uintptr_t cbdata)
+static uint16_t k32isa_vin_read_dia_1(uintptr_t cbdata)
 {
 	return 0;
 }
 
-static void k32isa_gsm_mod_set_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void k32isa_gsm_mod_set_control(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	outb(reg, PG_ISA_CTRL_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
+static uint8_t k32isa_gsm_mod_get_status(uintptr_t cbdata, size_t pos)
 {
 	return inb(PG_ISA_CTRL_BASE + cbdata * 8 + pos);
 }
 
-static void k32isa_gsm_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void k32isa_gsm_mod_at_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	outb(reg, PG_ISA_AT_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
+static uint8_t k32isa_gsm_mod_at_read(uintptr_t cbdata, size_t pos)
 {
 	return inb(PG_ISA_AT_BASE + cbdata * 8 + pos);
 }
 
-static void k32isa_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void k32isa_gsm_mod_sim_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	outb(reg, PG_ISA_SIM_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
+static uint8_t k32isa_gsm_mod_sim_read(uintptr_t cbdata, size_t pos)
 {
 	return inb(PG_ISA_SIM_BASE + cbdata * 8 + pos);
 }
 
-static void k32isa_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void k32isa_gsm_mod_imei_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	outb(reg, PG_ISA_IMEI_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
+static uint8_t k32isa_gsm_mod_imei_read(uintptr_t cbdata, size_t pos)
 {
 	return inb(PG_ISA_IMEI_BASE + cbdata * 8 + pos);
 }
 
-static u_int8_t k32isa_sim_read(void *data)
+static uint8_t k32isa_sim_read(void *data)
 {
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
 
 	return mod->sim_read(mod->cbdata, mod->pos_on_board);
 }
 
-static void k32isa_sim_write(void *data, u_int8_t value)
+static void k32isa_sim_write(void *data, uint8_t value)
 {
 	struct k32_gsm_module_data *mod = (struct k32_gsm_module_data *)data;
 
@@ -551,8 +551,8 @@ static ssize_t k32isa_board_write(struct file *filp, const char __user *buff, si
 	char cmd[256];
 	size_t len;
 
-	u_int32_t chan;
-	u_int32_t value;
+	uint32_t chan;
+	uint32_t value;
 	struct k32_gsm_module_data *mod;
 	struct k32_board_private_data *private_data = filp->private_data;
 

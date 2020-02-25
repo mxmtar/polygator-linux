@@ -54,26 +54,26 @@ MODULE_PARM_DESC(tty_at_major, "Major number for AT-command channel of Polygator
 
 union g8_at_ch_status_reg {
 	struct {
-		u_int8_t status:1;
-		u_int8_t at_rd_empty:1;
-		u_int8_t at_wr_empty:1;
-		u_int8_t sim_rd_empty:1;
-		u_int8_t sim_wr_empty:1;
-		u_int8_t gap:3;
+		uint8_t status:1;
+		uint8_t at_rd_empty:1;
+		uint8_t at_wr_empty:1;
+		uint8_t sim_rd_empty:1;
+		uint8_t sim_wr_empty:1;
+		uint8_t gap:3;
 	} __attribute__((packed)) bits;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 union g8_at_ch_control_reg {
 	struct {
-		u_int8_t vbat:1; // 1 - disable, 0 - enable
-		u_int8_t pkey:1;
-		u_int8_t gap:2;
-		u_int8_t cn_speed_a:1;
-		u_int8_t cn_speed_b:1;
-		u_int8_t at_baudrate:2;
+		uint8_t vbat:1; // 1 - disable, 0 - enable
+		uint8_t pkey:1;
+		uint8_t gap:2;
+		uint8_t cn_speed_a:1;
+		uint8_t cn_speed_b:1;
+		uint8_t at_baudrate:2;
 	} __attribute__((packed)) bits;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 struct g8_tty_at_channel {
@@ -96,10 +96,10 @@ struct g8_tty_at_channel {
 
 	uintptr_t cbdata;
 
-	void (* mod_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* mod_status)(uintptr_t cbdata, size_t pos);
-	void (* mod_at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* mod_at_read)(uintptr_t cbdata, size_t pos);
+	void (* mod_control)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* mod_status)(uintptr_t cbdata, size_t pos);
+	void (* mod_at_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* mod_at_read)(uintptr_t cbdata, size_t pos);
 
 	int tty_at_minor;
 	struct device *device;
@@ -181,7 +181,7 @@ static void g8_vinetic_reset(uintptr_t cbdata)
 	mdelay(2);
 // 	log(KERN_INFO, "%08lx\n", addr);
 }
-static void g8_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
+static void g8_vinetic_write_nwd(uintptr_t cbdata, uint16_t value)
 {
 	uintptr_t addr;
 
@@ -190,7 +190,7 @@ static void g8_vinetic_write_nwd(uintptr_t cbdata, u_int16_t value)
 	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 }
-static void g8_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
+static void g8_vinetic_write_eom(uintptr_t cbdata, uint16_t value)
 {
 	uintptr_t addr;
 
@@ -199,9 +199,9 @@ static void g8_vinetic_write_eom(uintptr_t cbdata, u_int16_t value)
 	iowrite16(value, addr);
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 }
-static u_int16_t g8_vinetic_read_nwd(uintptr_t cbdata)
+static uint16_t g8_vinetic_read_nwd(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)g8_cs4_base_ptr;
@@ -210,9 +210,9 @@ static u_int16_t g8_vinetic_read_nwd(uintptr_t cbdata)
 // 	log(KERN_INFO, "%08lx: %04x\n", addr, value);
 	return value;
 }
-static u_int16_t g8_vinetic_read_eom(uintptr_t cbdata)
+static uint16_t g8_vinetic_read_eom(uintptr_t cbdata)
 {
-	u_int16_t value;
+	uint16_t value;
 	uintptr_t addr;
 
 	addr = (uintptr_t)g8_cs4_base_ptr;
@@ -243,26 +243,26 @@ static size_t g8_vinetic_is_not_ready(uintptr_t cbdata)
 	return reg_ir.bits.rdyq;
 #endif
 }
-static u_int16_t g8_vinetic_read_dia(uintptr_t cbdata)
+static uint16_t g8_vinetic_read_dia(uintptr_t cbdata)
 {
 	return 0;
 }
 
-static void g8_mod_control(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void g8_mod_control(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	uintptr_t addr = cbdata;
 
 	iowrite8(reg, addr);
 }
 
-static u_int8_t g8_mod_status(uintptr_t cbdata, size_t pos)
+static uint8_t g8_mod_status(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
 
 	return ioread8(addr);
 }
 
-static void g8_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
+static void g8_mod_at_write(uintptr_t cbdata, size_t pos, uint8_t reg)
 {
 	uintptr_t addr = cbdata;
 
@@ -271,7 +271,7 @@ static void g8_mod_at_write(uintptr_t cbdata, size_t pos, u_int8_t reg)
 	iowrite8(reg, addr);
 }
 
-static u_int8_t g8_mod_at_read(uintptr_t cbdata, size_t pos)
+static uint8_t g8_mod_at_read(uintptr_t cbdata, size_t pos)
 {
 	uintptr_t addr = cbdata;
 
@@ -414,10 +414,10 @@ static ssize_t g8_board_write(struct file *filp, const char __user *buff, size_t
 	char cmd[256];
 	size_t len;
 
-	u_int32_t at_chan;
-	u_int32_t pwr_state;
-	u_int32_t key_state;
-	u_int32_t baudrate;
+	uint32_t at_chan;
+	uint32_t pwr_state;
+	uint32_t key_state;
+	uint32_t baudrate;
 	struct g8_board_private_data *private_data = filp->private_data;
 
 	memset(cmd, 0, sizeof(cmd));

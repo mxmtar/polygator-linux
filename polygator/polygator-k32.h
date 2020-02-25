@@ -15,46 +15,46 @@
 
 union k32_gsm_mod_status_reg {
 	struct {
-		u_int8_t at_rdy_rd:1;
-		u_int8_t at_rdy_wr:1;
-		u_int8_t vio:1;
-		u_int8_t sim_rdy_rd:1;
-		u_int8_t sim_rdy_wr:1;
-		u_int8_t sim_rst_req:1;
-		u_int8_t imei_rdy_rd:1;
-		u_int8_t imei_rdy_wr:1;
+		uint8_t at_rdy_rd:1;
+		uint8_t at_rdy_wr:1;
+		uint8_t vio:1;
+		uint8_t sim_rdy_rd:1;
+		uint8_t sim_rdy_wr:1;
+		uint8_t sim_rst_req:1;
+		uint8_t imei_rdy_rd:1;
+		uint8_t imei_rdy_wr:1;
 	} __attribute__((packed)) bits;
 	struct {
-		u_int8_t vio:1;
-		u_int8_t at_rdy_rd:1;
-		u_int8_t at_rdy_wr:1;
-		u_int8_t sim_rdy_rd:1;
-		u_int8_t sim_rdy_wr:1;
-		u_int8_t sim_rst_req:1;
-		u_int8_t imei_rdy_rd:1;
-		u_int8_t imei_rdy_wr:1;
+		uint8_t vio:1;
+		uint8_t at_rdy_rd:1;
+		uint8_t at_rdy_wr:1;
+		uint8_t sim_rdy_rd:1;
+		uint8_t sim_rdy_wr:1;
+		uint8_t sim_rst_req:1;
+		uint8_t imei_rdy_rd:1;
+		uint8_t imei_rdy_wr:1;
 	} __attribute__((packed)) bits_e;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 union k32_gsm_mod_control_reg {
 	struct {
-		u_int8_t mod_off:1;
-		u_int8_t sim_spd_1:1;
-		u_int8_t rst:1;
-		u_int8_t sim_spd_0:1;
-		u_int8_t pwr_off:1;
-		u_int8_t sync_mode:1;
-		u_int8_t com_spd:2;
+		uint8_t mod_off:1;
+		uint8_t sim_spd_1:1;
+		uint8_t rst:1;
+		uint8_t sim_spd_0:1;
+		uint8_t pwr_off:1;
+		uint8_t sync_mode:1;
+		uint8_t com_spd:2;
 	} __attribute__((packed)) bits;
 	struct {
-		u_int8_t pwr:1;
-		u_int8_t key:1;
-		u_int8_t gap:2;
-		u_int8_t sim_spd:2;
-		u_int8_t com_spd:2;
+		uint8_t pwr:1;
+		uint8_t key:1;
+		uint8_t gap:2;
+		uint8_t sim_spd:2;
+		uint8_t com_spd:2;
 	} __attribute__((packed)) bits_e;
-	u_int8_t full;
+	uint8_t full;
 } __attribute__((packed));
 
 struct k32_gsm_module_data {
@@ -66,16 +66,16 @@ struct k32_gsm_module_data {
 
 	uintptr_t cbdata;
 
-	void (* set_control)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* get_status)(uintptr_t cbdata, size_t pos);
-	void (* at_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* at_read)(uintptr_t cbdata, size_t pos);
-	u_int16_t (* at_read16)(uintptr_t cbdata, size_t pos);
-	void (* sim_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* sim_read)(uintptr_t cbdata, size_t pos);
+	void (* set_control)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* get_status)(uintptr_t cbdata, size_t pos);
+	void (* at_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* at_read)(uintptr_t cbdata, size_t pos);
+	uint16_t (* at_read16)(uintptr_t cbdata, size_t pos);
+	void (* sim_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* sim_read)(uintptr_t cbdata, size_t pos);
 	void (* sim_do_after_reset)(uintptr_t cbdata, size_t pos);
-	void (* imei_write)(uintptr_t cbdata, size_t pos, u_int8_t reg);
-	u_int8_t (* imei_read)(uintptr_t cbdata, size_t pos);
+	void (* imei_write)(uintptr_t cbdata, size_t pos, uint8_t reg);
+	uint8_t (* imei_read)(uintptr_t cbdata, size_t pos);
 
 	// at section
 	int at_port_select;
@@ -99,12 +99,12 @@ struct k32_board {
 	struct polygator_board *pg_board;
 	struct cdev cdev;
 
-	u_int8_t rom[256];
+	uint8_t rom[256];
 	size_t romsize;
-	u_int32_t sn;
-	u_int8_t serial_number[256];
-	u_int16_t type;
-	u_int16_t position;
+	uint32_t sn;
+	uint8_t serial_number[256];
+	uint16_t type;
+	uint16_t position;
 
 	int iomem_req;
 	void __iomem *iomem_base;
