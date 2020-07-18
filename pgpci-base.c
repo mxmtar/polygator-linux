@@ -247,8 +247,9 @@ static const struct tty_port_operations pgpci_tty_at_port_ops = {
 };
 #endif
 static struct pci_device_id pgpci_board_id_table[] = {
-	{ PCI_DEVICE(0xdead, 0xbede), .driver_data = 1, },
-	{ 0, },
+    { PCI_DEVICE(0xdead, 0xbede), .driver_data = 1, }, /* pg110 */
+    { PCI_DEVICE(0xdead, 0xbeee), .driver_data = 1, }, /* pg108 */
+    { 0, },
 };
 MODULE_DEVICE_TABLE(pci, pgpci_board_id_table);
 
@@ -956,7 +957,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 	} else {
 		verbose("found board hw %u fw %u.%u.%u\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf);
 	}
-	
+
 
 	// reset board
 	board->control_data.bits.reset = 1;
