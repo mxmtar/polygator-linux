@@ -190,6 +190,7 @@ struct pgpci_board {
 	uint32_t xw_version;
 	uint32_t serial_number;
 	uint32_t position;
+    uint32_t uart_clock;
 
 	union board_control_reg control_data;
 
@@ -615,12 +616,12 @@ static irqreturn_t pgpci_board_interrupt(int irq, void *data)
 	return res;
 }
 
-static inline uint32_t pgpci_baudrate_to_btu(speed_t baudrate)
+static inline uint32_t pgpci_baudrate_to_btu(struct pgpci_board *board, speed_t baudrate)
 {
 	uint32_t btu, rem;
 
-	btu = PGPCI_UART_CLOCK / baudrate;
-	rem = PGPCI_UART_CLOCK % baudrate;
+	btu = board->uart_clock / baudrate;
+	rem = board->uart_clock % baudrate;
 	if (rem < (baudrate >> 1)) {
 		btu -= 1;
 	}
@@ -838,7 +839,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
 	} else if (sscanf(cmd, "channel[%u].uart.baudrate(%u)", &chan, &value) == 2) {
 		if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
 			mod = board->gsm_modules[chan];
-			mod->uart_btu_data = pgpci_baudrate_to_btu(value);
+			mod->uart_btu_data = pgpci_baudrate_to_btu(board, value);
 			iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
 			mod->uart_control_data.bits.reset = 1;
 			iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
@@ -952,10 +953,14 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
 	board->xw_version = ioread32(board->iomem_base + 0x00000);
 	board->serial_number = ioread32(board->iomem_base + 0x00020);
 	board->position = ioread32(board->iomem_base + 0x00040);
+    board->uart_clock = ioread32(board->iomem_base + 0x00204);
+    if (0 == board->uart_clock) {
+        board->uart_clock = PGPCI_UART_CLOCK;
+    }
 	if (board->serial_number != 0xffffffff) {
-		verbose("found board hw %u fw %u.%u.%u sn %u\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf, board->serial_number);
+		verbose("found board hw %u fw %u.%u.%u sn %u uart clock %u Hz\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf, board->serial_number, board->uart_clock);
 	} else {
-		verbose("found board hw %u fw %u.%u.%u\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf);
+		verbose("found board hw %u fw %u.%u.%u uart clock %u Hz\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf, board->uart_clock);
 	}
 
 
@@ -1036,7 +1041,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
         mod->control_data.full = ioread32(board->iomem_base + 0x00100 + ((i & 7) << 2));
 
         // init radio module uart control register
-        mod->uart_btu_data = pgpci_baudrate_to_btu(115200);
+        mod->uart_btu_data = pgpci_baudrate_to_btu(board, 115200);
         iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((i & 7) << 2));
         mod->uart_control_data.bits.reset = 1;
         mod->uart_control_data.bits.csize = 3;
@@ -1392,7 +1397,7 @@ static void pgpci_tty_at_set_termios(struct tty_struct *tty, struct termios *old
 
 	spin_lock_bh(&mod->at_lock);
 
-	mod->uart_btu_data = pgpci_baudrate_to_btu(baudrate);
+	mod->uart_btu_data = pgpci_baudrate_to_btu(board, baudrate);
 	if ((termios->c_cflag & CSIZE) == CS8) {
 		mod->uart_control_data.bits.csize = 3;
 	} else if ((termios->c_cflag & CSIZE) == CS7) {
