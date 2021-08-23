@@ -42,7 +42,16 @@ MODULE_LICENSE("GPL");
 #define log(_level, _fmt, _args...) printk(_level "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pgpci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 #define debug(_fmt, _args...) printk(KERN_DEBUG "[polygator-%s] %s:%d - %s(): " _fmt, THIS_MODULE->name, "pgpci-base.c", __LINE__, __PRETTY_FUNCTION__, ## _args)
 
-#define PGPCI_UART_CLOCK 36864000 * 4
+#define PGPCI_RADIO_MODULE_NUMBER   8
+#define PGPCI_VINETIC_NUMBER        2
+#define PGPCI_VINETIC_RTP_NUMBER    4
+
+#define PGPCI_UART_CLOCK            36864000 * 4
+#define PGPCI_UART_RX_BUFFER_SIZE   2048
+#define PGPCI_UART_TX_BUFFER_SIZE   2048
+
+#define PGPCI_UICC_RX_BUFFER_SIZE   256
+#define PGPCI_UICC_TX_BUFFER_SIZE   512
 
 union board_control_reg {
     struct {
@@ -174,7 +183,7 @@ struct radio_module_data {
     struct tty_struct *at_tty;
 #endif
     struct timer_list uart_poll_timer;
-    uint8_t uart_rx_buf[2048];
+    uint8_t uart_rx_buf[PGPCI_UART_RX_BUFFER_SIZE];
 };
 
 struct pgpci_board {
@@ -194,15 +203,15 @@ struct pgpci_board {
 
     union board_control_reg control_data;
 
-    struct vinetic *vinetics[2];
+    struct vinetic *vinetics[PGPCI_VINETIC_NUMBER];
 
-    struct radio_module_data *gsm_modules[8];
+    struct radio_module_data *gsm_modules[PGPCI_RADIO_MODULE_NUMBER];
 
-    struct polygator_tty_device *tty_at_channels[8];
+    struct polygator_tty_device *tty_at_channels[PGPCI_RADIO_MODULE_NUMBER];
 
-    struct simcard_device *simcard_channels[8];
+    struct simcard_device *simcard_channels[PGPCI_RADIO_MODULE_NUMBER];
 
-    union radio_module_status_reg radio_module_status[8];
+    union radio_module_status_reg radio_module_status[PGPCI_RADIO_MODULE_NUMBER];
 };
 
 struct pgpci_board_private_data {
@@ -401,9 +410,9 @@ static size_t pgpci_sim_get_write_room(void *cbdata)
         if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
             res = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else if (smart_card_tx_status.bits.wp > smart_card_tx_status.bits.rp) {
-            res = 512 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+            res = PGPCI_UICC_TX_BUFFER_SIZE + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else {
-            res = 512;
+            res = PGPCI_UICC_TX_BUFFER_SIZE;
         }
     }
 
@@ -425,9 +434,9 @@ static size_t pgpci_sim_write(void *cbdata, uint8_t *data, size_t length)
         if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
             chunk = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else if (smart_card_tx_status.bits.wp > smart_card_tx_status.bits.rp) {
-            chunk = 512 + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
+            chunk = PGPCI_UICC_TX_BUFFER_SIZE + smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else {
-            chunk = 512;
+            chunk = PGPCI_UICC_TX_BUFFER_SIZE;
         }
     }
     length = min(length, chunk);
@@ -437,7 +446,7 @@ static size_t pgpci_sim_write(void *cbdata, uint8_t *data, size_t length)
         if (smart_card_tx_status.bits.rp > smart_card_tx_status.bits.wp) {
             chunk = smart_card_tx_status.bits.rp - smart_card_tx_status.bits.wp;
         } else {
-            chunk = 512 - smart_card_tx_status.bits.wp;
+            chunk = PGPCI_UICC_TX_BUFFER_SIZE - smart_card_tx_status.bits.wp;
         }
         chunk = min(chunk, length - i);
         memcpy_toio(board->iomem_base + 0x88000 + ((mod->position & 7) << 16) + smart_card_tx_status.bits.wp, data + i, chunk);
@@ -462,11 +471,11 @@ static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
     smart_card_rx_status.full = ioread32(board->iomem_base + 0x002e0 + ((mod->position & 7) << 2));
 
     if (smart_card_rx_status.bits.fl) {
-        res = 256;
+        res = PGPCI_UICC_RX_BUFFER_SIZE;
     } else if (smart_card_rx_status.bits.wp > smart_card_rx_status.bits.rp) {
         res = smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
     } else if (smart_card_rx_status.bits.wp < smart_card_rx_status.bits.rp) {
-        res = 256 + smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
+        res = PGPCI_UICC_RX_BUFFER_SIZE + smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
     } else  {
         res = 0;
     }
@@ -478,7 +487,7 @@ static size_t pgpci_sim_read(void *cbdata, uint8_t *data, size_t length)
         i = 0;
         while (i < res) {
             if ((smart_card_rx_status.bits.fl) || (smart_card_rx_status.bits.wp < smart_card_rx_status.bits.rp)) {
-                chunk = 256 - smart_card_rx_status.bits.rp;
+                chunk = PGPCI_UICC_RX_BUFFER_SIZE - smart_card_rx_status.bits.rp;
             } else {
                 chunk = smart_card_rx_status.bits.wp - smart_card_rx_status.bits.rp;
             }
@@ -556,11 +565,11 @@ static void pgpci_uart_poll(unsigned long addr)
 
     if (rx_status.bits.valid) {
         if (rx_status.bits.fl) {
-            len = 2048;
+            len = PGPCI_UART_RX_BUFFER_SIZE;
         } else if (rx_status.bits.wp > rx_status.bits.rp) {
             len = rx_status.bits.wp - rx_status.bits.rp;
         } else if (rx_status.bits.wp < rx_status.bits.rp) {
-            len = 2048 + rx_status.bits.wp - rx_status.bits.rp;
+            len = PGPCI_UART_RX_BUFFER_SIZE + rx_status.bits.wp - rx_status.bits.rp;
         } else  {
             len = 0;
         }
@@ -575,7 +584,7 @@ static void pgpci_uart_poll(unsigned long addr)
         i = 0;
         while (i < len) {
             if ((rx_status.bits.fl) || (rx_status.bits.wp < rx_status.bits.rp)) {
-                chunk = 2048 - rx_status.bits.rp;
+                chunk = PGPCI_UART_RX_BUFFER_SIZE - rx_status.bits.rp;
             } else {
                 chunk = rx_status.bits.wp - rx_status.bits.rp;
             }
@@ -663,7 +672,7 @@ static int pgpci_board_open(struct inode *inode, struct file *filp)
     len += sprintf(private_data->buff + len, "\r\n\t\"position\": %u,", board->position);
     // radio channels
     len += sprintf(private_data->buff + len, "\r\n\t\"channels\": [");
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < PGPCI_RADIO_MODULE_NUMBER; ++i) {
         if ((mod = board->gsm_modules[i])) {
             len += sprintf(private_data->buff + len, "%s\r\n\t\t{\
                                                         \r\n\t\t\t\"tty\": \"%s\",\
@@ -689,14 +698,14 @@ static int pgpci_board_open(struct inode *inode, struct file *filp)
                             mod->control_data.bits.power_supply ? "on" : "off",
                             mod->control_data.bits.power_key ? "on" : "off",
                             board->radio_module_status[i].bits.status ? "on" : "off",
-                            (unsigned long int)(i / 4),
-                            (unsigned long int)(i % 4));
+                            (unsigned long int)(i / PGPCI_VINETIC_RTP_NUMBER),
+                            (unsigned long int)(i % PGPCI_VINETIC_RTP_NUMBER));
         }
     }
     len += sprintf(private_data->buff + len, "\r\n\t],");
     // vinetic
     len += sprintf(private_data->buff + len, "\r\n\t\"vinetic\": [");
-    for (i = 0; i < 2; ++i) {
+    for (i = 0; i < PGPCI_VINETIC_NUMBER; ++i) {
         if (board->vinetics[i]) {
             len += sprintf(private_data->buff + len, "%s\r\n\t\t{\r\n\t\t\t\"path\": \"%s\",",
                             i ? "," : "",
@@ -709,7 +718,7 @@ static int pgpci_board_open(struct inode *inode, struct file *filp)
 #endif
                             );
             len += sprintf(private_data->buff + len, "\r\n\t\t\t\"rtp\": [");
-            for (j = 0; j < 4; ++j) {
+            for (j = 0; j < PGPCI_VINETIC_RTP_NUMBER; ++j) {
                 if (board->vinetics[i]->rtp_channels[j])
                     len += sprintf(private_data->buff + len, "%s\r\n\t\t\t\t{\r\n\t\t\t\t\t\"path\": \"%s\"\r\n\t\t\t\t}",
                                 j ? "," : "",
@@ -795,7 +804,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
     }
 
     if (sscanf(cmd, "channel[%u].power_supply(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
             spin_lock_bh(&mod->lock);
             if (value) {
@@ -826,7 +835,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
             res = -ENODEV;
         }
     } else if (sscanf(cmd, "channel[%u].power_key(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
             spin_lock_bh(&mod->lock);
             mod->control_data.bits.power_key = value;
@@ -837,7 +846,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
             res = -ENODEV;
         }
     } else if (sscanf(cmd, "channel[%u].uart.baudrate(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
             mod->uart_btu_data = pgpci_baudrate_to_btu(board, value);
             iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
@@ -851,7 +860,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
             res = -ENODEV;
         }
     } else if (sscanf(cmd, "channel[%u].uart.loopback(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
             mod->uart_control_data.bits.loopback = value;
             iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
@@ -860,7 +869,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
             res = -ENODEV;
         }
     } else if (sscanf(cmd, "channel[%u].smart_card.reset(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
             mod->smart_card_control_data.bits.reset = value;
             iowrite32(mod->smart_card_control_data.full, board->iomem_base + 0x00160 + ((mod->position & 7) << 2));
@@ -869,7 +878,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
             res = -ENODEV;
         }
     } else if (sscanf(cmd, "channel[%u].smart_card.enable(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7) && (board->gsm_modules[chan])) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER) && (board->gsm_modules[chan])) {
             mod = board->gsm_modules[chan];
             mod->smart_card_control_data.bits.enable = value;
             iowrite32(mod->smart_card_control_data.full, board->iomem_base + 0x00160 + ((mod->position & 7) << 2));
@@ -878,7 +887,7 @@ static ssize_t pgpci_board_write(struct file *filp, const char __user *buff, siz
             res = -ENODEV;
         }
     } else if (sscanf(cmd, "channel[%u].testpoint(%u)", &chan, &value) == 2) {
-        if ((chan >= 0) && (chan <= 7)) {
+        if ((chan >= 0) && (chan < PGPCI_RADIO_MODULE_NUMBER)) {
             iowrite32((((chan & 0xff) << 8) + (value & 0xff)), board->iomem_base + 0x000e0);
             res = len;
         } else {
@@ -982,7 +991,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
         goto pgpci_board_probe_error;
     }
 
-    for (j = 0; j < 2; ++j) {
+    for (j = 0; j < PGPCI_VINETIC_NUMBER; ++j) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
         snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j);
 #else
@@ -999,7 +1008,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
             rc = -1;
             goto pgpci_board_probe_error;
         }
-        for (i = 0; i < 4; ++i) {
+        for (i = 0; i < PGPCI_VINETIC_RTP_NUMBER; ++i) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
             snprintf(devname, VINETIC_DEVNAME_MAXLEN, "board-pgpci-%02x%02x%x-vin%lu-rtp%lu", pdev->bus->number, PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn), (unsigned long int)j, (unsigned long int)i);
 #else
@@ -1013,7 +1022,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
     }
 
     // set radio module data
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < PGPCI_RADIO_MODULE_NUMBER; ++i) {
         if (!(mod = kmalloc(sizeof(struct radio_module_data), GFP_KERNEL))) {
             log(KERN_ERR, "can't get memory for struct radio_module_data\n");
             rc = -1;
@@ -1073,7 +1082,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
     }
 
     // register polygator tty at device
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < PGPCI_RADIO_MODULE_NUMBER; ++i) {
         if ((mod = board->gsm_modules[i])) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
             if (!(board->tty_at_channels[i] = polygator_tty_device_register(&pdev->dev, mod, &mod->at_port, &pgpci_tty_at_ops))) {
@@ -1088,7 +1097,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
     }
 
     // register polygator simcard device
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < PGPCI_RADIO_MODULE_NUMBER; ++i) {
         if ((mod = board->gsm_modules[i])) {
             if (!(board->simcard_channels[i] = simcard_device_register2(THIS_MODULE, mod))) {
                 log(KERN_ERR, "can't register polygator simcard device\n");
@@ -1152,7 +1161,7 @@ pgpci_board_probe_error:
         if (pci_irq_requested) {
             free_irq(pdev->irq, board);
         }
-        for (i = 0; i < 8; ++i) {
+        for (i = 0; i < PGPCI_RADIO_MODULE_NUMBER; ++i) {
             if (board->simcard_channels[i]) {
                 simcard_device_unregister(board->simcard_channels[i]);
             }
@@ -1164,9 +1173,9 @@ pgpci_board_probe_error:
                 kfree(board->gsm_modules[i]);
             }
         }
-        for (j = 0; j < 2; ++j) {
+        for (j = 0; j < PGPCI_VINETIC_NUMBER; ++j) {
             if (board->vinetics[j]) {
-                for (i = 0; i < 4; ++i) {
+                for (i = 0; i < PGPCI_VINETIC_RTP_NUMBER; ++i) {
                     if (board->vinetics[j]->rtp_channels[i]) {
                         vinetic_rtp_channel_unregister(board->vinetics[j]->rtp_channels[i]);
                     }
@@ -1200,7 +1209,7 @@ static void __devexit pgpci_board_remove(struct pci_dev *pdev)
 
     free_irq(pdev->irq, board);
 
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < PGPCI_RADIO_MODULE_NUMBER; ++i) {
         if (board->simcard_channels[i]) {
             simcard_device_unregister(board->simcard_channels[i]);
         }
@@ -1213,9 +1222,9 @@ static void __devexit pgpci_board_remove(struct pci_dev *pdev)
         }
     }
 
-    for (j = 0; j < 2; ++j) {
+    for (j = 0; j < PGPCI_VINETIC_NUMBER; ++j) {
         if (board->vinetics[j]) {
-            for (i = 0; i < 4; ++i) {
+            for (i = 0; i < PGPCI_VINETIC_RTP_NUMBER; ++i) {
                 if (board->vinetics[j]->rtp_channels[i]) {
                     vinetic_rtp_channel_unregister(board->vinetics[j]->rtp_channels[i]);
                 }
@@ -1298,9 +1307,9 @@ static int pgpci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, 
         if (mod->uart_tx_status.bits.rp > mod->uart_tx_status.bits.wp) {
             res = mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
         } else if (mod->uart_tx_status.bits.wp > mod->uart_tx_status.bits.rp) {
-            res = 2048 + mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
+            res = PGPCI_UART_TX_BUFFER_SIZE + mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
         } else {
-            res = 2048;
+            res = PGPCI_UART_TX_BUFFER_SIZE;
         }
     }
     len = res = min(res, count);
@@ -1310,7 +1319,7 @@ static int pgpci_tty_at_write(struct tty_struct *tty, const unsigned char *buf, 
         if (mod->uart_tx_status.bits.rp > mod->uart_tx_status.bits.wp) {
             chunk = mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
         } else {
-            chunk = 2048 - mod->uart_tx_status.bits.wp;
+            chunk = PGPCI_UART_TX_BUFFER_SIZE - mod->uart_tx_status.bits.wp;
         }
         chunk = min(chunk, len - i);
         memcpy_toio(board->iomem_base + 0x80000 + ((mod->position & 7) << 16) + mod->uart_tx_status.bits.wp, buf + i, chunk);
@@ -1341,9 +1350,9 @@ static int pgpci_tty_at_write_room(struct tty_struct *tty)
         if (mod->uart_tx_status.bits.rp > mod->uart_tx_status.bits.wp) {
             res = mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
         } else if (mod->uart_tx_status.bits.wp > mod->uart_tx_status.bits.rp) {
-            res = 2048 + mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
+            res = PGPCI_UART_TX_BUFFER_SIZE + mod->uart_tx_status.bits.rp - mod->uart_tx_status.bits.wp;
         } else {
-            res = 2048;
+            res = PGPCI_UART_TX_BUFFER_SIZE;
         }
     }
 
@@ -1361,12 +1370,12 @@ static int pgpci_tty_at_chars_in_buffer(struct tty_struct *tty)
     spin_lock_bh(&mod->at_lock);
 
     if (mod->uart_tx_status.bits.fl) {
-        res = 2048;
+        res = PGPCI_UART_TX_BUFFER_SIZE;
     } else {
         if (mod->uart_tx_status.bits.wp > mod->uart_tx_status.bits.rp) {
             res = mod->uart_tx_status.bits.wp - mod->uart_tx_status.bits.rp;
         } else if (mod->uart_tx_status.bits.rp > mod->uart_tx_status.bits.wp) {
-            res = 2048 + mod->uart_tx_status.bits.wp - mod->uart_tx_status.bits.rp;
+            res = PGPCI_UART_TX_BUFFER_SIZE + mod->uart_tx_status.bits.wp - mod->uart_tx_status.bits.rp;
         } else {
             res = 0;
         }
@@ -1413,6 +1422,7 @@ static void pgpci_tty_at_set_termios(struct tty_struct *tty, struct termios *old
     mod->uart_control_data.bits.parodd = (termios->c_cflag & PARODD) ? 1 : 0;
 
     iowrite32(mod->uart_btu_data, board->iomem_base + 0x00140 + ((mod->position & 7) << 2));
+
     mod->uart_control_data.bits.reset = 1;
     iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
     udelay(1);
