@@ -196,7 +196,7 @@ struct pgpci_board {
     u8 irq_line;
     u8 irq_pin;
 
-    uint32_t xw_version;
+    uint32_t hardware_version;
     uint32_t serial_number;
     uint32_t position;
     uint32_t uart_clock;
@@ -662,9 +662,9 @@ static int pgpci_board_open(struct inode *inode, struct file *filp)
 
     len = 0;
     // type
-    len += sprintf(private_data->buff + len, "{\r\n\t\"hardware\": %u,", (board->xw_version >> 16) & 0xffff);
+    len += sprintf(private_data->buff + len, "{\r\n\t\"hardware\": %u,", (board->hardware_version >> 16) & 0xffff);
     // firmware
-    len += sprintf(private_data->buff + len, "\r\n\t\"firmware\": \"%u.%u.%u\",", (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf);
+    len += sprintf(private_data->buff + len, "\r\n\t\"firmware\": \"%u.%u.%u\",", (board->hardware_version >> 8) & 0xff, (board->hardware_version >> 4) & 0xf, board->hardware_version & 0xf);
     if (board->serial_number != 0xffffffff) {
         len += sprintf(private_data->buff + len, "\r\n\t\"msn\": %u,", board->serial_number);
     }
@@ -959,7 +959,7 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
         rc = -ENOMEM;
         goto pgpci_board_probe_error;
     }
-    board->xw_version = ioread32(board->iomem_base + 0x00000);
+    board->hardware_version = ioread32(board->iomem_base + 0x00000);
     board->serial_number = ioread32(board->iomem_base + 0x00020);
     board->position = ioread32(board->iomem_base + 0x00040);
     board->uart_clock = ioread32(board->iomem_base + 0x00204);
@@ -967,9 +967,9 @@ static int __devinit pgpci_board_probe(struct pci_dev *pdev, const struct pci_de
         board->uart_clock = PGPCI_UART_CLOCK;
     }
     if (board->serial_number != 0xffffffff) {
-        verbose("found board hw %u fw %u.%u.%u sn %u uart clock %u Hz\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf, board->serial_number, board->uart_clock);
+        verbose("found board hw %u fw %u.%u.%u sn %u uart clock %u Hz\n", (board->hardware_version >> 16) & 0xffff, (board->hardware_version >> 8) & 0xff, (board->hardware_version >> 4) & 0xf, board->hardware_version & 0xf, board->serial_number, board->uart_clock);
     } else {
-        verbose("found board hw %u fw %u.%u.%u uart clock %u Hz\n", (board->xw_version >> 16) & 0xffff, (board->xw_version >> 8) & 0xff, (board->xw_version >> 4) & 0xf, board->xw_version & 0xf, board->uart_clock);
+        verbose("found board hw %u fw %u.%u.%u uart clock %u Hz\n", (board->hardware_version >> 16) & 0xffff, (board->hardware_version >> 8) & 0xff, (board->hardware_version >> 4) & 0xf, board->hardware_version & 0xf, board->uart_clock);
     }
 
 
@@ -1261,14 +1261,27 @@ static int pgpci_tty_at_open(struct tty_struct *tty, struct file *filp)
     return tty_port_open(&mod->at_port, tty, filp);
 #else
     spin_lock_bh(&mod->at_lock);
+
     if (!mod->at_count++) {
+
+        // clear UART Tx data
+        mod->uart_tx_status.full = 0;
+        // Reset UART module
+        mod->uart_control_data.bits.reset = 1;
+        iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+        udelay(1);
+        mod->uart_control_data.bits.reset = 0;
+        iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+
         mod->uart_poll_timer.function = pgpci_uart_poll;
         mod->uart_poll_timer.data = (unsigned long)mod;
         mod->uart_poll_timer.expires = jiffies + 1;
         add_timer(&mod->uart_poll_timer);
         mod->at_tty = tty;
     }
+
     spin_unlock_bh(&mod->at_lock);
+
     return 0;
 #endif
 }
@@ -1282,10 +1295,22 @@ static void pgpci_tty_at_close(struct tty_struct *tty, struct file *filp)
     tty_port_close(&mod->at_port, tty, filp);
 #else
     spin_lock_bh(&mod->at_lock);
+
     if (!--mod->at_count) {
+
+        // clear UART Tx data
+        mod->uart_tx_status.full = 0;
+        // Reset UART module
+        mod->uart_control_data.bits.reset = 1;
+        iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+        udelay(1);
+        mod->uart_control_data.bits.reset = 0;
+        iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+
         del_timer_sync(&mod->uart_poll_timer);
         mod->at_tty = NULL;
     }
+
     spin_unlock_bh(&mod->at_lock);
 #endif
     return;
@@ -1443,13 +1468,18 @@ static void pgpci_tty_at_flush_buffer(struct tty_struct *tty)
     struct pgpci_board *board = mod->board;
 
     spin_lock_bh(&mod->at_lock);
+
+    // clear UART Tx data
     mod->uart_tx_status.full = 0;
+    // Reset UART module
     mod->uart_control_data.bits.reset = 1;
     iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
     udelay(1);
     mod->uart_control_data.bits.reset = 0;
     iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+
     spin_unlock_bh(&mod->at_lock);
+
     tty_wakeup(tty);
 }
 
@@ -1458,6 +1488,21 @@ static void pgpci_tty_at_hangup(struct tty_struct *tty)
 #ifdef TTY_PORT
     struct polygator_tty_device *ptd = tty->driver_data;
     struct radio_module_data *mod = (struct radio_module_data *)ptd->data;
+    struct pgpci_board *board = mod->board;
+
+    spin_lock_bh(&mod->at_lock);
+
+    // clear UART Tx data
+    mod->uart_tx_status.full = 0;
+    // Reset UART module
+    mod->uart_control_data.bits.reset = 1;
+    iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+    udelay(1);
+    mod->uart_control_data.bits.reset = 0;
+    iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+
+    spin_unlock_bh(&mod->at_lock);
+
     tty_port_hangup(&mod->at_port);
 #endif
 }
@@ -1476,6 +1521,20 @@ static void pgpci_tty_at_port_dtr_rts(struct tty_port *port, int onoff)
 static int pgpci_tty_at_port_activate(struct tty_port *port, struct tty_struct *tty)
 {
     struct radio_module_data *mod = container_of(port, struct radio_module_data, at_port);
+    struct pgpci_board *board = mod->board;
+
+    spin_lock_bh(&mod->at_lock);
+
+    // clear UART Tx data
+    mod->uart_tx_status.full = 0;
+    // Reset UART module
+    mod->uart_control_data.bits.reset = 1;
+    iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+    udelay(1);
+    mod->uart_control_data.bits.reset = 0;
+    iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+
+    spin_unlock_bh(&mod->at_lock);
 
     mod_timer(&mod->uart_poll_timer, jiffies + 1);
 
@@ -1485,6 +1544,20 @@ static int pgpci_tty_at_port_activate(struct tty_port *port, struct tty_struct *
 static void pgpci_tty_at_port_shutdown(struct tty_port *port)
 {
     struct radio_module_data *mod = container_of(port, struct radio_module_data, at_port);
+    struct pgpci_board *board = mod->board;
+
+    spin_lock_bh(&mod->at_lock);
+
+    // clear UART Tx data
+    mod->uart_tx_status.full = 0;
+    // Reset UART module
+    mod->uart_control_data.bits.reset = 1;
+    iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+    udelay(1);
+    mod->uart_control_data.bits.reset = 0;
+    iowrite32(mod->uart_control_data.full, board->iomem_base + 0x00120 + ((mod->position & 7) << 2));
+
+    spin_unlock_bh(&mod->at_lock);
 
     del_timer_sync(&mod->uart_poll_timer);
 }
